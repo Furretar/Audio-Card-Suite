@@ -8,3 +8,4 @@ mmmmm
 - [ ] equalize all audio in current deck
 - [ ] automatically extract subs
 - [ ] when using translation line, option to match timings or not
+- [ ] hotkey to add and remove 50ms to line in mpv?

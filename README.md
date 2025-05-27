@@ -8,3 +8,4 @@
 - [ ] when using translation line, option to match timings or not
 - [ ] hotkey to add and remove 50ms to line in mpv?
 - [ ] figure out if migaku already did this
+- [ ] option to change amount, from 50ms

@@ -9,3 +9,4 @@
 - [ ] hotkey to add and remove 50ms to line in mpv?
 - [ ] figure out if migaku already did this
 - [ ] option to change amount, from 50ms
+- [ ] hotkey to add to beginning or end of last edited card

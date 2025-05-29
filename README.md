@@ -1,4 +1,3 @@
-# Sentence-Card-Suite
 - [ ] figure out if migaku already did this
 - [ ] store original audios in a folder, tag cards automatically with video name
 - [ ] option to convert all videos in source to mp3 to save space

@@ -12,6 +12,6 @@
 - [ ] hotkey to add to beginning or end of last edited card
 - [ ] edit subtitle file as you make cards to make it match?
 
-- [ ] stop it from deleting the current field if its not audio
+- [ ] stop it from deleting the current field if its not audio, or detect the field with sound in it while loaded note
 - [ ] hold shift control or alt to do 2 5 and 10x displayed amount
 - [ ] add/subtract 1db for each audio

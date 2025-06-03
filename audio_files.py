@@ -1,38 +1,257 @@
 import re
 import os
-from aqt import mw
+import subprocess
 
-media_source_folder = os.path.join(os.getcwd(), "Sources")
+from PyQt6.QtCore import QTimer
+from aqt import mw
+from send2trash import send2trash
+from aqt import mw
+from aqt.sound import play
+
+addon_dir = os.path.dirname(os.path.abspath(__file__))
+addon_source_folder = os.path.join(addon_dir, "Sources")
+
+# temp for testing outside of anki
+if mw is not None and mw.col is not None and mw.col.media is not None:
+    collection_dir = mw.col.media.dir()
+else:
+    # fallback path when running outside Anki
+    collection_dir = r"C:\Users\wyatt\AppData\Roaming\Anki2\Furretar\collection.media"
+
 
 def get_audio_from_text(audio_filename) -> str:
     pass
 
-def get_audio_from_timestamps(audio_filename) -> str:
-    text = audio_filename
-    match = re.search(r"\[sound:(.+?)_(\d{2}\.\d{2}\.\d{2}\.\d{3})-(\d{2}\.\d{2}\.\d{2}\.\d{3})\.(\w+)\]", text)
 
+import re
+
+def extract_filename_data(text: str):
+    match = re.search(r"\[sound:(.+?)_(\d{2}\.\d{2}\.\d{2}\.\d{3})-(\d{2}\.\d{2}\.\d{2}\.\d{3})\.(\w+)\]", text)
     if not match:
-        return ""
+        return None
 
     filename_base = match.group(1)
     start_time = match.group(2)
     end_time = match.group(3)
     file_extension = match.group(4)
-    print("Filename base:", filename_base)
-    print("Start time:", start_time)
-    print("End time:", end_time)
-    print("File extension:", file_extension)
+    full_source_filename = f"{filename_base}.{file_extension}"
+    timestamp_filename = f"{filename_base}_{start_time}-{end_time}.{file_extension}"
+    collection_path = os.path.join(collection_dir, timestamp_filename)
+    source_path = get_source_file(filename_base)
+    return {
+        "filename_base": filename_base,
+        "start_time": start_time,
+        "end_time": end_time,
+        "file_extension": file_extension,
+        "full_source_filename": full_source_filename,
+        "timestamp_filename": timestamp_filename,
+        "collection_path": collection_path,
+        "source_path": source_path,
+    }
 
-    if get_source_file(filename_base):
-        if os.path.exists(os.path.join(mw.col.media.dir(), file_extension))
 
-
-
-def get_source_file(filename_base) -> str:
-    path = os.path.join(media_source_folder, filename_base + ".mp3")
-    if os.path.exists(path):
-        return path
-    else:
+def get_audio_from_timestamps(audio_filename) -> str:
+    data = extract_filename_data(audio_filename)
+    if not data:
         return ""
 
-get_audio_from_timestamps("[sound:Yuru_Camp_S1E08_00.06.05.332-00.06.07.700.mp3]")
+    filename_base = data["filename_base"]
+    start_time = data["start_time"]
+    end_time = data["end_time"]
+    file_extension = data["file_extension"]
+    full_source_filename = data["full_source_filename"]
+    timestamp_filename = data["timestamp_filename"]
+    collection_path = data["collection_path"]
+    source_path = data["source_path"]
+
+    if not source_path:
+        print(f"Source file not found: {full_source_filename}")
+        return ""
+
+    if os.path.exists(collection_path):
+        send2trash(collection_path)
+        print(f"Moved existing file {collection_path} to recycle bin.")
+
+    ffmpeg_command = create_ffmpeg_extract_command(source_path, start_time, end_time, "192", collection_path)
+    try:
+        subprocess.run(ffmpeg_command, check=True)
+        print(f"Created extracted audio: {collection_path}")
+        return collection_path
+    except subprocess.CalledProcessError as e:
+        print("FFmpeg failed:", e)
+        return ""
+
+def get_source_file(filename_base) -> str:
+    audio_video_exts = [
+        ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma",  # common audio
+        ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv",           # common video
+    ]
+
+    mp3_path = os.path.join(addon_source_folder, filename_base + ".mp3")
+    if os.path.exists(mp3_path):
+        return mp3_path
+    elif os.path.exists(mp3_path.replace("_", " ")):
+        return mp3_path.replace("_", " ")
+
+    alt_names = [filename_base, filename_base.replace("_", " ")]
+
+    print("Mp3 Source file not found, attempting extraction:", mp3_path)
+    for name in alt_names:
+        for ext in audio_video_exts:
+            path = os.path.join(addon_source_folder, name + ext)
+            print("now checking: ", path)
+            if os.path.exists(path):
+                mp3_path = ffmpeg_extract_full_mp3(path)
+                print(f"mp3 extracted from: {path}")
+                return mp3_path
+
+    print(f"No source file found for base name: {filename_base}")
+    return ""
+
+def create_ffmpeg_extract_command(source_path, start_time, end_time, kbps, collection_path) -> str:
+    start = convert_time(start_time)
+    end = convert_time(end_time)
+
+    duration_sec = time_to_seconds(end) - time_to_seconds(start)
+    if duration_sec <= 0:
+        print("End time must be after start time")
+        return ""
+
+    cmd = [
+        "ffmpeg",
+        "-y",  # overwrite output file without asking
+        "-i", source_path,
+        "-ss", start,
+        "-t", str(duration_sec),
+        "-codec:a", "libmp3lame",
+        "-b:a", f"{kbps}k",
+        collection_path
+    ]
+    return cmd
+
+def convert_time(t):
+    parts = t.split('.')
+    return f"{parts[0]}:{parts[1]}:{parts[2]}.{parts[3]}"
+
+def time_to_seconds(t):
+    h, m, s = t.split(':')
+    s, ms = (s.split(',') if ',' in s else s.split('.'))
+    return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000
+
+def time_to_milliseconds(t: str) -> int:
+    parts = t.split('.')
+    if len(parts) != 4:
+        raise ValueError("Time string must be in HH.MM.SS.mmm format")
+
+    h, m, s, ms = parts
+    total_ms = (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
+    return total_ms
+
+def milliseconds_to_anki_time_format(ms: int) -> str:
+    hours = ms // (3600 * 1000)
+    ms %= (3600 * 1000)
+    minutes = ms // (60 * 1000)
+    ms %= (60 * 1000)
+    seconds = ms // 1000
+    millis = ms % 1000
+    return f"{hours:02d}.{minutes:02d}.{seconds:02d}.{millis:03d}"
+
+def ffmpeg_extract_full_mp3(source_file_path) -> str:
+    base, _ = os.path.splitext(source_file_path)
+    output_path = base + ".mp3"
+
+    cmd = [
+        "ffmpeg",
+        "-y",                  # overwrite output if exists
+        "-i", source_file_path, # input file
+        "-map", "0:a:0",
+        "-codec:a", "libmp3lame",
+        "-b:a", "192k",        # bitrate 192 kbps
+        output_path
+    ]
+
+    try:
+        subprocess.run(cmd, check=True)
+        print(f"Converted to mp3: {output_path}")
+        return output_path
+    except subprocess.CalledProcessError as e:
+        print("FFmpeg conversion failed:", e)
+        return ""
+
+def alter_sound_file_times(filename, start_ms, end_ms) -> str:
+    data = extract_filename_data(filename)
+    if not data:
+        return ""
+    filename_base = data["filename_base"]
+    start_time = data["start_time"]
+    end_time = data["end_time"]
+    file_extension = data["file_extension"]
+    full_source_filename = data["full_source_filename"]
+    old_timestamp_path = data["collection_path"]
+    source_path = data["source_path"]
+
+    if not source_path or not os.path.isfile(source_path):
+        print(f"Missing source file for base name: {filename_base}")
+        return ""
+
+    print(f"start time: {start_time}")
+    print(f"end time: {end_time}")
+
+    # recycle original file
+    print(f"checking for old file to delete: {old_timestamp_path}")
+    if os.path.exists(old_timestamp_path):
+        send2trash(old_timestamp_path)
+        print(f"Moved existing file {old_timestamp_path} to recycle bin.")
+
+    # initialize times in milliseconds
+    start_milliseconds = time_to_milliseconds(start_time)
+    end_milliseconds = time_to_milliseconds(end_time)
+
+    # apply adjustments, ensure not negative
+    if start_ms != 0:
+        start_milliseconds = max(0, start_milliseconds + start_ms)
+    if end_ms != 0:
+        end_milliseconds = max(0, end_milliseconds + end_ms)
+
+    # validate times
+    if end_milliseconds <= start_milliseconds:
+        print("Invalid time range: end time must be after start time")
+        return ""
+
+    # convert back to anki time format
+    new_start_time = milliseconds_to_anki_time_format(start_milliseconds)
+    new_end_time = milliseconds_to_anki_time_format(end_milliseconds)
+    print(f"new_start_time: {new_start_time}")
+    print(f"new_end_time: {new_end_time}")
+
+
+    new_timestamp_filename = f"{filename_base}_{new_start_time}-{new_end_time}.{file_extension}"
+    old_timestamp_filename = f"{filename_base}_{start_time}-{end_time}.{file_extension}"
+    print(f"new_timestamp_filename: {new_timestamp_filename}")
+    new_timestamp_path = os.path.join(collection_dir, new_timestamp_filename)
+
+    ffmpeg_command = create_ffmpeg_extract_command(source_path, new_start_time, new_end_time, "192", new_timestamp_path)
+    try:
+        print(f"running command: {ffmpeg_command}")
+        subprocess.run(ffmpeg_command, check=True)
+        print(f"Created extracted audio: {new_timestamp_path}")
+    except subprocess.CalledProcessError as e:
+        print("FFmpeg failed:", e)
+        return ""
+
+
+
+    if os.path.exists(new_timestamp_path):
+        QTimer.singleShot(0, lambda: play(new_timestamp_filename))
+        return f"[sound:{new_timestamp_filename}]"
+    else:
+        print(f"file not found: {new_timestamp_path}")
+        print(f"using old path: {old_timestamp_path}")
+        return f"[sound:{old_timestamp_filename}]"
+
+
+
+# print(change_filename_start_time("[sound:Yuru_Camp_S1E01_00.17.38.583-00.17.40.084.mp3]", -5000))
+
+
+# get_audio_from_timestamps("[sound:Yuru_Camp_S1E08_00.06.05.332-00.06.07.700.mp3]")

@@ -1,6 +1,7 @@
 - [ ] figure out if migaku already did this
 - [ ] store original audios in a folder, tag cards automatically with video name
 - [ ] option to convert all videos in source to mp3 to save space
+- [ ] figure out a system to use langauge codes to always get the right audio track
 - [ ] trim/add 50ms to every audio in audio field
 - [ ] add/subtract 1db for each audio
 - [ ] equalize all audio in current deck

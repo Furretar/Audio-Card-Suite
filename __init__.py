@@ -1,4 +1,4 @@
-# File: AudioCardSuite/__init__.py
+# File: Audio-Card-Suite/__init__.py
 from aqt import gui_hooks
 from . import menu  # Import your menu module (which defines init_editor_buttons)
 

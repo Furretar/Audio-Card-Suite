@@ -1,6 +1,7 @@
 - [ ] figure out if migaku already did this
 - [ ] store original audios in a folder, tag cards automatically with video name
 - [ ] option to convert all videos in source to mp3 to save space
+- [ ] figure out a system to use langauge codes to always get the right audio track
 - [ ] trim/add 50ms to every audio in audio field
 - [ ] add/subtract 1db for each audio
 - [ ] equalize all audio in current deck
@@ -8,5 +9,6 @@
 - [ ] when using translation line, option to match timings or not
 - [ ] hotkey to add and remove 50ms to line in mpv?
 - [ ] option to change amount, from 50ms
+- [ ] hold shift control or alt to do 2 5 and 10x displayed amount
 - [ ] hotkey to add to beginning or end of last edited card
 - [ ] edit subtitle file as you make cards to make it match?

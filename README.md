@@ -9,5 +9,6 @@
 - [ ] when using translation line, option to match timings or not
 - [ ] hotkey to add and remove 50ms to line in mpv?
 - [ ] option to change amount, from 50ms
+- [ ] hold shift control or alt to do 2 5 and 10x displayed amount
 - [ ] hotkey to add to beginning or end of last edited card
 - [ ] edit subtitle file as you make cards to make it match?

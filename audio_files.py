@@ -160,16 +160,33 @@ def ffmpeg_extract_full_mp3(source_file_path) -> str:
     base, _ = os.path.splitext(source_file_path)
     output_path = base + ".mp3"
 
-    cmd = [
-        "ffmpeg",
-        "-y",                  # overwrite output if exists
-        "-i", source_file_path, # input file
-        "-map", "0:a:0",
-        "-codec:a", "libmp3lame",
-        "-b:a", "192k",        # bitrate 192 kbps
-        output_path
-    ]
+    delay_ms = get_audio_start_time_ms(source_file_path)
 
+    if delay_ms == 0:
+        # No delay, direct copy if possible
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", source_file_path,
+            "-map", "0:a:0",
+            "-c:a", "libmp3lame",
+            "-b:a", "192k",
+            output_path
+        ]
+    else:
+        # Add delay with adelay filter, re-encode
+        adelay_str = f"{delay_ms}|{delay_ms}"
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", source_file_path,
+            "-map", "0:a:0",
+            "-af", f"adelay={adelay_str}",
+            "-c:a", "libmp3lame",
+            "-ar", "48000",  # optional resample
+            "-b:a", "192k",
+            output_path
+        ]
+
+    print(f"Running FFmpeg command: {' '.join(cmd)}")
     try:
         subprocess.run(cmd, check=True)
         print(f"Converted to mp3: {output_path}")
@@ -194,8 +211,6 @@ def alter_sound_file_times(filename, start_ms, end_ms) -> str:
         print(f"Missing source file for base name: {filename_base}")
         return ""
 
-    print(f"start time: {start_time}")
-    print(f"end time: {end_time}")
 
     # recycle original file
     print(f"checking for old file to delete: {old_timestamp_path}")
@@ -248,6 +263,44 @@ def alter_sound_file_times(filename, start_ms, end_ms) -> str:
         print(f"file not found: {new_timestamp_path}")
         print(f"using old path: {old_timestamp_path}")
         return f"[sound:{old_timestamp_filename}]"
+
+import subprocess
+import re
+
+def get_audio_start_time_ms(source_file_path: str) -> int:
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "a:0",
+                "-show_packets",
+                "-read_intervals", "0%+#5",
+                "-print_format", "compact",
+                source_file_path
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        )
+
+        output = result.stdout
+
+        # find first pts_time using regex
+        match = re.search(r"pts_time=([\d\.]+)", output)
+        if match:
+            start_time = float(match.group(1))
+            delay_ms = round(start_time * 1000)
+            print(f"delay time: {delay_ms}")
+            return delay_ms
+        else:
+            print("No pts_time found in packets output.")
+            return 0
+    except Exception as e:
+        print(f"Could not get pts_time from packets: {e}")
+        return 0
+
 
 
 

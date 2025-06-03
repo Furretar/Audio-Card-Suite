@@ -15,3 +15,4 @@
 - [ ] stop it from deleting the current field if its not audio, or detect the field with sound in it while loaded note
 - [ ] hold shift control or alt to do 2 5 and 10x displayed amount
 - [ ] add/subtract 1db for each audio
+- [ ] can extract from mkv without converting to mp3 first, should be stored as opus if possible

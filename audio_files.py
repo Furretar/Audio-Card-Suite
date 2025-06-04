@@ -26,7 +26,12 @@ def get_audio_from_text(audio_filename) -> str:
 import re
 
 def extract_filename_data(text: str):
-    match = re.search(r"\[sound:(.+?)_(\d{2}\.\d{2}\.\d{2}\.\d{3})-(\d{2}\.\d{2}\.\d{2}\.\d{3})\.(\w+)\]", text)
+    match = re.search(
+        r"\[sound:(.+?)_(\d+\.\d+\.\d+\.\d+)-(\d+\.\d+\.\d+\.\d+)\.(\w+)\]",
+        text,
+        flags=re.UNICODE
+    )
+
     if not match:
         return None
 
@@ -195,8 +200,44 @@ def ffmpeg_extract_full_mp3(source_file_path) -> str:
         print("FFmpeg conversion failed:", e)
         return ""
 
+def get_audio_start_time_ms(source_file_path: str) -> int:
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "a:0",
+                "-show_packets",
+                "-read_intervals", "0%+#5",
+                "-print_format", "compact",
+                source_file_path
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        )
+
+        output = result.stdout
+
+        # find first pts_time using regex
+        match = re.search(r"pts_time=([\d\.]+)", output)
+        if match:
+            start_time = float(match.group(1))
+            delay_ms = round(start_time * 1000)
+            print(f"delay time: {delay_ms}")
+            return delay_ms
+        else:
+            print("No pts_time found in packets output.")
+            return 0
+    except Exception as e:
+        print(f"Could not get pts_time from packets: {e}")
+        return 0
+
 def alter_sound_file_times(filename, start_ms, end_ms) -> str:
+    print("received filename:", filename)
     data = extract_filename_data(filename)
+    print("extracted filename data:", data)
     if not data:
         return ""
     filename_base = data["filename_base"]
@@ -267,39 +308,7 @@ def alter_sound_file_times(filename, start_ms, end_ms) -> str:
 import subprocess
 import re
 
-def get_audio_start_time_ms(source_file_path: str) -> int:
-    try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v", "error",
-                "-select_streams", "a:0",
-                "-show_packets",
-                "-read_intervals", "0%+#5",
-                "-print_format", "compact",
-                source_file_path
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True
-        )
 
-        output = result.stdout
-
-        # find first pts_time using regex
-        match = re.search(r"pts_time=([\d\.]+)", output)
-        if match:
-            start_time = float(match.group(1))
-            delay_ms = round(start_time * 1000)
-            print(f"delay time: {delay_ms}")
-            return delay_ms
-        else:
-            print("No pts_time found in packets output.")
-            return 0
-    except Exception as e:
-        print(f"Could not get pts_time from packets: {e}")
-        return 0
 
 
 
@@ -307,4 +316,4 @@ def get_audio_start_time_ms(source_file_path: str) -> int:
 # print(change_filename_start_time("[sound:Yuru_Camp_S1E01_00.17.38.583-00.17.40.084.mp3]", -5000))
 
 
-# get_audio_from_timestamps("[sound:Yuru_Camp_S1E08_00.06.05.332-00.06.07.700.mp3]")
+print("results: " + alter_sound_file_times("[sound:jìnjī_de_jùrén_s1_1-5_5_0.21.02.887-0.21.07.283.mp3]", 50, 50))

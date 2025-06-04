@@ -106,7 +106,8 @@ def get_source_file(filename_base) -> str:
             path = os.path.join(addon_source_folder, name + ext)
             print("now checking: ", path)
             if os.path.exists(path):
-                return path
+                mp3_path = ffmpeg_extract_full_audio(path)
+                return mp3_path
 
     print(f"No source file found for base name: {filename_base}")
     return ""
@@ -114,22 +115,34 @@ def get_source_file(filename_base) -> str:
 def create_ffmpeg_extract_command(source_path, start_time, end_time, kbps, collection_path) -> str:
     start = convert_time(start_time)
     end = convert_time(end_time)
-
     duration_sec = time_to_seconds(end) - time_to_seconds(start)
     if duration_sec <= 0:
         print("End time must be after start time")
         return ""
 
+    delay_ms = get_audio_start_time_ms(source_path)
+
+    base, _ = os.path.splitext(collection_path)
+    collection_path = f"{base}.mp3"
+
     cmd = [
-        "ffmpeg",
-        "-y",  # overwrite output file without asking
+        "ffmpeg", "-y",
         "-i", source_path,
+        "-map", "0:a:0",  # extract first audio track
         "-ss", start,
         "-t", str(duration_sec),
-        "-codec:a", "libmp3lame",
+    ]
+
+    if delay_ms > 0:
+        adelay = f"{delay_ms}|{delay_ms}"
+        cmd += ["-af", f"adelay={adelay}"]
+
+    cmd += [
+        "-c:a", "libmp3lame",
         "-b:a", f"{kbps}k",
         collection_path
     ]
+
     return cmd
 
 def convert_time(t):
@@ -161,34 +174,27 @@ def milliseconds_to_anki_time_format(ms: int) -> str:
 
 def ffmpeg_extract_full_audio(source_file_path) -> str:
     base, _ = os.path.splitext(source_file_path)
-    output_path = base + ".opus"
+    output_path = base + ".mp3"
 
     delay_ms = get_audio_start_time_ms(source_file_path)
 
-    if delay_ms == 0:
-        # No delay, direct copy if possible
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", source_file_path,
-            "-map", "0:a:0",
-            "-c:a", "libopus",
-            "-b:a", "192k",
-            "-ar", "48000",
-            output_path
-        ]
-    else:
-        # Add delay with adelay filter, re-encode
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", source_file_path,
+        "-map", "0:a:0" # first track
+    ]
+
+    # add delay to beginning if detected
+    if delay_ms != 0:
         adelay_str = f"{delay_ms}|{delay_ms}"
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", source_file_path,
-            "-map", "0:a:0",
-            "-af", f"adelay={adelay_str}",
-            "-c:a", "libopus",
-            "-ar", "48000",
-            "-b:a", "192k",
-            output_path
+        cmd += [
+            "-af", f"adelay={adelay_str}"
         ]
+
+    cmd += [
+        "-b:a", "192k",
+        output_path
+    ]
 
     print(f"Running FFmpeg command: {' '.join(cmd)}")
     try:
@@ -297,7 +303,6 @@ def alter_sound_file_times(filename, start_ms, end_ms) -> str:
 
 
     if os.path.exists(new_timestamp_path):
-        QTimer.singleShot(0, lambda: play(new_timestamp_filename))
         return f"[sound:{new_timestamp_filename}]"
     else:
         print(f"file not found: {new_timestamp_path}")

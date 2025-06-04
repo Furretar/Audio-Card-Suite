@@ -7,6 +7,7 @@ mpv to anki tool
 
 edit already made cards
 - [ ] add/subtract 1db for each audio
+- [ ] setting to set sentence and audio fields so you can use subtitle line to find audio even if two have the same name
 - [ ] update buttons, change numbers if shift or ctrl held down
 - [ ] move buttons to above audio field
 - [ ] figure out a system to use language codes to always get the right audio track (box with order of priority?)

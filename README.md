@@ -5,6 +5,7 @@ mpv to anki tool
 - [ ] hotkey to add to beginning or end of last edited card
 - [ ] add other audio to backside for pure audio cards
 - [ ] add a check for source file with the same name, rename current file to disambiguate?
+- [ ] store source mp3 file on card when you create first card
 
 edit already made cards
 - [ ] add/subtract 1db for each audio

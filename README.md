@@ -1,16 +1,18 @@
+mpv to anki tool
 - [ ] figure out if migaku already did this
-- [ ] store original audios in a folder, tag cards automatically with video name
-- [ ] figure out a system to use langauge codes to always get the right audio track
+- [ ] when using translation line, option to match timings or not
+- [ ] hotkey to add and remove 50ms to subtitle line in mpv?
+- [ ] hotkey to add to beginning or end of last edited card
+- [ ] add other audio to backside for pure audio cards
+
+edit already made cards
+- [ ] add/subtract 1db for each audio
+- [ ] update buttons, change numbers if shift or ctrl held down
+- [ ] move buttons to above audio field
+- [ ] figure out a system to use language codes to always get the right audio track (box with order of priority?)
 - [ ] equalize all audio in current deck, auto equalize when adding
 - [ ] automatically extract subs
-- [ ] when using translation line, option to match timings or not
-- [ ] hotkey to add and remove 50ms to line in mpv?
-- [ ] hotkey to add to beginning or end of last edited card
-- [ ] edit subtitle file as you make cards to make it match?
-- [ ] add other audio to backside for pure audio cards
-- [ ] 
+- [ ] store original audios in a folder, tag cards automatically with video name (for jidoujisho cards)
 
-- [ ] stop it from deleting the current field if its not audio, or detect the field with sound in it while loaded note
-- [ ] hold shift control or alt to do 2 5 and 10x displayed amount
-- [ ] add/subtract 1db for each audio
-- [ ] can extract from mkv without converting to mp3 first, should be stored as opus if possible
+
+- [ ] edit subtitle file as you make cards to make it match?

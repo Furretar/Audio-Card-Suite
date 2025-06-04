@@ -1,14 +1,16 @@
 - [ ] figure out if migaku already did this
 - [ ] store original audios in a folder, tag cards automatically with video name
-- [ ] option to convert all videos in source to mp3 to save space
 - [ ] figure out a system to use langauge codes to always get the right audio track
-- [ ] trim/add 50ms to every audio in audio field
-- [ ] add/subtract 1db for each audio
-- [ ] equalize all audio in current deck
+- [ ] equalize all audio in current deck, auto equalize when adding
 - [ ] automatically extract subs
 - [ ] when using translation line, option to match timings or not
 - [ ] hotkey to add and remove 50ms to line in mpv?
-- [ ] option to change amount, from 50ms
-- [ ] hold shift control or alt to do 2 5 and 10x displayed amount
 - [ ] hotkey to add to beginning or end of last edited card
 - [ ] edit subtitle file as you make cards to make it match?
+- [ ] add other audio to backside for pure audio cards
+- [ ] 
+
+- [ ] stop it from deleting the current field if its not audio, or detect the field with sound in it while loaded note
+- [ ] hold shift control or alt to do 2 5 and 10x displayed amount
+- [ ] add/subtract 1db for each audio
+- [ ] can extract from mkv without converting to mp3 first, should be stored as opus if possible

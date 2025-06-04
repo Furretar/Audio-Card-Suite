@@ -88,7 +88,7 @@ def get_audio_from_timestamps(audio_filename) -> str:
 
 def get_source_file(filename_base) -> str:
     audio_video_exts = [
-        ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma",  # common audio
+        ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma", ".opus"  # common audio
         ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv",           # common video
     ]
 
@@ -106,9 +106,7 @@ def get_source_file(filename_base) -> str:
             path = os.path.join(addon_source_folder, name + ext)
             print("now checking: ", path)
             if os.path.exists(path):
-                mp3_path = ffmpeg_extract_full_mp3(path)
-                print(f"mp3 extracted from: {path}")
-                return mp3_path
+                return path
 
     print(f"No source file found for base name: {filename_base}")
     return ""
@@ -161,9 +159,9 @@ def milliseconds_to_anki_time_format(ms: int) -> str:
     millis = ms % 1000
     return f"{hours:02d}.{minutes:02d}.{seconds:02d}.{millis:03d}"
 
-def ffmpeg_extract_full_mp3(source_file_path) -> str:
+def ffmpeg_extract_full_audio(source_file_path) -> str:
     base, _ = os.path.splitext(source_file_path)
-    output_path = base + ".mp3"
+    output_path = base + ".opus"
 
     delay_ms = get_audio_start_time_ms(source_file_path)
 
@@ -173,8 +171,9 @@ def ffmpeg_extract_full_mp3(source_file_path) -> str:
             "ffmpeg", "-y",
             "-i", source_file_path,
             "-map", "0:a:0",
-            "-c:a", "libmp3lame",
+            "-c:a", "libopus",
             "-b:a", "192k",
+            "-ar", "48000",
             output_path
         ]
     else:
@@ -185,8 +184,8 @@ def ffmpeg_extract_full_mp3(source_file_path) -> str:
             "-i", source_file_path,
             "-map", "0:a:0",
             "-af", f"adelay={adelay_str}",
-            "-c:a", "libmp3lame",
-            "-ar", "48000",  # optional resample
+            "-c:a", "libopus",
+            "-ar", "48000",
             "-b:a", "192k",
             output_path
         ]
@@ -316,4 +315,4 @@ import re
 # print(change_filename_start_time("[sound:Yuru_Camp_S1E01_00.17.38.583-00.17.40.084.mp3]", -5000))
 
 
-print("results: " + alter_sound_file_times("[sound:jìnjī_de_jùrén_s1_1-5_5_0.21.02.887-0.21.07.283.mp3]", 50, 50))
+# print("results: " + alter_sound_file_times("[sound:jìnjī_de_jùrén_s1_1-5_5_0.21.02.887-0.21.07.283.mp3]", 50, 50))

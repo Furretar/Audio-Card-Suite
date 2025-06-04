@@ -7,23 +7,21 @@ from . import audio_files
 ms_amount = 50
 
 def adjust_sound_tag(editor: Editor, start_delta: int, end_delta: int) -> None:
-    field_idx = editor.currentField
-    if field_idx is None:
-        showInfo("No field is currently focused.")
-        return
+    # finds first field with "[sound:" tag
+    for idx, field_text in enumerate(editor.note.fields):
+        if "[sound:" in field_text:
+            new_sound_tag = audio_files.alter_sound_file_times(field_text, start_delta, end_delta)
+            print("new_sound_tag:", new_sound_tag)
 
-    field_text = editor.note.fields[field_idx]
-    new_sound_tag = audio_files.alter_sound_file_times(field_text, start_delta, end_delta)
-    print("new_sound_tag:", new_sound_tag)
+            if new_sound_tag:
+                new_text = re.sub(r"\[sound:.*?\]", new_sound_tag, field_text)
+                editor.note.fields[idx] = new_text
+                editor.loadNote()
+            else:
+                print("No new sound tag returned, field not updated.")
+            return
 
-    if new_sound_tag:
-        import re
-        # Replace existing [sound:...] tag, or replace entire field if that's all it contains
-        new_text = re.sub(r"\[sound:.*?\]", new_sound_tag, field_text)
-        editor.note.fields[field_idx] = new_text
-        editor.loadNote()
-    else:
-        print("No new sound tag returned; field not updated.")
+    showInfo("No [sound:] tag found in any field.")
 
 
 def add_custom_editor_button(html_buttons: list[str], editor: Editor) -> None:

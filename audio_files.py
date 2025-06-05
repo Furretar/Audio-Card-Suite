@@ -1,13 +1,7 @@
-import re
-import os
-import subprocess
 
-from PyQt6.QtCore import QTimer
-from aqt import mw
+import os
 from send2trash import send2trash
 from aqt import mw
-from aqt.sound import play
-
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 addon_source_folder = os.path.join(addon_dir, "Sources")
 
@@ -18,12 +12,49 @@ else:
     # fallback path when running outside Anki
     collection_dir = r"C:\Users\wyatt\AppData\Roaming\Anki2\Furretar\collection.media"
 
+audio_exts = [
+    ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma", ".opus", ".m4b"
+]
 
-def get_audio_from_text(audio_filename) -> str:
-    pass
+video_exts = [
+    ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".m4b"
+]
 
 
-import re
+# def get_audio_from_timestamps(audio_filename, sentence_text) -> str:
+#     if "jidoujisho-" in audio_filename:
+#         audio_filename = get_timestamps_from_line_text(sentence_text)
+#
+#     data = extract_filename_data(audio_filename)
+#     if not data:
+#         return ""
+#
+#     filename_base = data["filename_base"]
+#     start_time = data["start_time"]
+#     end_time = data["end_time"]
+#     file_extension = data["file_extension"]
+#     full_source_filename = data["full_source_filename"]
+#     timestamp_filename = data["timestamp_filename"]
+#     collection_path = data["collection_path"]
+#     source_path = data["source_path"]
+#
+#     if not source_path:
+#         print(f"Source file not found: {full_source_filename}")
+#         return ""
+#
+#     if os.path.exists(collection_path):
+#         send2trash(collection_path)
+#         print(f"Moved existing file {collection_path} to recycle bin.")
+#
+#     ffmpeg_command = create_ffmpeg_extract_command(source_path, start_time, end_time, "192", collection_path)
+#     try:
+#         subprocess.run(ffmpeg_command, check=True)
+#         print(f"Created extracted audio: {collection_path}")
+#         return collection_path
+#     except subprocess.CalledProcessError as e:
+#         print("FFmpeg failed:", e)
+#         return ""
+
 
 def extract_filename_data(text: str):
     match = re.search(
@@ -54,43 +85,62 @@ def extract_filename_data(text: str):
         "source_path": source_path,
     }
 
+def format_timestamp_for_filename(timestamp: str) -> str:
+    return timestamp.replace(':', '.').replace(',', '.')
 
-def get_audio_from_timestamps(audio_filename) -> str:
-    data = extract_filename_data(audio_filename)
-    if not data:
-        return ""
 
-    filename_base = data["filename_base"]
-    start_time = data["start_time"]
-    end_time = data["end_time"]
-    file_extension = data["file_extension"]
-    full_source_filename = data["full_source_filename"]
-    timestamp_filename = data["timestamp_filename"]
-    collection_path = data["collection_path"]
-    source_path = data["source_path"]
 
-    if not source_path:
-        print(f"Source file not found: {full_source_filename}")
-        return ""
-
-    if os.path.exists(collection_path):
-        send2trash(collection_path)
-        print(f"Moved existing file {collection_path} to recycle bin.")
-
-    ffmpeg_command = create_ffmpeg_extract_command(source_path, start_time, end_time, "192", collection_path)
+def extract_first_subtitle_line(video_path, srt_output_path):
     try:
-        subprocess.run(ffmpeg_command, check=True)
-        print(f"Created extracted audio: {collection_path}")
-        return collection_path
+        print(f"Extracting first subtitle for {video_path}")
+        subprocess.run([
+            "ffmpeg",
+            "-y",
+            "-i", video_path,
+            "-map", "0:s:0",
+            srt_output_path
+        ])
     except subprocess.CalledProcessError as e:
-        print("FFmpeg failed:", e)
-        return ""
+        print(f"Failed to extract subtitles from {video_path}: {e}")
+
+
+def get_timestamps_from_line_text(sentence_text) -> str:
+    for filename in os.listdir(addon_source_folder):
+        filename_base, file_extension = os.path.splitext(filename)
+        if file_extension.lower() in video_exts:
+            video_path = os.path.join(addon_source_folder, filename)
+            srt_path = os.path.join(addon_source_folder, filename_base + ".srt")
+
+            if not os.path.exists(srt_path):
+                extract_first_subtitle_line(video_path, srt_path)
+                if not os.path.exists(srt_path):
+                    print(f"Failed to extract subtitles from {video_path}")
+                    continue
+
+            with open(srt_path, 'r', encoding='utf-8') as f:
+                lines = f.read().splitlines()
+
+            i = 0
+            print(f"reading file: {filename_base}" + ".srt")
+
+            while i < len(lines):
+                if lines[i] != "" and lines[i] == sentence_text:
+                    timestamp_line = lines[i - 1]
+                    start_srt, end_srt = [t.strip() for t in timestamp_line.split('-->')]
+                    start_time = format_timestamp_for_filename(start_srt)
+                    end_time = format_timestamp_for_filename(end_srt)
+                    filename_base, file_extension = os.path.splitext(filename)
+
+                    sound_line = f"[sound:{filename_base}_{start_time}-{end_time}.mp3]"
+
+                    return sound_line
+                i += 1
+    return ""
+
+
+
 
 def get_source_file(filename_base) -> str:
-    audio_video_exts = [
-        ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma", ".opus"  # common audio
-        ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv",           # common video
-    ]
 
     mp3_path = os.path.join(addon_source_folder, filename_base + ".mp3")
     if os.path.exists(mp3_path):
@@ -102,7 +152,7 @@ def get_source_file(filename_base) -> str:
 
     print("Mp3 Source file not found, attempting extraction:", mp3_path)
     for name in alt_names:
-        for ext in audio_video_exts:
+        for ext in set(audio_exts) & set(video_exts):
             path = os.path.join(addon_source_folder, name + ext)
             print("now checking: ", path)
             if os.path.exists(path):
@@ -113,6 +163,20 @@ def get_source_file(filename_base) -> str:
     return ""
 
 def create_ffmpeg_extract_command(source_path, start_time, end_time, kbps, collection_path) -> str:
+    def get_video_duration_seconds(path):
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            return float(result.stdout.strip())
+        except Exception as e:
+            print("Failed to get duration:", e)
+            return 0
+
     start = convert_time(start_time)
     end = convert_time(end_time)
     duration_sec = time_to_seconds(end) - time_to_seconds(start)
@@ -121,17 +185,27 @@ def create_ffmpeg_extract_command(source_path, start_time, end_time, kbps, colle
         return ""
 
     delay_ms = get_audio_start_time_ms(source_path)
-
     base, _ = os.path.splitext(collection_path)
     collection_path = f"{base}.mp3"
 
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", source_path,
-        "-map", "0:a:0",  # extract first audio track
-        "-ss", start,
-        "-t", str(duration_sec),
-    ]
+    duration_total = get_video_duration_seconds(source_path)
+
+    if duration_total > 3600:
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", start,
+            "-i", source_path,
+            "-map", "0:a:0",
+            "-t", str(duration_sec),
+        ]
+    else:
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", source_path,
+            "-map", "0:a:0",  # extract first audio track
+            "-ss", start,
+            "-t", str(duration_sec),
+        ]
 
     if delay_ms > 0:
         adelay = f"{delay_ms}|{delay_ms}"
@@ -315,7 +389,7 @@ import re
 
 
 
-
+# print(get_timestamps_from_line_text("這樣根本就不能露營嘛"))
 
 # print(change_filename_start_time("[sound:Yuru_Camp_S1E01_00.17.38.583-00.17.40.084.mp3]", -5000))
 

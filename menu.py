@@ -17,6 +17,10 @@ def on_note_loaded(editor: Editor):
         for field_text in editor.note.fields:
             if "[sound:" in field_text:
                 data = audio_files.extract_filename_data(field_text)
+                if not data:
+                    print(f"Could not extract timestamp from: {field_text}")
+                    continue
+
                 timestamp_filename = data["timestamp_filename"]
                 print(f"playing {timestamp_filename}")
                 QTimer.singleShot(0, lambda: play(timestamp_filename))
@@ -42,16 +46,24 @@ def adjust_sound_tag(editor: Editor, start_delta: int, end_delta: int) -> None:
         end_delta *= 5
 
     # finds first field with "[sound:" tag
+    sentence_text = editor.note.fields[0]
+
     for idx, field_text in enumerate(editor.note.fields):
         if "[sound:" in field_text:
-            new_sound_tag = audio_files.alter_sound_file_times(field_text, start_delta, end_delta)
+            if "jidoujisho-" in field_text:
+                new_sound_name = audio_files.get_timestamps_from_line_text(sentence_text)
+                new_sound_tag = audio_files.alter_sound_file_times(new_sound_name, start_delta, end_delta)
+            else:
+                new_sound_tag = audio_files.alter_sound_file_times(field_text, start_delta, end_delta)
             print("new_sound_tag:", new_sound_tag)
 
             if new_sound_tag:
                 new_text = re.sub(r"\[sound:.*?\]", new_sound_tag, field_text)
                 editor.note.fields[idx] = new_text
                 editor.loadNote()
-
+                print(f"now playing {new_sound_tag}")
+                sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_tag).group(1)
+                QTimer.singleShot(0, lambda: play(sound_filename))
 
             else:
                 print("No new sound tag returned, field not updated.")

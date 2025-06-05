@@ -4,7 +4,8 @@ mpv to anki tool
 - [ ] hotkey to add and remove 50ms to subtitle line in mpv?
 - [ ] hotkey to add to beginning or end of last edited card
 - [ ] add other audio to backside for pure audio cards
-- [ ] add a check for source file with the same name, rename current file to disambiguate?
+- [ ] store source filename with hash, then add to filename if different video has the same name, ie 01_abcd.mkv, 01_(2)_efgh.mkv, dont use hash in mp3 file on the cards
+- [ ] store source mp3 file on card when you create first card
 
 edit already made cards
 - [ ] add/subtract 1db for each audio

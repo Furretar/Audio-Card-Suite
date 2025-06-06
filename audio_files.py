@@ -4,6 +4,7 @@ from send2trash import send2trash
 from aqt import mw
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 addon_source_folder = os.path.join(addon_dir, "Sources")
+import re
 
 # temp for testing outside of anki
 if mw is not None and mw.col is not None and mw.col.media is not None:
@@ -21,42 +22,7 @@ video_exts = [
 ]
 
 
-# def get_audio_from_timestamps(audio_filename, sentence_text) -> str:
-#     if "jidoujisho-" in audio_filename:
-#         audio_filename = get_timestamps_from_line_text(sentence_text)
-#
-#     data = extract_filename_data(audio_filename)
-#     if not data:
-#         return ""
-#
-#     filename_base = data["filename_base"]
-#     start_time = data["start_time"]
-#     end_time = data["end_time"]
-#     file_extension = data["file_extension"]
-#     full_source_filename = data["full_source_filename"]
-#     timestamp_filename = data["timestamp_filename"]
-#     collection_path = data["collection_path"]
-#     source_path = data["source_path"]
-#
-#     if not source_path:
-#         print(f"Source file not found: {full_source_filename}")
-#         return ""
-#
-#     if os.path.exists(collection_path):
-#         send2trash(collection_path)
-#         print(f"Moved existing file {collection_path} to recycle bin.")
-#
-#     ffmpeg_command = create_ffmpeg_extract_command(source_path, start_time, end_time, "192", collection_path)
-#     try:
-#         subprocess.run(ffmpeg_command, check=True)
-#         print(f"Created extracted audio: {collection_path}")
-#         return collection_path
-#     except subprocess.CalledProcessError as e:
-#         print("FFmpeg failed:", e)
-#         return ""
-
-
-def extract_filename_data(text: str):
+def extract_sound_line_data(text: str):
     match = re.search(
         r"\[sound:(.+?)_(\d+\.\d+\.\d+\.\d+)-(\d+\.\d+\.\d+\.\d+)\.(\w+)\]",
         text,
@@ -103,45 +69,82 @@ def extract_first_subtitle_line(video_path, srt_output_path):
     except subprocess.CalledProcessError as e:
         print(f"Failed to extract subtitles from {video_path}: {e}")
 
+def get_subtitle_sentence_text_from_relative_index(sentence_text, relative_index) -> str:
+    subtitle_path = get_subtitle_file_from_sentence_text(sentence_text)
+    with open(subtitle_path, 'r', encoding='utf-8') as f:
+        lines = f.read().splitlines()
 
-def get_timestamps_from_line_text(sentence_text) -> str:
+    i = 0
+    while i < len(lines):
+        if lines[i] != "" and sentence_text in lines[i]:
+            target_index = i + (4 * relative_index)
+            if 0 <= target_index < len(lines):
+                target_line = lines[i + (4 * relative_index)]
+                return target_line
+            else:
+                print(f"Index {target_index} out of bounds for lines of length {len(lines)}")
+                return ""
+        i += 1
+    return ""
+
+
+
+def get_subtitle_file_from_sentence_text(sentence_text) -> str:
     for filename in os.listdir(addon_source_folder):
         filename_base, file_extension = os.path.splitext(filename)
         if file_extension.lower() in video_exts:
             video_path = os.path.join(addon_source_folder, filename)
-            srt_path = os.path.join(addon_source_folder, filename_base + ".srt")
+            subtitle_path = os.path.join(addon_source_folder, filename_base + ".srt")
 
-            if not os.path.exists(srt_path):
-                extract_first_subtitle_line(video_path, srt_path)
-                if not os.path.exists(srt_path):
+            if not os.path.exists(subtitle_path):
+                extract_first_subtitle_line(video_path, subtitle_path)
+                if not os.path.exists(subtitle_path):
                     print(f"Failed to extract subtitles from {video_path}")
                     continue
 
-            with open(srt_path, 'r', encoding='utf-8') as f:
+            with open(subtitle_path, 'r', encoding='utf-8') as f:
                 lines = f.read().splitlines()
 
             i = 0
-            print(f"reading file: {filename_base}" + ".srt")
+            # print(f"reading file: {filename_base}" + ".srt")
 
             while i < len(lines):
-                if lines[i] != "" and lines[i] == sentence_text:
-                    timestamp_line = lines[i - 1]
-                    start_srt, end_srt = [t.strip() for t in timestamp_line.split('-->')]
-                    start_time = format_timestamp_for_filename(start_srt)
-                    end_time = format_timestamp_for_filename(end_srt)
-                    filename_base, file_extension = os.path.splitext(filename)
-
-                    sound_line = f"[sound:{filename_base}_{start_time}-{end_time}.mp3]"
-
-                    return sound_line
+                if lines[i] != "" and sentence_text in lines[i]:
+                    return subtitle_path
                 i += 1
+    return ""
+
+def get_timestamps_from_sentence_text(sentence_text) -> str:
+    subtitle_path = get_subtitle_file_from_sentence_text(sentence_text)
+    if not subtitle_path:
+        print(f"No subtitle file found containing sentence: {sentence_text}")
+        return ""
+
+    filename_base, file_extension = os.path.splitext(os.path.basename(subtitle_path))
+    filename = os.path.basename(subtitle_path)
+    with open(subtitle_path, 'r', encoding='utf-8') as f:
+        lines = f.read().splitlines()
+    # print(f"reading file: {filename_base}" + ".srt")
+    for i in range(1, len(lines)):
+        if lines[i] != "" and sentence_text in lines[i]:
+            timestamp_line = lines[i - 1]
+            try:
+                start_srt, end_srt = [t.strip() for t in timestamp_line.split('-->')]
+                start_time = format_timestamp_for_filename(start_srt)
+                end_time = format_timestamp_for_filename(end_srt)
+                filename_base, _ = os.path.splitext(filename)
+                return f"[sound:{filename_base}_{start_time}-{end_time}.mp3]"
+            except Exception as e:
+                print(f"Error parsing timestamp near line {i}: {e}")
+                return ""
+
+    print(f"Sentence not found in subtitle file: {subtitle_path}")
     return ""
 
 
 
 
 def get_source_file(filename_base) -> str:
-
     mp3_path = os.path.join(addon_source_folder, filename_base + ".mp3")
     if os.path.exists(mp3_path):
         return mp3_path
@@ -152,7 +155,7 @@ def get_source_file(filename_base) -> str:
 
     print("Mp3 Source file not found, attempting extraction:", mp3_path)
     for name in alt_names:
-        for ext in set(audio_exts) & set(video_exts):
+        for ext in set(audio_exts) | set(video_exts):
             path = os.path.join(addon_source_folder, name + ext)
             print("now checking: ", path)
             if os.path.exists(path):
@@ -315,8 +318,7 @@ def get_audio_start_time_ms(source_file_path: str) -> int:
 
 def alter_sound_file_times(filename, start_ms, end_ms) -> str:
     print("received filename:", filename)
-    data = extract_filename_data(filename)
-    print("extracted filename data:", data)
+    data = extract_sound_line_data(filename)
     if not data:
         return ""
     filename_base = data["filename_base"]
@@ -387,9 +389,9 @@ import subprocess
 import re
 
 
-
-
-# print(get_timestamps_from_line_text("這樣根本就不能露營嘛"))
+#
+#
+# print(get_timestamps_from_sentence_text("這樣根本就不能露營嘛"))
 
 # print(change_filename_start_time("[sound:Yuru_Camp_S1E01_00.17.38.583-00.17.40.084.mp3]", -5000))
 

@@ -108,8 +108,8 @@ def adjust_sound_tag(editor: Editor, start_delta: int, end_delta: int) -> None:
     print("new_sound_tag:", new_sound_tag)
 
     if new_sound_tag:
-        new_text = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
-        editor.note.fields[sound_idx] = new_text
+        print("extracted text: ", new_sound_tag)
+        editor.note.fields[sound_idx] = new_sound_tag
         editor.loadNote()
         print(f"now playing {new_sound_tag}")
         sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_tag).group(1)

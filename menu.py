@@ -100,7 +100,7 @@ def adjust_sound_tag(editor: Editor, start_delta: int, end_delta: int) -> None:
     sound_line, sound_idx = get_sound_line(editor)
     sentence_text, sentence_idx = get_sentence_text(editor)
 
-    if "jidoujisho-" in sound_line:
+    if "jidoujisho-" in sound_line or sound_line == "":
         new_sound_name = audio_files.get_timestamps_from_sentence_text(sentence_text)
         new_sound_tag = audio_files.alter_sound_file_times(new_sound_name, start_delta, end_delta)
     else:
@@ -135,15 +135,11 @@ def get_sound_line(editor: Editor):
 def on_note_loaded(editor: Editor):
     if getattr(editor, "_auto_play_enabled", False):
         for field_text in editor.note.fields:
-            if "[sound:" in field_text:
-                data = audio_files.extract_sound_line_data(field_text)
-                if not data:
-                    print(f"Could not extract timestamp from: {field_text}")
-                    continue
-
-                timestamp_filename = data["timestamp_filename"]
-                print(f"playing {timestamp_filename}")
-                QTimer.singleShot(0, lambda: play(timestamp_filename))
+            match = re.search(r"\[sound:([^\]]+)\]", field_text)
+            if match:
+                filename = match.group(1)
+                print(f"Playing sound: {filename}")
+                QTimer.singleShot(0, lambda fn=filename: play(fn))
                 break
 
 def toggle_auto_play_audio(editor: Editor):

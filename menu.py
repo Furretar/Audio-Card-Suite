@@ -1,3 +1,4 @@
+import subprocess
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication
@@ -100,6 +101,8 @@ def adjust_sound_tag(editor: Editor, start_delta: int, end_delta: int) -> None:
     sound_line, sound_idx = get_sound_line(editor)
     sentence_text, sentence_idx = get_sentence_text(editor)
 
+
+
     if "jidoujisho-" in sound_line or sound_line == "":
         new_sound_name = audio_files.get_timestamps_from_sentence_text(sentence_text)
         new_sound_tag = audio_files.alter_sound_file_times(new_sound_name, start_delta, end_delta)
@@ -112,6 +115,9 @@ def adjust_sound_tag(editor: Editor, start_delta: int, end_delta: int) -> None:
         editor.note.fields[sound_idx] = new_sound_tag
         editor.loadNote()
         print(f"now playing {new_sound_tag}")
+
+        # 3 is temporary screenshot index
+        audio_files.add_image_if_empty(editor, 3, new_sound_tag)
         sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_tag).group(1)
         QTimer.singleShot(0, lambda: play(sound_filename))
 
@@ -120,6 +126,11 @@ def adjust_sound_tag(editor: Editor, start_delta: int, end_delta: int) -> None:
     return
 
     showInfo("No [sound:] tag found in any field.")
+
+
+
+
+
 
 # temporary logic
 def get_sentence_text(editor: Editor):
@@ -130,7 +141,7 @@ def get_sound_line(editor: Editor):
     for idx, field_text in enumerate(editor.note.fields):
         if "[sound:" in field_text:
             return field_text, idx
-    return "", -1
+    return "", 2
 
 def on_note_loaded(editor: Editor):
     if getattr(editor, "_auto_play_enabled", False):

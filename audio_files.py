@@ -1,10 +1,13 @@
 
 import os
+
+from aqt.utils import showInfo
 from send2trash import send2trash
 from aqt import mw
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 addon_source_folder = os.path.join(addon_dir, "Sources")
 import re
+from aqt.editor import Editor
 
 # temp for testing outside of anki
 if mw is not None and mw.col is not None and mw.col.media is not None:
@@ -32,13 +35,16 @@ def extract_sound_line_data(text: str):
     if not match:
         return None
 
-    filename_base = match.group(1)
+    filename_base = match.group(1).replace(" ", "_")
     start_time = match.group(2)
     end_time = match.group(3)
     file_extension = match.group(4)
     full_source_filename = f"{filename_base}.{file_extension}"
     timestamp_filename = f"{filename_base}_{start_time}-{end_time}.{file_extension}"
-    collection_path = os.path.join(collection_dir, timestamp_filename)
+    audio_collection_path = os.path.join(collection_dir, timestamp_filename)
+    screenshot_filename = f"{filename_base}_{start_time}.jpg"
+    screenshot_collection_path = os.path.join(collection_dir, screenshot_filename)
+
     source_path = get_source_file(filename_base)
     return {
         "filename_base": filename_base,
@@ -47,8 +53,10 @@ def extract_sound_line_data(text: str):
         "file_extension": file_extension,
         "full_source_filename": full_source_filename,
         "timestamp_filename": timestamp_filename,
-        "collection_path": collection_path,
+        "collection_path": audio_collection_path,
         "source_path": source_path,
+        "screenshot_filename": screenshot_filename,
+        "screenshot_collection_path": screenshot_collection_path,
     }
 
 def format_timestamp_for_filename(timestamp: str) -> str:
@@ -142,7 +150,15 @@ def get_timestamps_from_sentence_text(sentence_text) -> str:
     return ""
 
 
-
+def check_for_video_source(filename_base) -> str:
+    alt_names = [filename_base, filename_base.replace("_", " ")]
+    for name in alt_names:
+        for ext in set(video_exts):
+            path = os.path.join(addon_source_folder, name + ext)
+            print("now checking: ", path)
+            if os.path.exists(path):
+                return path
+    return ""
 
 def get_source_file(filename_base) -> str:
     mp3_path = os.path.join(addon_source_folder, filename_base + ".mp3")
@@ -155,7 +171,12 @@ def get_source_file(filename_base) -> str:
 
     print("Mp3 Source file not found, attempting extraction:", mp3_path)
     for name in alt_names:
-        for ext in set(audio_exts) | set(video_exts):
+        video_source_path = check_for_video_source(name)
+        if video_source_path:
+            mp3_path = ffmpeg_extract_full_audio(video_source_path)
+            return mp3_path
+
+        for ext in set(audio_exts):
             path = os.path.join(addon_source_folder, name + ext)
             print("now checking: ", path)
             if os.path.exists(path):
@@ -165,23 +186,75 @@ def get_source_file(filename_base) -> str:
     print(f"No source file found for base name: {filename_base}")
     return ""
 
-def create_ffmpeg_extract_command(source_path, start_time, end_time, kbps, collection_path) -> str:
-    def get_video_duration_seconds(path):
-        try:
-            result = subprocess.run(
-                ["ffprobe", "-v", "error", "-select_streams", "v:0",
-                 "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            return float(result.stdout.strip())
-        except Exception as e:
-            print("Failed to get duration:", e)
-            return 0
+def get_video_duration_seconds(path):
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        return float(result.stdout.strip())
+    except Exception as e:
+        print("Failed to get duration:", e)
+        return 0
 
-    start = convert_time(start_time)
-    end = convert_time(end_time)
+def add_image_if_empty(editor: Editor, screenshot_index, new_sound_tag: str):
+    # check if any field already has an image
+    for idx, field_text in enumerate(editor.note.fields):
+        if ".jpg" in field_text or ".png" in field_text:
+            return ""
+
+    print(f"no image found, extracting from source")
+
+    data = extract_sound_line_data(new_sound_tag)
+    start_time = data["start_time"]
+    filename_base = data["filename_base"]
+    source_path = data["source_path"]
+    screenshot_collection_path = data["screenshot_collection_path"]
+    screenshot_filename = data["screenshot_filename"]
+    video_source_path = check_for_video_source(filename_base)
+    if not video_source_path:
+        print(f"No video source found for {filename_base}")
+        return ""
+
+    screenshot_path = run_ffmpeg_extract_screenshot_command(video_source_path, start_time, screenshot_collection_path)
+
+    if screenshot_path:
+        embed_screenshot = f'<img src="{screenshot_filename}">'
+        print(f"add screenshot: {embed_screenshot}")
+        editor.note.fields[screenshot_index] = embed_screenshot
+        editor.loadNote()
+    else:
+        showInfo("Could not add screenshot")
+
+
+def run_ffmpeg_extract_screenshot_command(source_path, screenshot_timestamp, screenshot_collection_path) -> str:
+    timestamp = convert_to_default_time_notation(screenshot_timestamp)
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", timestamp,
+        "-i", source_path,
+        "-frames:v", "1",
+        "-q:v", "15",
+        screenshot_collection_path
+    ]
+
+    try:
+        print(f"running command: {cmd}")
+        subprocess.run(cmd, check=True)
+        print(f"extracted screenshot: {screenshot_collection_path}")
+        return screenshot_collection_path
+    except subprocess.CalledProcessError as e:
+        print("FFmpeg failed:", e)
+        return ""
+
+
+def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, kbps, collection_path) -> str:
+    start = convert_to_default_time_notation(start_time)
+    end = convert_to_default_time_notation(end_time)
     duration_sec = time_to_seconds(end) - time_to_seconds(start)
     if duration_sec <= 0:
         print("End time must be after start time")
@@ -191,24 +264,14 @@ def create_ffmpeg_extract_command(source_path, start_time, end_time, kbps, colle
     base, _ = os.path.splitext(collection_path)
     collection_path = f"{base}.mp3"
 
-    duration_total = get_video_duration_seconds(source_path)
 
-    if duration_total > 3600:
-        cmd = [
-            "ffmpeg", "-y",
-            "-ss", start,
-            "-i", source_path,
-            "-map", "0:a:0",
-            "-t", str(duration_sec),
-        ]
-    else:
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", source_path,
-            "-map", "0:a:0",  # extract first audio track
-            "-ss", start,
-            "-t", str(duration_sec),
-        ]
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", start,
+        "-i", source_path,
+        "-map", "0:a:0",
+        "-t", str(duration_sec),
+    ]
 
     if delay_ms > 0:
         adelay = f"{delay_ms}|{delay_ms}"
@@ -222,7 +285,7 @@ def create_ffmpeg_extract_command(source_path, start_time, end_time, kbps, colle
 
     return cmd
 
-def convert_time(t):
+def convert_to_default_time_notation(t):
     parts = t.split('.')
     return f"{parts[0]}:{parts[1]}:{parts[2]}.{parts[3]}"
 
@@ -367,7 +430,7 @@ def alter_sound_file_times(filename, start_ms, end_ms) -> str:
     print(f"new_timestamp_filename: {new_timestamp_filename}")
     new_timestamp_path = os.path.join(collection_dir, new_timestamp_filename)
 
-    ffmpeg_command = create_ffmpeg_extract_command(source_path, new_start_time, new_end_time, "192", new_timestamp_path)
+    ffmpeg_command = create_ffmpeg_extract_audio_command(source_path, new_start_time, new_end_time, "192", new_timestamp_path)
     try:
         print(f"running command: {ffmpeg_command}")
         subprocess.run(ffmpeg_command, check=True)

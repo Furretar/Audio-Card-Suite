@@ -1,5 +1,6 @@
 - [ ] search sources for currently selected text, allows adding when sentence field was added manually and doesnt match subs perfectly
-- [ ] auto convert jidoujisho files to subs2srs format
+- [ ] add indexes to filenames for disambiguation
+- [ ] add a button to fetch next result for text if it matched something else
 
 
 mpv to anki tool

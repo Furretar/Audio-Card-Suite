@@ -1,6 +1,7 @@
 - [ ] search sources for currently selected text, allows adding when sentence field was added manually and doesnt match subs perfectly
 - [ ] add indexes to filenames for disambiguation
 - [ ] add a button to fetch next result for text if it matched something else
+- [ ] refresh line if its slightly different from the sub
 
 
 mpv to anki tool

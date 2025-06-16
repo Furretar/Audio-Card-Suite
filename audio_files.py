@@ -249,6 +249,29 @@ def add_image_if_empty(editor: Editor, screenshot_index, new_sound_tag: str):
 
 
 def run_ffmpeg_extract_screenshot_command(source_path, screenshot_timestamp, screenshot_collection_path) -> str:
+    if source_path.lower().endswith(".m4b"):
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", source_path,
+            "-an",
+            "-vcodec", "copy",
+            "-loglevel", "error",
+            screenshot_collection_path
+        ]
+        try:
+            print(f"Extracting cover from m4b: {cmd}")
+            subprocess.run(cmd, check=True)
+            if os.path.exists(screenshot_collection_path):
+                print(f"Extracted cover: {screenshot_collection_path}")
+                return screenshot_collection_path
+            else:
+                print("Cover extraction failed: file not found")
+                return ""
+        except subprocess.CalledProcessError as e:
+            print("FFmpeg cover extraction failed:", e)
+            return ""
+
+
     timestamp = convert_to_default_time_notation(screenshot_timestamp)
 
     cmd = [

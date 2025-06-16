@@ -8,7 +8,6 @@ from aqt.editor import Editor
 from aqt.sound import play
 from aqt.utils import showInfo
 import re
-
 try:
     from . import audio_files
 except ImportError:
@@ -25,9 +24,25 @@ ms_amount = 50
 
 
 def add_context_line(editor: Editor, relative_index):
-    sentence_text, sentence_idx = get_sentence_text(editor)
     sound_line, sound_idx = get_sound_line(editor)
-    target_line = audio_files.get_subtitle_sentence_text_from_relative_index(sentence_text, relative_index)
+    sentence_text, sentence_idx = get_sentence_text(editor)
+    sentence_lines = sentence_text.splitlines()
+    first_line = sentence_lines[0]
+    last_line = sentence_lines[-1]
+
+    if relative_index == 1:
+        target_line = audio_files.get_subtitle_sentence_text_from_relative_index(last_line, relative_index)
+        if target_line is None or target_line == "":
+            showInfo(f"This is the last line of the file: {target_line}")
+            return
+
+    else:
+        target_line = audio_files.get_subtitle_sentence_text_from_relative_index(first_line, relative_index)
+        if target_line is None or target_line == "":
+            showInfo(f"This is the first line of the file: {target_line}")
+            return
+
+
     new_sound_line = audio_files.get_timestamps_from_sentence_text(target_line)
     print(f"getting new sound line from target line: {target_line}, new sound line: {new_sound_line}")
 
@@ -57,7 +72,7 @@ def add_context_line(editor: Editor, relative_index):
         print(f"new start end, {start_time} - {target_end_time}")
         print(f"index 1, new sound tag: {new_sound_tag}")
     elif relative_index == -1:
-        start_difference = start_milliseconds - target_start_milliseconds
+        start_difference = target_start_milliseconds - start_milliseconds
 
         new_sound_tag = audio_files.alter_sound_file_times(sound_line, start_difference, 0)
         print(f"start_difference: {start_difference}")

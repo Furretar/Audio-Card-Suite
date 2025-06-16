@@ -1,3 +1,7 @@
+- [ ] search sources for currently selected text, allows adding when sentence field was added manually and doesnt match subs perfectly
+- [ ] auto convert jidoujisho files to subs2srs format
+
+
 mpv to anki tool
 - [ ] figure out if migaku already did this
 - [ ] when using translation line, option to match timings or not
@@ -10,7 +14,6 @@ mpv to anki tool
 edit already made cards
 
 - [ ] add/subtract 1db for each audio
-- [ ] hotkey to search sources for currently selected text
 - [ ] setting to set sentence and audio fields so you can use subtitle line to find audio even if two have the same name
 - [ ] update buttons, change numbers if shift or ctrl held down
 - [ ] move buttons to above audio field

@@ -168,6 +168,7 @@ def get_timestamps_from_sentence_text(sentence_text) -> str:
     print(f"Sentence not found in subtitle file: {subtitle_path}")
     return ""
 
+
 def check_for_video_source(filename_base) -> str:
     alt_names = [filename_base, filename_base.replace("_", " ")]
     for name in alt_names:
@@ -336,13 +337,11 @@ def time_to_seconds(t):
     return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000
 
 def time_to_milliseconds(t: str) -> int:
-    parts = t.split('.')
-    if len(parts) != 4:
-        raise ValueError("Time string must be in HH.MM.SS.mmm format")
-
-    h, m, s, ms = parts
-    total_ms = (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
-    return total_ms
+    try:
+        h, m, s, ms = map(int, t.strip().split('.'))
+        return ((h * 3600 + m * 60 + s) * 1000) + ms
+    except Exception as e:
+        raise ValueError(f"Invalid time string: {t}") from e
 
 def milliseconds_to_anki_time_format(ms: int) -> str:
     hours = ms // (3600 * 1000)

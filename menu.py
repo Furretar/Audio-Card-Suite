@@ -17,19 +17,21 @@ except ImportError:
     import audio_files
 
 ms_amount = 50
-
+const_screenshot_index = 3
+const_sound_index = 2
+const_sentence_index = 0
 
 def get_sound_and_sentence_from_editor(editor: Editor) -> tuple[str, int, str, int]:
     sound_line = ""
-    sound_idx = 2
+    sound_idx = const_sound_index
 
     for idx, field_text in enumerate(editor.note.fields):
         if "[sound:" in field_text:
             sound_line = field_text
             sound_idx = idx
 
-    sentence_text = editor.note.fields[0]
-    sentence_idx = 0
+    sentence_text = editor.note.fields[const_sentence_index]
+    sentence_idx = const_sentence_index
     return sound_line, sound_idx, sentence_text, sentence_idx
 
 
@@ -82,12 +84,18 @@ def remove_first_last_lines(editor, relative_index):
 
     editor.note.fields[sentence_idx] = new_sentence_text
     editor.loadNote()
+    audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_tag)
+
     print(f"new line {new_sentence_text}")
 
     return
 
 def add_context_line(editor, relative_index):
     sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
+    if "jidoujisho-" in sound_line or sound_line == "":
+        sound_line = audio_files.get_timestamps_from_sentence_text(sentence_text)
+
+
     sentence_lines = [line for line in sentence_text.splitlines() if line.strip()]
     first_line = sentence_lines[0]
     last_line = sentence_lines[-1]
@@ -105,7 +113,7 @@ def add_context_line(editor, relative_index):
             return
 
 
-    new_sound_line = audio_files.get_timestamps_from_sentence_text(target_line)
+    new_sound_line = audio_files.get_timestamps_from_sentence_text()
     print(f"getting new sound line from target line: {target_line}, new sound line: {new_sound_line}")
 
     print(f"extracting data from sound line {sound_line}")
@@ -117,10 +125,6 @@ def add_context_line(editor, relative_index):
     target_data = audio_files.extract_sound_line_data(new_sound_line)
     target_start_time = target_data["start_time"]
     target_end_time = target_data["end_time"]
-
-    if "jidoujisho-" in sound_line:
-        sound_line = audio_files.get_timestamps_from_sentence_text(sentence_text)
-        print(f"detect jidoujisho, new sound line: {sound_line}")
 
     start_ms = audio_files.time_to_milliseconds(start_time)
     end_ms = audio_files.time_to_milliseconds(end_time)
@@ -143,22 +147,32 @@ def add_context_line(editor, relative_index):
     else:
         new_sound_tag = ""
 
+    sound_updated = False
     if new_sound_tag:
         new_text = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
         editor.note.fields[sound_idx] = new_text
+
+        if new_text != sound_line:
+            sound_updated = True
+
         print(f"now playing {new_sound_tag}")
         sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_tag).group(1)
         QTimer.singleShot(0, lambda: play(sound_filename))
     else:
         print("No new sound tag returned, field not updated.")
 
-    if relative_index == 1:
-        new_sentence_text = f"{sentence_text}\n{target_line}"
+    if sound_updated:
+        if relative_index == 1:
+            new_sentence_text = f"{sentence_text}\n{target_line}"
+        else:
+            new_sentence_text = f"{target_line}\n{sentence_text}"
     else:
-        new_sentence_text = f"{target_line}\n{sentence_text}"
+        return
 
     editor.note.fields[sentence_idx] = new_sentence_text
     editor.loadNote()
+    audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_tag)
+
     print(f"new line {new_sentence_text}")
 
     return
@@ -193,7 +207,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         print(f"now playing {new_sound_tag}")
 
         # 3 is temporary screenshot index
-        audio_files.add_image_if_empty(editor, 3, new_sound_tag)
+        audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_tag)
         sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_tag).group(1)
         QTimer.singleShot(0, lambda: play(sound_filename))
 

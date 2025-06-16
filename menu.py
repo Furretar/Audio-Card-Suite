@@ -113,7 +113,7 @@ def add_context_line(editor, relative_index):
             return
 
 
-    new_sound_line = audio_files.get_timestamps_from_sentence_text()
+    new_sound_line = audio_files.get_timestamps_from_sentence_text(target_line)
     print(f"getting new sound line from target line: {target_line}, new sound line: {new_sound_line}")
 
     print(f"extracting data from sound line {sound_line}")

@@ -80,19 +80,27 @@ def extract_first_subtitle_line(video_path, srt_output_path):
 def get_subtitle_sentence_text_from_relative_index(sentence_text, relative_index) -> str:
     subtitle_path = get_subtitle_file_from_sentence_text(sentence_text)
     with open(subtitle_path, 'r', encoding='utf-8') as f:
-        lines = f.read().splitlines()
+        content = f.read()
 
-    i = 0
-    while i < len(lines):
-        if lines[i] != "" and sentence_text in lines[i]:
-            target_index = i + (4 * relative_index)
-            if 0 <= target_index < len(lines):
-                target_line = lines[i + (4 * relative_index)]
-                return target_line
+    blocks = content.strip().split('\n\n')
+
+    parsed_blocks = []
+    for block in blocks:
+        lines = block.strip().splitlines()
+        if len(lines) >= 3:
+            text = "\n".join(lines[2:])
+            parsed_blocks.append((block, text))
+
+    for i, (block, text) in enumerate(parsed_blocks):
+        if normalize_text(sentence_text) in normalize_text(text):
+            target_index = i + relative_index
+            if 0 <= target_index < len(parsed_blocks):
+                return parsed_blocks[target_index][1]
             else:
-                print(f"Index {target_index} out of bounds for lines of length {len(lines)}")
+                print(f"Relative index {relative_index} goes out of range at position {i}")
                 return ""
-        i += 1
+
+    print(f"Sentence text not found in any subtitle block: {sentence_text}")
     return ""
 
 
@@ -111,16 +119,20 @@ def get_subtitle_file_from_sentence_text(sentence_text) -> str:
                     continue
 
             with open(subtitle_path, 'r', encoding='utf-8') as f:
-                lines = f.read().splitlines()
+                content = f.read()
 
-            i = 0
-            # print(f"reading file: {filename_base}" + ".srt")
+            blocks = content.strip().split('\n\n')
+            for block in blocks:
+                lines = block.strip().splitlines()
+                if len(lines) >= 3:
+                    text = "\n".join(lines[2:])
+                    if normalize_text(sentence_text) in normalize_text(text):
+                        return subtitle_path
 
-            while i < len(lines):
-                if lines[i] != "" and sentence_text in lines[i]:
-                    return subtitle_path
-                i += 1
     return ""
+
+def normalize_text(s):
+    return ''.join(s.strip().split())
 
 def get_timestamps_from_sentence_text(sentence_text) -> str:
     subtitle_path = get_subtitle_file_from_sentence_text(sentence_text)
@@ -128,27 +140,32 @@ def get_timestamps_from_sentence_text(sentence_text) -> str:
         print(f"No subtitle file found containing sentence: {sentence_text}")
         return ""
 
-    filename_base, file_extension = os.path.splitext(os.path.basename(subtitle_path))
-    filename = os.path.basename(subtitle_path)
+    filename_base, _ = os.path.splitext(os.path.basename(subtitle_path))
+
     with open(subtitle_path, 'r', encoding='utf-8') as f:
-        lines = f.read().splitlines()
-    # print(f"reading file: {filename_base}" + ".srt")
-    for i in range(1, len(lines)):
-        if lines[i] != "" and sentence_text in lines[i]:
-            timestamp_line = lines[i - 1]
-            try:
-                start_srt, end_srt = [t.strip() for t in timestamp_line.split('-->')]
-                start_time = format_timestamp_for_filename(start_srt)
-                end_time = format_timestamp_for_filename(end_srt)
-                filename_base, _ = os.path.splitext(filename)
-                return f"[sound:{filename_base}_{start_time}-{end_time}.mp3]"
-            except Exception as e:
-                print(f"Error parsing timestamp near line {i}: {e}")
-                return ""
+        content = f.read()
+
+    blocks = content.strip().split('\n\n')
+
+
+    for block in blocks:
+        lines = block.strip().splitlines()
+        if len(lines) >= 3:
+            timestamp_line = lines[1].strip()
+            subtitle_text = "\n".join(lines[2:]).strip()
+
+            if normalize_text(sentence_text) in normalize_text(subtitle_text):
+                try:
+                    start_srt, end_srt = [t.strip() for t in timestamp_line.split('-->')]
+                    start_time = format_timestamp_for_filename(start_srt)
+                    end_time = format_timestamp_for_filename(end_srt)
+                    return f"[sound:{filename_base}_{start_time}-{end_time}.mp3]"
+                except Exception as e:
+                    print(f"Error parsing timestamp in block:\n{block}\nError: {e}")
+                    return ""
 
     print(f"Sentence not found in subtitle file: {subtitle_path}")
     return ""
-
 
 def check_for_video_source(filename_base) -> str:
     alt_names = [filename_base, filename_base.replace("_", " ")]

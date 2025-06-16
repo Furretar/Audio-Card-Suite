@@ -21,7 +21,32 @@ ms_amount = 50
 
 
 
-
+# def remove_first_last_lines(editor: Editor, relative_index):
+#     sound_line, sound_idx = get_sound_line(editor)
+#     sentence_text, sentence_idx = get_sentence_text(editor)
+#     sentence_lines = sentence_text.splitlines()
+#     second_line = sentence_lines[1]
+#     second_to_last_line = sentence_lines[-2]
+#
+#
+#     if relative_index == 1:
+#         new_end_beginning = audio_files.get_subtitle_sentence_text_from_relative_index(second_to_last_line, relative_index)
+#     else:
+#         new_end_beginning = audio_files.get_subtitle_sentence_text_from_relative_index(second_line, relative_index)
+#
+#     print(f"extracting data from sound line {sound_line}")
+#     data = audio_files.extract_sound_line_data(sound_line)
+#     start_time = data["start_time"]
+#     end_time = data["end_time"]
+#
+#     print(f"extracting data from new sound line {new_sound_line}")
+#     target_data = audio_files.extract_sound_line_data(new_sound_line)
+#     target_start_time = target_data["start_time"]
+#     target_end_time = target_data["end_time"]
+#
+#
+#
+#     new_field_text = "\n".join(lines[:-1])
 
 def add_context_line(editor: Editor, relative_index):
     sound_line, sound_idx = get_sound_line(editor)
@@ -51,7 +76,7 @@ def add_context_line(editor: Editor, relative_index):
     start_time = data["start_time"]
     end_time = data["end_time"]
 
-    print(f"extracting data from new sound line {new_sound_line}")
+    print(f"extracting data from new sound line: {new_sound_line}")
     target_data = audio_files.extract_sound_line_data(new_sound_line)
     target_start_time = target_data["start_time"]
     target_end_time = target_data["end_time"]

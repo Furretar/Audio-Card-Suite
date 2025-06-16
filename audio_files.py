@@ -6,8 +6,9 @@ from send2trash import send2trash
 from aqt import mw
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 addon_source_folder = os.path.join(addon_dir, "Sources")
-import re
 from aqt.editor import Editor
+import subprocess
+import re
 
 # temp for testing outside of anki
 if mw is not None and mw.col is not None and mw.col.media is not None:
@@ -274,7 +275,7 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, kbps,
     end = convert_to_default_time_notation(end_time)
     duration_sec = time_to_seconds(end) - time_to_seconds(start)
     if duration_sec <= 0:
-        print("End time must be after start time")
+        print(f"End time must be after start time, {start}, {end}")
         return ""
 
     delay_ms = get_audio_start_time_ms(source_path)
@@ -420,24 +421,23 @@ def alter_sound_file_times(filename, start_ms, end_ms) -> str:
         send2trash(old_timestamp_path)
         print(f"Moved existing file {old_timestamp_path} to recycle bin.")
 
-    # initialize times in milliseconds
-    start_milliseconds = time_to_milliseconds(start_time)
-    end_milliseconds = time_to_milliseconds(end_time)
+    # initialize times in milliseconds from the filename
+    orig_start_ms = time_to_milliseconds(start_time)
+    orig_end_ms = time_to_milliseconds(end_time)
 
-    # apply adjustments, ensure not negative
-    if start_ms != 0:
-        start_milliseconds = max(0, start_milliseconds + start_ms)
-    if end_ms != 0:
-        end_milliseconds = max(0, end_milliseconds + end_ms)
+    # apply adjustments passed to function
+    new_start_ms = max(0, orig_start_ms + start_ms)
+    new_end_ms = max(0, orig_end_ms + end_ms)
 
     # validate times
-    if end_milliseconds <= start_milliseconds:
-        print("Invalid time range: end time must be after start time")
+    if new_end_ms <= new_start_ms:
+        print(
+            f"Invalid time range: end time must be after start time\n{start_time}-{end_time}\n{new_start_ms}-{new_end_ms}")
         return ""
 
-    # convert back to anki time format
-    new_start_time = milliseconds_to_anki_time_format(start_milliseconds)
-    new_end_time = milliseconds_to_anki_time_format(end_milliseconds)
+    # convert back to Anki time format
+    new_start_time = milliseconds_to_anki_time_format(new_start_ms)
+    new_end_time = milliseconds_to_anki_time_format(new_end_ms)
     print(f"new_start_time: {new_start_time}")
     print(f"new_end_time: {new_end_time}")
 
@@ -465,15 +465,5 @@ def alter_sound_file_times(filename, start_ms, end_ms) -> str:
         print(f"using old path: {old_timestamp_path}")
         return f"[sound:{old_timestamp_filename}]"
 
-import subprocess
-import re
 
 
-#
-#
-# print(get_timestamps_from_sentence_text("這樣根本就不能露營嘛"))
-
-# print(change_filename_start_time("[sound:Yuru_Camp_S1E01_00.17.38.583-00.17.40.084.mp3]", -5000))
-
-
-# print("results: " + alter_sound_file_times("[sound:jìnjī_de_jùrén_s1_1-5_5_0.21.02.887-0.21.07.283.mp3]", 50, 50))

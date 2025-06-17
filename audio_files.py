@@ -28,36 +28,63 @@ video_exts = [
 
 def extract_sound_line_data(text: str):
     match = re.search(
-        r"\[sound:(.+?)_(\d+\.\d+\.\d+\.\d+)-(\d+\.\d+\.\d+\.\d+)\.(\w+)\]",
+        r"""\[sound:
+        (?P<filename_base>[^_.\[\]]+(?:_[^_.\[\]]+)*?)     # base filename with underscores
+        (?:\.(?P<sha>[a-zA-Z0-9]{4}))?                     # optional .ABCD
+        \.(?P<start_time>\d+\.\d+\.\d+\.\d+)
+        -
+        (?P<end_time>\d+\.\d+\.\d+\.\d+)
+        (?:\.(?P<subtitle_range>\d+-\d+))?                 # optional .1-3
+        (?:\.(?P<normalize_tag>[a-z]{2}))?                           # optional .nm
+        \.(?P<file_extension>\w+)
+        \]""",
         text,
-        flags=re.UNICODE
+        re.VERBOSE | re.UNICODE
     )
 
     if not match:
         return None
 
-    filename_base = match.group(1).replace(" ", "_")
-    start_time = match.group(2)
-    end_time = match.group(3)
-    file_extension = match.group(4)
-    full_source_filename = f"{filename_base}.{file_extension}"
-    timestamp_filename = f"{filename_base}_{start_time}-{end_time}.{file_extension}"
+    groups = match.groupdict()
+    filename_base = groups["filename_base"].replace(" ", "_")
+    sha = groups.get("sha") or ""
+    start_time = groups["start_time"]
+    end_time = groups["end_time"]
+    subtitle_range = groups.get("subtitle_range") or ""
+    normalize_tag = groups.get("normalize_tag") or ""
+    file_extension = groups["file_extension"]
+
+    parts = [filename_base]
+    if sha:
+        parts.append(sha)
+    parts.append(f"{start_time}-{end_time}")
+    if subtitle_range:
+        parts.append(subtitle_range)
+    if normalize_tag:
+        parts.append(normalize_tag)
+
+    timestamp_filename = ".".join(parts) + f".{file_extension}"
+    screenshot_filename = f"{filename_base}_{start_time}.jpg"
+
     audio_collection_path = os.path.join(collection_dir, timestamp_filename)
     screenshot_filename = f"{filename_base}_{start_time}.jpg"
     screenshot_collection_path = os.path.join(collection_dir, screenshot_filename)
-
     source_path = get_source_file(filename_base)
+
     return {
         "filename_base": filename_base,
+        "sha": sha,
         "start_time": start_time,
         "end_time": end_time,
+        "subtitle_range": subtitle_range,
+        "normalize_tag": normalize_tag,
         "file_extension": file_extension,
-        "full_source_filename": full_source_filename,
+        "full_source_filename": f"{filename_base}.{file_extension}",
         "timestamp_filename": timestamp_filename,
         "collection_path": audio_collection_path,
-        "source_path": source_path,
         "screenshot_filename": screenshot_filename,
         "screenshot_collection_path": screenshot_collection_path,
+        "source_path": source_path,
     }
 
 def format_timestamp_for_filename(timestamp: str) -> str:
@@ -65,7 +92,7 @@ def format_timestamp_for_filename(timestamp: str) -> str:
 
 
 
-def extract_first_subtitle_line(video_path, srt_output_path):
+def extract_first_subtitle_file(video_path, srt_output_path):
     try:
         print(f"Extracting first subtitle for {video_path}")
         subprocess.run([
@@ -114,7 +141,7 @@ def get_subtitle_file_from_sentence_text(sentence_text) -> str:
             subtitle_path = os.path.join(addon_source_folder, filename_base + ".srt")
 
             if not os.path.exists(subtitle_path):
-                extract_first_subtitle_line(video_path, subtitle_path)
+                extract_first_subtitle_file(video_path, subtitle_path)
                 if not os.path.exists(subtitle_path):
                     print(f"Failed to extract subtitles from {video_path}")
                     continue

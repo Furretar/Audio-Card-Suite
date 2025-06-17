@@ -43,17 +43,26 @@ def remove_first_last_lines(editor, relative_index):
     print(f"sentence lines: " + str(len(sentence_lines)))
     if len(sentence_lines) == 1:
         return
-    edge_line = sentence_lines[-1] if relative_index == 1 else sentence_lines[0]
-    new_end_beginning_line = audio_files.get_subtitle_sentence_text_from_relative_index(edge_line, -relative_index)
-    cut_off_text = audio_files.get_subtitle_sentence_text_from_relative_index(new_end_beginning_line, relative_index)
-    new_sentence_text = sentence_text
-    print(f"remove text: {cut_off_text}")
-    new_sentence_text = new_sentence_text.replace(cut_off_text, "")
 
 
     data = audio_files.extract_sound_line_data(sound_line)
     start_time = data["start_time"]
     end_time = data["end_time"]
+    start_index = data["start_index"]
+    end_index = data["end_index"]
+    subtitle_path = data["subtitle_path"]
+
+    edge_index = end_index if relative_index == 1 else start_index
+
+    target_block = audio_files.get_subtitle_block_from_relative_index(-relative_index, edge_index, subtitle_path)
+    new_end_beginning_line = target_block[2]
+
+    cut_off_text_block = audio_files.get_subtitle_block_from_relative_index(relative_index, edge_index, subtitle_path)
+    cut_off_text = cut_off_text_block[2]
+
+    new_sentence_text = sentence_text
+    print(f"remove text: {cut_off_text}")
+    new_sentence_text = new_sentence_text.replace(cut_off_text, "")
 
     new_sound_line = audio_files.get_timestamps_from_sentence_text(new_end_beginning_line)
 
@@ -101,7 +110,7 @@ def add_context_line(editor, relative_index):
     last_line = sentence_lines[-1]
 
     if relative_index == 1:
-        target_line = audio_files.get_subtitle_sentence_text_from_relative_index(last_line, relative_index)
+        target_block = audio_files.get_subtitle_block_from_relative_index(last_line, relative_index)
         if target_line is None or target_line == "":
             showInfo(f"This is the last line of the file: {target_line}")
             return
@@ -195,6 +204,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
 
     if "jidoujisho-" in sound_line or sound_line == "":
         new_sound_name = audio_files.get_timestamps_from_sentence_text(sentence_text)
+        print(f"new sound name: {new_sound_name}, sending for new sound tag")
         new_sound_tag = audio_files.alter_sound_file_times(new_sound_name, start_delta, end_delta)
     else:
         new_sound_tag = audio_files.alter_sound_file_times(sound_line, start_delta, end_delta)

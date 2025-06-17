@@ -29,14 +29,13 @@ video_exts = [
 def extract_sound_line_data(text: str):
     match = re.search(
         r"""\[sound:
-        (?P<filename_base>[^_.\[\]]+(?:_[^_.\[\]]+)*?)     # base filename with underscores
-        (?:\.(?P<sha>[a-zA-Z0-9]{4}))?                     # optional .ABCD
-        \.(?P<start_time>\d+\.\d+\.\d+\.\d+)
-        -
-        (?P<end_time>\d+\.\d+\.\d+\.\d+)
-        (?:\.(?P<subtitle_range>\d+-\d+))?                 # optional .1-3
-        (?:\.(?P<normalize_tag>[a-z]{2}))?                           # optional .nm
-        \.(?P<file_extension>\w+)
+        (?P<filename_base>.+?)              # filename base (non-greedy)
+        `(?P<sha>[a-zA-Z0-9]{4})`           # 4-character SHA code
+        (?P<start_time>\d+\.\d+\.\d+\.\d+)` # start timestamp
+        (?P<end_time>\d+\.\d+\.\d+\.\d+)`   # end timestamp
+        (?P<subtitle_range>\d+-\d+)`        # subtitle range
+        (?P<normalize_tag>[a-z]{2})`        # normalize tag
+        (?P<file_extension>\w+)             # file extension
         \]""",
         text,
         re.VERBOSE | re.UNICODE
@@ -54,6 +53,14 @@ def extract_sound_line_data(text: str):
     normalize_tag = groups.get("normalize_tag") or ""
     file_extension = groups["file_extension"]
 
+    if subtitle_range:
+        try:
+            start_index, end_index = map(int, subtitle_range.split("-"))
+        except ValueError:
+            start_index, end_index = None, None
+    else:
+        start_index, end_index = None, None
+
     parts = [filename_base]
     if sha:
         parts.append(sha)
@@ -64,19 +71,19 @@ def extract_sound_line_data(text: str):
         parts.append(normalize_tag)
 
     timestamp_filename = ".".join(parts) + f".{file_extension}"
-    screenshot_filename = f"{filename_base}_{start_time}.jpg"
-
     audio_collection_path = os.path.join(collection_dir, timestamp_filename)
-    screenshot_filename = f"{filename_base}_{start_time}.jpg"
+    screenshot_filename = f"{filename_base}`{start_time}.jpg"
     screenshot_collection_path = os.path.join(collection_dir, screenshot_filename)
     source_path = get_source_file(filename_base)
+    subtitle_path = os.path.splitext(source_path)[0] + ".srt"
 
     return {
         "filename_base": filename_base,
         "sha": sha,
         "start_time": start_time,
         "end_time": end_time,
-        "subtitle_range": subtitle_range,
+        "start_index": start_index,
+        "end_index": end_index,
         "normalize_tag": normalize_tag,
         "file_extension": file_extension,
         "full_source_filename": f"{filename_base}.{file_extension}",
@@ -85,11 +92,27 @@ def extract_sound_line_data(text: str):
         "screenshot_filename": screenshot_filename,
         "screenshot_collection_path": screenshot_collection_path,
         "source_path": source_path,
+        "subtitle_path": subtitle_path,
     }
 
 def format_timestamp_for_filename(timestamp: str) -> str:
     return timestamp.replace(':', '.').replace(',', '.')
 
+def get_subtitle_block_from_index_and_path(index, subtitle_path):
+    with open(subtitle_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    blocks = content.strip().split('\n\n')
+
+    if 0 <= index < len(blocks):
+        lines = blocks[index].strip().splitlines()
+        if len(lines) >= 3:
+            subtitle_index = lines[0].strip()
+            time_range = lines[1].strip()
+            subtitle_text = "\n".join(line.strip() for line in lines[2:]).strip()
+            return [subtitle_index, time_range, subtitle_text]
+
+    return []
 
 
 def extract_first_subtitle_file(video_path, srt_output_path):
@@ -105,8 +128,7 @@ def extract_first_subtitle_file(video_path, srt_output_path):
     except subprocess.CalledProcessError as e:
         print(f"Failed to extract subtitles from {video_path}: {e}")
 
-def get_subtitle_sentence_text_from_relative_index(sentence_text, relative_index) -> str:
-    subtitle_path = get_subtitle_file_from_sentence_text(sentence_text)
+def get_subtitle_block_from_relative_index(relative_index, index, subtitle_path) -> str:
     with open(subtitle_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
@@ -116,24 +138,21 @@ def get_subtitle_sentence_text_from_relative_index(sentence_text, relative_index
     for block in blocks:
         lines = block.strip().splitlines()
         if len(lines) >= 3:
-            text = "\n".join(lines[2:])
-            parsed_blocks.append((block, text))
+            subtitle_index = lines[0].strip()
+            time_range = lines[1].strip()
+            subtitle_text = "\n".join(line.strip() for line in lines[2:])
+            parsed_blocks.append([subtitle_index, time_range, subtitle_text])
 
-    for i, (block, text) in enumerate(parsed_blocks):
-        if normalize_text(sentence_text) in normalize_text(text):
-            target_index = i + relative_index
-            if 0 <= target_index < len(parsed_blocks):
-                return parsed_blocks[target_index][1]
-            else:
-                print(f"Relative index {relative_index} goes out of range at position {i}")
-                return ""
-
-    print(f"Sentence text not found in any subtitle block: {sentence_text}")
-    return ""
+    target_index = index + relative_index
+    if 0 <= target_index < len(parsed_blocks):
+        return parsed_blocks[target_index]
+    else:
+        print(f"Relative index {relative_index} goes out of range at position {index}")
+        return ""
 
 
 
-def get_subtitle_file_from_sentence_text(sentence_text) -> str:
+def get_subtitle_file_and_block_from_sentence_text(sentence_text) -> tuple[str, list[str]]:
     for filename in os.listdir(addon_source_folder):
         filename_base, file_extension = os.path.splitext(filename)
         if file_extension.lower() in video_exts:
@@ -153,47 +172,29 @@ def get_subtitle_file_from_sentence_text(sentence_text) -> str:
             for block in blocks:
                 lines = block.strip().splitlines()
                 if len(lines) >= 3:
-                    text = "\n".join(lines[2:])
+                    index = lines[0]
+                    times = lines[1]
+                    text = "\n".join(line.strip() for line in lines[2:] if line.strip())
+                    structured_block = [index, times, text]
                     if normalize_text(sentence_text) in normalize_text(text):
-                        return subtitle_path
+                        return subtitle_path, structured_block
 
-    return ""
+    return "", []
 
 def normalize_text(s):
     return ''.join(s.strip().split())
 
-def get_timestamps_from_sentence_text(sentence_text) -> str:
-    subtitle_path = get_subtitle_file_from_sentence_text(sentence_text)
-    if not subtitle_path:
-        print(f"No subtitle file found containing sentence: {sentence_text}")
-        return ""
-
+def get_sound_line_from_block_and_path(block, subtitle_path) -> str:
     filename_base, _ = os.path.splitext(os.path.basename(subtitle_path))
 
-    with open(subtitle_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-
-    blocks = content.strip().split('\n\n')
-
-
-    for block in blocks:
-        lines = block.strip().splitlines()
-        if len(lines) >= 3:
-            timestamp_line = lines[1].strip()
-            subtitle_text = "\n".join(lines[2:]).strip()
-
-            if normalize_text(sentence_text) in normalize_text(subtitle_text):
-                try:
-                    start_srt, end_srt = [t.strip() for t in timestamp_line.split('-->')]
-                    start_time = format_timestamp_for_filename(start_srt)
-                    end_time = format_timestamp_for_filename(end_srt)
-                    return f"[sound:{filename_base}_{start_time}-{end_time}.mp3]"
-                except Exception as e:
-                    print(f"Error parsing timestamp in block:\n{block}\nError: {e}")
-                    return ""
-
-    print(f"Sentence not found in subtitle file: {subtitle_path}")
-    return ""
+    try:
+        start_srt, end_srt = [t.strip() for t in block[1].split('-->')]
+        start_time = format_timestamp_for_filename(start_srt)
+        end_time = format_timestamp_for_filename(end_srt)
+        return f"[sound:{filename_base}.{start_time}-{end_time}.mp3]"
+    except Exception as e:
+        print(f"Error parsing timestamp in block:\n{block}\nError: {e}")
+        return ""
 
 
 def check_for_video_source(filename_base) -> str:

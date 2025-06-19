@@ -26,32 +26,71 @@ video_exts = [
 ]
 
 
-def extract_sound_line_data(text: str):
-    match = re.search(
+def extract_sound_line_data(sound_line):
+    regex_backtick = re.compile(
         r"""\[sound:
-        (?P<filename_base>.+?)              # filename base (non-greedy)
-        `(?P<sha>[a-zA-Z0-9]{4})`           # 4-character SHA code
-        (?P<start_time>\d+\.\d+\.\d+\.\d+)` # start timestamp
-        (?P<end_time>\d+\.\d+\.\d+\.\d+)`   # end timestamp
-        (?P<subtitle_range>\d+-\d+)`        # subtitle range
-        (?P<normalize_tag>[a-z]{2})`        # normalize tag
-        (?P<file_extension>\w+)             # file extension
+        (?P<filename_base>.+?)`                      # filename base
+        (?P<sha>[a-zA-Z0-9]{4})`                     # 4 character sha
+        (?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`   # start timestamp
+        (?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`     # end timestamp
+        (?P<subtitle_range>\d+-\d+)`                 # subtitle range
+        (?P<normalize_tag>[a-z]{2})\.                # normalize tag followed by a dot
+        (?P<file_extension>\w+)                      # file extension
         \]""",
-        text,
         re.VERBOSE | re.UNICODE
     )
 
-    if not match:
-        return None
+    regex_subs2srs = re.compile(
+        r"""\[sound:
+        (?P<filename_base>.+?)_                           # base
+        (?P<start_time>\d{2}\.\d{2}\.\d{2}\.\d{3})-       # start time
+        (?P<end_time>\d{2}\.\d{2}\.\d{2}\.\d{3})          # end time
+        \.(?P<file_extension>\w+)\]                       # extension
+        """,
+        re.VERBOSE | re.UNICODE
+    )
 
-    groups = match.groupdict()
-    filename_base = groups["filename_base"].replace(" ", "_")
-    sha = groups.get("sha") or ""
-    start_time = groups["start_time"]
-    end_time = groups["end_time"]
-    subtitle_range = groups.get("subtitle_range") or ""
-    normalize_tag = groups.get("normalize_tag") or ""
-    file_extension = groups["file_extension"]
+    def convert_timestamp(ts):
+        return re.sub(
+            r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms",
+            r"\1.\2.\3.\4",
+            ts
+        )
+
+    match = regex_backtick.search(sound_line)
+    if match:
+        groups = match.groupdict()
+        filename_base = groups["filename_base"].replace(" ", "_")
+        sha = groups["sha"]
+        start_time_raw = groups["start_time"]
+        end_time_raw = groups["end_time"]
+        start_time = convert_timestamp(groups["start_time"])
+        end_time = convert_timestamp(groups["end_time"])
+        subtitle_range = groups["subtitle_range"]
+        normalize_tag = groups["normalize_tag"]
+        file_extension = groups["file_extension"]
+
+        timestamp_filename = (
+            f"{filename_base}`{sha}`{start_time_raw}`{end_time_raw}"
+            f"`{subtitle_range}`{normalize_tag}.{file_extension}"
+        )
+    elif (match := regex_subs2srs.search(sound_line)):
+        groups = match.groupdict()
+        filename_base = groups["filename_base"].replace(" ", "_")
+        sha = ""
+        start_time_raw = groups["start_time"]
+        end_time_raw = groups["end_time"]
+        start_time = convert_timestamp(groups["start_time"])
+        end_time = convert_timestamp(groups["end_time"])
+        subtitle_range = ""
+        normalize_tag = ""
+        file_extension = groups["file_extension"]
+
+        timestamp_filename = (
+            f"{filename_base}_{start_time_raw}-{end_time_raw}.{file_extension}"
+        )
+    else:
+        return None
 
     if subtitle_range:
         try:
@@ -61,16 +100,6 @@ def extract_sound_line_data(text: str):
     else:
         start_index, end_index = None, None
 
-    parts = [filename_base]
-    if sha:
-        parts.append(sha)
-    parts.append(f"{start_time}-{end_time}")
-    if subtitle_range:
-        parts.append(subtitle_range)
-    if normalize_tag:
-        parts.append(normalize_tag)
-
-    timestamp_filename = ".".join(parts) + f".{file_extension}"
     audio_collection_path = os.path.join(collection_dir, timestamp_filename)
     screenshot_filename = f"{filename_base}`{start_time}.jpg"
     screenshot_collection_path = os.path.join(collection_dir, screenshot_filename)
@@ -491,8 +520,12 @@ def alter_sound_file_times(filename, start_ms, end_ms) -> str:
     print(f"new_start_time: {new_start_time}")
     print(f"new_end_time: {new_end_time}")
 
+    sound_line = "[sound:Yuru_Camp_S2E07`ABCD`00.07.04.341`00.07.07.259`1-3`nm.mp3]"
 
-    new_timestamp_filename = f"{filename_base}_{new_start_time}-{new_end_time}.{file_extension}"
+    new_timestamp_filename = f"{filename_base}`ABCD`{new_start_time}`{new_end_time}`{start_index}-{end_index}"
+    if normalize_text:
+        new_timestamp_filename += f"`{normalize_text}"
+    new_timestamp_filename += f".{file_extension}"
     old_timestamp_filename = f"{filename_base}_{start_time}-{end_time}.{file_extension}"
     print(f"new_timestamp_filename: {new_timestamp_filename}")
     new_timestamp_path = os.path.join(collection_dir, new_timestamp_filename)

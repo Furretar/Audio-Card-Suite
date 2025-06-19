@@ -75,10 +75,10 @@ def remove_first_last_lines(editor, relative_index):
 
     if relative_index == 1:
         delta_end = target_end_ms - end_ms
-        new_sound_tag = audio_files.alter_sound_file_times(sound_line, 0, delta_end)
+        new_sound_tag = audio_files.alter_sound_file_times(sound_line, 0, delta_end, relative_index)
     else:
         delta_start = target_start_ms - start_ms
-        new_sound_tag = audio_files.alter_sound_file_times(sound_line, delta_start, 0)
+        new_sound_tag = audio_files.alter_sound_file_times(sound_line, delta_start, 0, relative_index)
 
     if new_sound_tag:
         new_text = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
@@ -97,103 +97,70 @@ def remove_first_last_lines(editor, relative_index):
 
     return
 
-def add_context_line(editor, relative_index):
+def add_context_line_helper(editor: Editor, relative_index):
     sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
-    if "jidoujisho-" in sound_line or sound_line == "":
-        block, subtitle_path = audio_files.get_block_and_subtitle_file_from_sentence_text(sentence_text)
-        sound_line = audio_files.get_sound_line_from_block_and_path(block, subtitle_path)
-    else:
-        data = audio_files.format_subtitle_block(sound_line)
-        if relative_index == 1:
-            target_index = data["end_index"]
-        else:
-            target_index = data["start_index"]
-        subtitle_path = data["subtitle_path"]
+    new_sound_tag, new_sentence_text = add_context_line_data(sound_line, sentence_text, relative_index)
+    print(f"new_sound_tag: {new_sound_tag}, new_sentence_text: {new_sentence_text}")
 
-        block = audio_files.get_subtitle_block_from_index_and_path(target_index, subtitle_path)
+    if new_sound_tag and new_sentence_text:
+        editor.note.fields[sound_idx] = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
+        editor.note.fields[sentence_idx] = new_sentence_text
+        editor.loadNote()
 
-
-    sentence_lines = [line for line in sentence_text.splitlines() if line.strip()]
-    first_line = sentence_lines[0]
-    last_line = sentence_lines[-1]
-
-    if relative_index == 1:
-        target_block = audio_files.get_subtitle_block_from_relative_index(relative_index, "subtitle_index", subtitle_path)
-        target_line = ""
-        if target_line is None or target_line == "":
-            showInfo(f"This is the last line of the file: {target_line}")
-            return
-
-    else:
-        target_line = audio_files.get_subtitle_sentence_text_from_relative_index(first_line, relative_index)
-        if target_line is None or target_line == "":
-            showInfo(f"This is the first line of the file: {target_line}")
-            return
-
-
-    new_sound_line = audio_files.get_timestamps_from_sentence_text(target_line)
-    print(f"getting new sound line from target line: {target_line}, new sound line: {new_sound_line}")
-
-    print(f"extracting data from sound line {sound_line}")
-    data = audio_files.extract_sound_line_data(sound_line)
-    start_time = data["start_time"]
-    end_time = data["end_time"]
-
-    print(f"extracting data from new sound line: {new_sound_line}")
-    target_data = audio_files.extract_sound_line_data(new_sound_line)
-    target_start_time = target_data["start_time"]
-    target_end_time = target_data["end_time"]
-
-    start_ms = audio_files.time_to_milliseconds(start_time)
-    end_ms = audio_files.time_to_milliseconds(end_time)
-    target_start_ms = audio_files.time_to_milliseconds(target_start_time)
-    target_end_ms = audio_files.time_to_milliseconds(target_end_time)
-    if relative_index == 1:
-        end_difference = target_end_ms - end_ms
-
-        new_sound_tag = audio_files.alter_sound_file_times(sound_line, 0, end_difference)
-        print(f"end_difference: {end_difference}, {target_end_ms} - {end_ms}")
-        print(f"new start end, {start_time} - {target_end_time}")
-        print(f"index 1, new sound tag: {new_sound_tag}")
-    elif relative_index == -1:
-        start_difference = target_start_ms - start_ms
-
-        new_sound_tag = audio_files.alter_sound_file_times(sound_line, start_difference, 0)
-        print(f"start_difference: {start_difference}")
-        print(f"new start end, {target_start_time} - {end_time}")
-        print(f"index -1, new sound tag: {new_sound_tag}")
-    else:
-        new_sound_tag = ""
-
-    sound_updated = False
-    if new_sound_tag:
-        new_text = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
-        editor.note.fields[sound_idx] = new_text
-
-        if new_text != sound_line:
-            sound_updated = True
-
-        print(f"now playing {new_sound_tag}")
         sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_tag).group(1)
         QTimer.singleShot(0, lambda: play(sound_filename))
+
+        audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_tag)
+
+        print(f"new line {new_sentence_text}")
+
+def add_context_line_data(sound_line, sentence_text, relative_index):
+    sentence_lines = [line for line in sentence_text.splitlines() if line.strip()]
+    if relative_index == 1:
+        edge_line = sentence_lines[-1]
     else:
-        print("No new sound tag returned, field not updated.")
+        edge_line = sentence_lines[0]
 
-    if sound_updated:
-        if relative_index == 1:
-            new_sentence_text = f"{sentence_text}\n{target_line}"
-        else:
-            new_sentence_text = f"{target_line}\n{sentence_text}"
+    sound_line = audio_files.get_valid_backtick_sound_line(sound_line, edge_line)
+    print(f"sound line: {sound_line}")
+
+    data = audio_files.extract_sound_line_data(sound_line)
+    if not data:
+        return "", ""
+
+
+    edge_index = data["end_index"] if relative_index == 1 else data["start_index"]
+    subtitle_path = data["subtitle_path"]
+
+    target_block = audio_files.get_subtitle_block_from_relative_index(relative_index, edge_index, subtitle_path)
+    if not target_block or len(target_block) < 4:
+        return "", ""
+
+    target_line = target_block[3]
+    new_sound_line = audio_files.get_sound_line_from_block_and_path(target_block, subtitle_path)
+
+    target_data = audio_files.extract_sound_line_data(new_sound_line)
+    if not target_data:
+        return "", ""
+
+    start_ms = audio_files.time_to_milliseconds(data["start_time"])
+    end_ms = audio_files.time_to_milliseconds(data["end_time"])
+    target_start_ms = audio_files.time_to_milliseconds(target_data["start_time"])
+    target_end_ms = audio_files.time_to_milliseconds(target_data["end_time"])
+
+    if relative_index == 1:
+        delta = target_end_ms - end_ms
+        new_sound_line = audio_files.alter_sound_file_times(sound_line, 0, delta, relative_index)
+        new_sentence_text = f"{sentence_text}\n\n{target_line}"
     else:
-        return
+        delta = start_ms - target_start_ms
+        new_sound_line = audio_files.alter_sound_file_times(sound_line, delta, 0, relative_index)
+        new_sentence_text = f"{target_line}\n\n{sentence_text}"
 
-    editor.note.fields[sentence_idx] = new_sentence_text
-    editor.loadNote()
-    audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_tag)
+    if not new_sound_line:
+        return "", ""
 
-    print(f"new line {new_sentence_text}")
-
-    return
+    return new_sound_line.strip(), new_sentence_text.strip()
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
@@ -207,13 +174,9 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         start_delta *= 5
         end_delta *= 5
 
-    if "jidoujisho-" in sound_line or sound_line == "":
-        block, subtitle_path = audio_files.get_block_and_subtitle_file_from_sentence_text(sentence_text)
-        sound_line = audio_files.get_sound_line_from_block_and_path(block, subtitle_path)
-        print(f"new sound line: {sound_line}, sending for new sound tag")
-        new_sound_line = audio_files.alter_sound_file_times(sound_line, start_delta, end_delta)
-    else:
-        new_sound_line = audio_files.alter_sound_file_times(sound_line, start_delta, end_delta)
+    sound_line = audio_files.get_valid_backtick_sound_line(sound_line, sentence_text)
+
+    new_sound_line = audio_files.alter_sound_file_times(sound_line, -start_delta, -end_delta, None)
     print("new_sound_tag:", new_sound_line)
 
     if new_sound_line:
@@ -258,7 +221,7 @@ def add_custom_editor_button(html_buttons: list[str], editor: Editor) -> None:
     editor._my_button_added = True
 
     buttons = [
-        (f"Prev Line", lambda ed=editor: add_context_line(editor, -1), f"Add previous line to card", f"Prev Line"),
+        (f"Prev Line", lambda ed=editor: add_context_line_helper(editor, -1), f"Add previous line to card", f"Prev Line"),
         (f"Rem First Line", lambda ed=editor: remove_first_last_lines(editor, -1), f"Remove first line from card", f"Rem First Line"),
 
         (f"S+{ms_amount}", lambda ed=editor: adjust_sound_tag(editor, -ms_amount, 0), f"Add {ms_amount}ms to start", f"S+{ms_amount}"),
@@ -267,7 +230,7 @@ def add_custom_editor_button(html_buttons: list[str], editor: Editor) -> None:
         (f"E-{ms_amount}", lambda ed=editor: adjust_sound_tag(editor, 0, -ms_amount), f"Remove {ms_amount}ms from end", f"E-{ms_amount}"),
 
         (f"Rem Last Line", lambda ed=editor: remove_first_last_lines(editor, 1), f"Removes last line from card",f"Rem Last Line"),
-        (f"Next Line", lambda ed=editor: add_context_line(editor, 1), f"Add next line to card", f"Next Line"),
+        (f"Next Line", lambda ed=editor: add_context_line_helper(editor, 1), f"Add next line to card", f"Next Line"),
         (f"Autoplay", lambda ed=editor: toggle_auto_play_audio(ed), f"Autoplay Audio", f"Autoplay"),
     ]
 

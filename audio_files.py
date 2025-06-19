@@ -25,79 +25,92 @@ video_exts = [
     ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".m4b"
 ]
 
+BACKTICK_PATTERN = re.compile(
+    r"""\[sound:
+    (?P<filename_base>.+?)`                           # base filename
+    (?P<sha>[a-zA-Z0-9]{4})`                          # SHA
+    (?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-        # start time
+    (?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`          # end time
+    (?P<subtitle_range>\d+-\d+)                       # subtitle range
+    (?:`(?P<normalize_tag>[a-z]{2}))?                 # optional normalize tag
+    \.(?P<file_extension>\w+)                         # extension
+    \]$""",
+    re.VERBOSE
+)
+
+
+
+SUBS2SRS_PATTERN = re.compile(
+    r"""\[sound:
+    (?P<filename_base>.+?)_                      # base filename ending with underscore
+    (?P<start_time>\d{2}\.\d{2}\.\d{2}\.\d{3})- # start time (dot format)
+    (?P<end_time>\d{2}\.\d{2}\.\d{2}\.\d{3})    # end time
+    \.(?P<file_extension>\w+)                     # extension
+    \]$""",
+    re.VERBOSE
+)
+
+
+def detect_format(sound_line: str) -> str:
+    line = sound_line.strip()
+    if BACKTICK_PATTERN.match(line):
+        return "backtick"
+    elif SUBS2SRS_PATTERN.match(line):
+        return "subs2srs"
+    else:
+        return "unknown"
+
+
 def extract_sound_line_data(sound_line):
-    regex_backtick = re.compile(
-        r"""\[sound:
-        (?P<filename_base>.+?)`                        # filename base
-        (?P<sha>[a-zA-Z0-9]{4})`                       # 4-character SHA
-        (?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-     # start time
-        (?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`       # end time
-        (?P<subtitle_range>\d+-\d+)                    # subtitle range
-        (?:`(?P<normalize_tag>[a-z]{2}))?              # optional normalize tag
-        \.(?P<file_extension>\w+)                      # file extension
-        \]""",
-        re.VERBOSE | re.UNICODE
-    )
-
-    regex_subs2srs = re.compile(
-        r"""\[sound:
-        (?P<filename_base>.+?)_                           # base
-        (?P<start_time>\d{2}\.\d{2}\.\d{2}\.\d{3})-       # start time
-        (?P<end_time>\d{2}\.\d{2}\.\d{2}\.\d{3})          # end time
-        \.(?P<file_extension>\w+)\]                       # extension
-        """,
-        re.VERBOSE | re.UNICODE
-    )
-
-    def convert_timestamp_hmsms_to_dot(ts):
-        return re.sub(
-            r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms",
-            r"\1.\2.\3.\4",
-            ts
-        )
-
-    match = regex_backtick.search(sound_line)
-    if match:
+    format_type = detect_format(sound_line)
+    if format_type == "backtick":
+        match = BACKTICK_PATTERN.match(sound_line)
+        if not match:
+            return None
         groups = match.groupdict()
         filename_base = groups["filename_base"].replace(" ", "_")
         sha = groups["sha"]
         start_time_raw = groups["start_time"]
         end_time_raw = groups["end_time"]
-        start_time = convert_timestamp_hmsms_to_dot(groups["start_time"])
-        end_time = convert_timestamp_hmsms_to_dot(groups["end_time"])
-        subtitle_range = groups["subtitle_range"]
-        normalize_tag = groups["normalize_tag"]
-        file_extension = groups["file_extension"]
 
-        timestamp_filename = (
-            f"{filename_base}`{sha}`{start_time_raw}`{end_time_raw}"
-            f"`{subtitle_range}`{normalize_tag}.{file_extension}"
-        )
-    elif (match := regex_subs2srs.search(sound_line)):
+        subtitle_range = groups["subtitle_range"]
+        file_extension = groups["file_extension"]
+        normalize_tag = groups.get("normalize_tag")
+
+        start_index, end_index = map(int, subtitle_range.split("-"))
+        normalize_tag = groups.get("normalize_tag")
+
+        timestamp_filename = "`".join(filter(None, [
+            filename_base,
+            sha,
+            f"{start_time_raw}-{end_time_raw}",
+            subtitle_range,
+            normalize_tag
+        ])) + f".{file_extension}"
+
+    elif format_type == "subs2srs":
+        match = SUBS2SRS_PATTERN.match(sound_line)
+        if not match:
+            return None
         groups = match.groupdict()
         filename_base = groups["filename_base"].replace(" ", "_")
         sha = ""
         start_time_raw = groups["start_time"]
         end_time_raw = groups["end_time"]
-        start_time = convert_timestamp_hmsms_to_dot(groups["start_time"])
-        end_time = convert_timestamp_hmsms_to_dot(groups["end_time"])
-        subtitle_range = ""
+        start_index = end_index = None
         normalize_tag = ""
         file_extension = groups["file_extension"]
-
         timestamp_filename = (
             f"{filename_base}_{start_time_raw}-{end_time_raw}.{file_extension}"
         )
     else:
         return None
 
-    if subtitle_range:
-        try:
-            start_index, end_index = map(int, subtitle_range.split("-"))
-        except ValueError:
-            start_index, end_index = None, None
-    else:
-        start_index, end_index = None, None
+    def convert(ts):
+        return re.sub(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms", r"\1.\2.\3.\4", ts)
+
+    start_time = convert(start_time_raw)
+    end_time = convert(end_time_raw)
 
     audio_collection_path = os.path.join(collection_dir, timestamp_filename)
     screenshot_filename = f"{filename_base}`{start_time}.jpg"
@@ -122,6 +135,7 @@ def extract_sound_line_data(sound_line):
         "source_path": source_path,
         "subtitle_path": subtitle_path,
     }
+
 
 def format_timestamp_for_filename(timestamp: str) -> str:
     return timestamp.replace(':', '.').replace(',', '.')
@@ -178,18 +192,63 @@ def get_subtitle_block_from_relative_index(relative_index, subtitle_index, subti
 
     blocks = content.strip().split('\n\n')
 
-    formatted_block = []
+    formatted_blocks = []
     for block in blocks:
-        formatted_block = format_subtitle_block(block)
+        formatted = format_subtitle_block(block)
+        formatted_blocks.append(formatted)
 
     target_index = subtitle_index + relative_index
-    if 0 <= target_index < len(formatted_block):
-        return formatted_block[target_index]
+    if 0 <= target_index < len(formatted_blocks):
+        return formatted_blocks[target_index - 1]
     else:
-        print(f"Relative index {relative_index} goes out of range at position {subtitle_index}")
-        return ""
+        print(f"Relative index {relative_index} out of range from position {subtitle_index}")
+        print(f"len(blocks): {len(formatted_blocks)}")
+        return []
 
-def get_block_and_subtitle_file_from_sentence_text(sentence_text) -> tuple[str, list[str]]:
+def is_backtick_format(sound_line: str) -> bool:
+    return '`' in sound_line and '-' in sound_line and ']' in sound_line
+
+def is_subs2srs_format(sound_line: str) -> bool:
+    return '_' in sound_line and '-' in sound_line and ']' in sound_line
+
+def get_valid_backtick_sound_line(sound_line, sentence_text) -> str:
+    format = detect_format(sound_line)
+    if format == "backtick":
+        return sound_line
+    if format == "subs2srs":
+        data = extract_sound_line_data(sound_line)
+        subtitle_path = data["subtitle_path"]
+        block = get_block_from_subtitle_path_and_sentence_text(subtitle_path, sentence_text)
+        if block is None:
+            return ""
+        sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
+    else:
+        block, subtitle_path = get_block_and_subtitle_file_from_sentence_text(sentence_text)
+        if block is None or subtitle_path is None:
+            return ""
+        sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
+
+    return sound_line
+
+
+def get_block_from_subtitle_path_and_sentence_text(subtitle_file: str, sentence_text: str):
+    if not os.path.exists(subtitle_file):
+        print(f"Subtitle file not found: {subtitle_file}")
+        return None
+
+    with open(subtitle_file, 'r', encoding='utf-8') as f:
+        blocks = f.read().strip().split('\n\n')
+
+    for block in blocks:
+        formatted_block = format_subtitle_block(block)
+        if formatted_block and len(formatted_block) == 4:
+            subtitle_text = formatted_block[3]
+            if normalize_text(sentence_text) in normalize_text(subtitle_text):
+                return formatted_block
+
+    return None
+
+def get_block_and_subtitle_file_from_sentence_text(sentence_text: str):
     for filename in os.listdir(addon_source_folder):
         filename_base, file_extension = os.path.splitext(filename)
         if file_extension.lower() in video_exts:
@@ -204,18 +263,16 @@ def get_block_and_subtitle_file_from_sentence_text(sentence_text) -> tuple[str, 
                     continue
 
             with open(subtitle_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+                blocks = f.read().strip().split('\n\n')
 
-            blocks = content.strip().split('\n\n')
             for block in blocks:
                 formatted_block = format_subtitle_block(block)
-                if not formatted_block:
-                    continue
-                text = formatted_block[3]
-                if normalize_text(sentence_text) in normalize_text(text):
-                    return formatted_block, subtitle_path
+                if formatted_block and len(formatted_block) == 4:
+                    subtitle_text  = formatted_block[3]
+                    if normalize_text(sentence_text) in normalize_text(subtitle_text):
+                        return formatted_block, subtitle_path
 
-    return "", []
+    return None, None
 
 def normalize_text(s):
     return ''.join(s.strip().split())
@@ -361,7 +418,7 @@ def run_ffmpeg_extract_screenshot_command(source_path, screenshot_timestamp, scr
     ]
 
     try:
-        print(f"running command: {cmd}")
+        # print(f"running command: {cmd}")
         subprocess.run(cmd, check=True)
         print(f"extracted screenshot: {screenshot_collection_path}")
         return screenshot_collection_path
@@ -402,9 +459,17 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, kbps,
 
     return cmd
 
-def convert_to_default_time_notation(t):
-    parts = t.split('.')
-    return f"{parts[0]}:{parts[1]}:{parts[2]}.{parts[3]}"
+def convert_to_default_time_notation(t: str) -> str:
+    hmsms_match = re.match(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms", t)
+    if hmsms_match:
+        h, m, s, ms = hmsms_match.groups()
+        return f"{h}:{m}:{s}.{ms}"
+
+    parts = t.strip().split(".")
+    if len(parts) == 4:
+        return f"{parts[0]}:{parts[1]}:{parts[2]}.{parts[3]}"
+
+    raise ValueError(f"Unrecognized timestamp format: {t}")
 
 def time_to_seconds(t):
     h, m, s = t.split(':')
@@ -493,7 +558,6 @@ def get_audio_start_time_ms(source_file_path: str) -> int:
         if match:
             start_time = float(match.group(1))
             delay_ms = round(start_time * 1000)
-            print(f"delay time: {delay_ms}")
             return delay_ms
         else:
             print("No pts_time found in packets output.")
@@ -502,9 +566,8 @@ def get_audio_start_time_ms(source_file_path: str) -> int:
         print(f"Could not get pts_time from packets: {e}")
         return 0
 
-def alter_sound_file_times(sound_line, start_ms, end_ms) -> str:
-    altered_data = get_altered_sound_data(sound_line, start_ms, end_ms)
-    print(f"altered data: {altered_data}")
+def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
+    altered_data = get_altered_sound_data(sound_line, start_ms, end_ms, relative_index)
     if not altered_data:
         return ""
 
@@ -519,12 +582,12 @@ def alter_sound_file_times(sound_line, start_ms, end_ms) -> str:
         "192",
         altered_data["new_path"]
     )
-    print("running command:", cmd)
+    # print("running command:", cmd)
     try:
-        subprocess.run(cmd, check=True)
-        print("Created extracted audio:", altered_data["new_path"])
-    except subprocess.CalledProcessError as e:
-        print("FFmpeg failed:", e)
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # print("Audio extraction succeeded.")
+    except subprocess.CalledProcessError:
+        print("FFmpeg failed.")
         return ""
 
     if os.path.exists(altered_data["new_path"]):
@@ -539,9 +602,8 @@ def convert_timestamp_dot_to_hmsms(ts: str) -> str:
     )
 
 
-def get_altered_sound_data(sound_line, start_ms, end_ms) -> dict:
+def get_altered_sound_data(sound_line, start_ms, end_ms, relative_index) -> dict:
     data = extract_sound_line_data(sound_line)
-    print(f"getting altered sound data: {data}")
     if not data:
         return {}
 
@@ -549,24 +611,42 @@ def get_altered_sound_data(sound_line, start_ms, end_ms) -> dict:
     orig_start_ms = time_to_milliseconds(data["start_time"])
     orig_end_ms = time_to_milliseconds(data["end_time"])
 
-    new_start_ms = max(0, orig_start_ms + start_ms)
-    new_end_ms = max(0, orig_end_ms + end_ms)
+    start_index = data["start_index"]
+    end_index = data["end_index"]
+
+    if relative_index == 1:
+        # extend end time and increase end_index
+        new_start_ms = orig_start_ms
+        new_end_ms = orig_end_ms + end_ms
+        if end_index is not None:
+            end_index += 1
+    elif relative_index == -1:
+        # extend start time earlier and decrease start_index
+        new_start_ms = max(0, orig_start_ms - start_ms)
+        new_end_ms = orig_end_ms
+        if start_index is not None:
+            start_index -= 1
+    else:
+        # just apply both deltas
+        new_start_ms = max(0, orig_start_ms - start_ms)
+        new_end_ms = orig_end_ms + end_ms
+
 
     if new_end_ms <= new_start_ms:
-        print(f"Invalid time range: {new_start_ms}-{new_end_ms}")
+        print(f"Invalid time range for {sound_line}: {new_start_ms}-{new_end_ms}")
         return {}
+
+    new_start_ms = max(0, orig_start_ms - start_ms)
+    new_end_ms = max(0, orig_end_ms + end_ms)
 
     new_start_time = milliseconds_to_anki_time_hmsms_format(new_start_ms)
     new_end_time = milliseconds_to_anki_time_hmsms_format(new_end_ms)
 
-    start_index = data["start_index"]
-    end_index = data["end_index"]
-    subtitle_range = f"{start_index}-{end_index}" if start_index is not None and end_index is not None else ""
     normalize_tag = "nm" if data.get("normalize_tag") else ""
-
     time_range = f"{new_start_time}-{new_end_time}"
-
     filename_parts = [data["filename_base"], "ABCD", time_range]
+
+    subtitle_range = f"{start_index}-{end_index}" if start_index is not None and end_index is not None else ""
     if subtitle_range:
         filename_parts.append(subtitle_range)
     if normalize_tag:

@@ -66,7 +66,7 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
     print(f"new edge text: {new_edge_text}")
     new_edge_block = audio_files.get_block_from_subtitle_path_and_sentence_text(subtitle_path, new_edge_text)
     if not new_edge_block or len(new_edge_block) < 3:
-        print("Could not locate boundary block.")
+        print(f"Could not locate boundary block: {new_edge_block}")
         return None, None
 
     new_start_time = start_time

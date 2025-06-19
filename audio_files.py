@@ -243,6 +243,8 @@ def get_block_from_subtitle_path_and_sentence_text(subtitle_file: str, sentence_
         formatted_block = format_subtitle_block(block)
         if formatted_block and len(formatted_block) == 4:
             subtitle_text = formatted_block[3]
+            print(f"sentence_text: {sentence_text}")
+            print(f"subtitle_text: {subtitle_text}")
             if normalize_text(sentence_text) in normalize_text(subtitle_text):
                 return formatted_block
 

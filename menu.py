@@ -8,6 +8,7 @@ from aqt.sound import play
 from aqt.utils import showInfo
 import re
 
+
 try:
     from . import audio_files
 except ImportError:
@@ -34,68 +35,87 @@ def get_sound_and_sentence_from_editor(editor: Editor) -> tuple[str, int, str, i
     sentence_idx = const_sentence_index
     return sound_line, sound_idx, sentence_text, sentence_idx
 
-def remove_first_last_lines(editor, relative_index):
-    sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
-    sentence_lines = [line for line in sentence_text.splitlines() if line.strip()]
-    print(f"sentence lines: " + str(len(sentence_lines)))
-    if len(sentence_lines) == 1:
-        return
-
-
+def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index):
     data = audio_files.extract_sound_line_data(sound_line)
+    if not data:
+        print(f"no data extracted from {sound_line}")
+        return None, None
+
     start_time = data["start_time"]
     end_time = data["end_time"]
     start_index = data["start_index"]
-    end_index = data["end_index"]
+    end_index   = data["end_index"]
     subtitle_path = data["subtitle_path"]
 
-    edge_index = end_index if relative_index == 1 else start_index
-
-    target_block = audio_files.get_subtitle_block_from_relative_index(-relative_index, edge_index, subtitle_path)
-    new_end_beginning_line = target_block[2]
-
-    cut_off_text_block = audio_files.get_subtitle_block_from_relative_index(relative_index, edge_index, subtitle_path)
-    cut_off_text = cut_off_text_block[2]
-
-    new_sentence_text = sentence_text
-    print(f"remove text: {cut_off_text}")
-    new_sentence_text = new_sentence_text.replace(cut_off_text, "")
-
-    block, subtitle_path = audio_files.get_block_and_subtitle_file_from_sentence_text(sentence_text)
-    new_sound_line = audio_files.get_sound_line_from_block_and_path(block, subtitle_path)
-
-    target_data = audio_files.extract_sound_line_data(new_sound_line)
-    target_start_time = target_data["start_time"]
-    target_end_time = target_data["end_time"]
-
-    start_ms = audio_files.time_to_milliseconds(start_time)
-    end_ms = audio_files.time_to_milliseconds(end_time)
-    target_start_ms = audio_files.time_to_milliseconds(target_start_time)
-    target_end_ms = audio_files.time_to_milliseconds(target_end_time)
+    sentence_blocks = [b.strip() for b in sentence_text.split("\n\n") if b.strip()]
+    if len(sentence_blocks) <= 1:
+        print(f"no sentence blocks extracted from {sentence_text}")
+        return None, None
 
     if relative_index == 1:
-        delta_end = target_end_ms - end_ms
-        new_sound_tag = audio_files.alter_sound_file_times(sound_line, 0, delta_end, relative_index)
+        # remove last block
+        new_blocks = sentence_blocks[:-1]
+        new_edge_text = new_blocks[-1]
+        end_index -= 1
     else:
-        delta_start = target_start_ms - start_ms
-        new_sound_tag = audio_files.alter_sound_file_times(sound_line, delta_start, 0, relative_index)
+        # remove first block
+        new_blocks = sentence_blocks[1:]
+        new_edge_text = new_blocks[0]
+        start_index += 1
 
-    if new_sound_tag:
-        new_text = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
-        editor.note.fields[sound_idx] = new_text
-        print(f"now playing {new_sound_tag}")
-        sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_tag).group(1)
-        QTimer.singleShot(0, lambda: play(sound_filename))
+    print(f"new edge text: {new_edge_text}")
+    new_edge_block = audio_files.get_block_from_subtitle_path_and_sentence_text(subtitle_path, new_edge_text)
+    if not new_edge_block or len(new_edge_block) < 3:
+        print("Could not locate boundary block.")
+        return None, None
+
+    new_start_time = start_time
+    new_end_time = end_time
+    if relative_index == 1:
+        new_end_time = new_edge_block[2]
     else:
+        new_start_time = new_edge_block[1]
+
+    orig_start_ms = audio_files.time_to_milliseconds(data["start_time"])
+    orig_end_ms = audio_files.time_to_milliseconds(data["end_time"])
+    new_start_ms = audio_files.time_to_milliseconds(new_start_time)
+    new_end_ms = audio_files.time_to_milliseconds(new_end_time)
+
+    lengthen_start = orig_start_ms - new_start_ms
+    lengthen_end = new_end_ms - orig_end_ms
+
+
+    new_sound_line = audio_files.alter_sound_file_times(
+        sound_line,
+        lengthen_start if relative_index == -1 else 0,
+        lengthen_end if relative_index == 1 else 0,
+        relative_index
+    )
+    print(f"new_sound_tag: {new_sound_line}")
+
+    if not new_sound_line:
         print("No new sound tag returned, field not updated.")
+        return
 
+    new_sentence_text = "\n\n".join(new_blocks).strip()
+    return new_sentence_text, new_sound_line
+
+def remove_edge_lines_helper(editor, relative_index):
+    sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
+
+    new_sentence_text, new_sound_line = remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index)
+
+    new_field = re.sub(r"\[sound:.*?\]", new_sound_line, sound_line)
+    editor.note.fields[sound_idx] = new_field
     editor.note.fields[sentence_idx] = new_sentence_text
     editor.loadNote()
-    audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_tag)
 
-    print(f"new line {new_sentence_text}")
+    sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_line).group(1)
+    QTimer.singleShot(0, lambda: play(sound_filename))
+    audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_line)
 
-    return
+    print(f"Removed {'last' if relative_index==1 else 'first'} block, new text:\n{new_sentence_text}")
+
 
 def add_context_line_helper(editor: Editor, relative_index):
     sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
@@ -222,14 +242,14 @@ def add_custom_editor_button(html_buttons: list[str], editor: Editor) -> None:
 
     buttons = [
         (f"Prev Line", lambda ed=editor: add_context_line_helper(editor, -1), f"Add previous line to card", f"Prev Line"),
-        (f"Rem First Line", lambda ed=editor: remove_first_last_lines(editor, -1), f"Remove first line from card", f"Rem First Line"),
+        (f"Rem First Line", lambda ed=editor: remove_edge_lines_helper(editor, -1), f"Remove first line from card", f"Rem First Line"),
 
         (f"S+{ms_amount}", lambda ed=editor: adjust_sound_tag(editor, -ms_amount, 0), f"Add {ms_amount}ms to start", f"S+{ms_amount}"),
         (f"S-{ms_amount}", lambda ed=editor: adjust_sound_tag(editor, ms_amount, 0), f"Remove {ms_amount}ms from start", f"S-{ms_amount}"),
         (f"E+{ms_amount}", lambda ed=editor: adjust_sound_tag(editor, 0, ms_amount), f"Add {ms_amount}ms to end", f"E+{ms_amount}"),
         (f"E-{ms_amount}", lambda ed=editor: adjust_sound_tag(editor, 0, -ms_amount), f"Remove {ms_amount}ms from end", f"E-{ms_amount}"),
 
-        (f"Rem Last Line", lambda ed=editor: remove_first_last_lines(editor, 1), f"Removes last line from card",f"Rem Last Line"),
+        (f"Rem Last Line", lambda ed=editor: remove_edge_lines_helper(editor, 1), f"Removes last line from card", f"Rem Last Line"),
         (f"Next Line", lambda ed=editor: add_context_line_helper(editor, 1), f"Add next line to card", f"Next Line"),
         (f"Autoplay", lambda ed=editor: toggle_auto_play_audio(ed), f"Autoplay Audio", f"Autoplay"),
     ]

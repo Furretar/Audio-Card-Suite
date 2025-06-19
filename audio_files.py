@@ -602,7 +602,7 @@ def convert_timestamp_dot_to_hmsms(ts: str) -> str:
     )
 
 
-def get_altered_sound_data(sound_line, start_ms, end_ms, relative_index) -> dict:
+def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relative_index) -> dict:
     data = extract_sound_line_data(sound_line)
     if not data:
         return {}
@@ -615,29 +615,28 @@ def get_altered_sound_data(sound_line, start_ms, end_ms, relative_index) -> dict
     end_index = data["end_index"]
 
     if relative_index == 1:
-        # extend end time and increase end_index
-        new_start_ms = orig_start_ms
-        new_end_ms = orig_end_ms + end_ms
-        if end_index is not None:
+        if lengthen_end_ms > 0:
             end_index += 1
+        else:
+            end_index -= 1
     elif relative_index == -1:
-        # extend start time earlier and decrease start_index
-        new_start_ms = max(0, orig_start_ms - start_ms)
-        new_end_ms = orig_end_ms
-        if start_index is not None:
+        if lengthen_start_ms > 0:
             start_index -= 1
+        else:
+            start_index += 1
     else:
         # just apply both deltas
-        new_start_ms = max(0, orig_start_ms - start_ms)
-        new_end_ms = orig_end_ms + end_ms
+        new_start_ms = max(0, orig_start_ms - lengthen_start_ms)
+        new_end_ms = orig_end_ms + lengthen_end_ms
 
+    new_start_ms = max(0, orig_start_ms - lengthen_start_ms)
+    new_end_ms = max(0, orig_end_ms + lengthen_end_ms)
 
     if new_end_ms <= new_start_ms:
         print(f"Invalid time range for {sound_line}: {new_start_ms}-{new_end_ms}")
         return {}
 
-    new_start_ms = max(0, orig_start_ms - start_ms)
-    new_end_ms = max(0, orig_end_ms + end_ms)
+
 
     new_start_time = milliseconds_to_anki_time_hmsms_format(new_start_ms)
     new_end_time = milliseconds_to_anki_time_hmsms_format(new_end_ms)

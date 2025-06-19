@@ -1,5 +1,4 @@
 import subprocess
-
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication
 from aqt.gui_hooks import editor_did_load_note
@@ -8,6 +7,7 @@ from aqt.editor import Editor
 from aqt.sound import play
 from aqt.utils import showInfo
 import re
+
 try:
     from . import audio_files
 except ImportError:
@@ -33,9 +33,6 @@ def get_sound_and_sentence_from_editor(editor: Editor) -> tuple[str, int, str, i
     sentence_text = editor.note.fields[const_sentence_index]
     sentence_idx = const_sentence_index
     return sound_line, sound_idx, sentence_text, sentence_idx
-
-
-
 
 def remove_first_last_lines(editor, relative_index):
     sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
@@ -64,7 +61,8 @@ def remove_first_last_lines(editor, relative_index):
     print(f"remove text: {cut_off_text}")
     new_sentence_text = new_sentence_text.replace(cut_off_text, "")
 
-    new_sound_line = audio_files.get_timestamps_from_sentence_text(new_end_beginning_line)
+    block, subtitle_path = audio_files.get_block_and_subtitle_file_from_sentence_text(sentence_text)
+    new_sound_line = audio_files.get_sound_line_from_block_and_path(block, subtitle_path)
 
     target_data = audio_files.extract_sound_line_data(new_sound_line)
     target_start_time = target_data["start_time"]
@@ -102,7 +100,17 @@ def remove_first_last_lines(editor, relative_index):
 def add_context_line(editor, relative_index):
     sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
     if "jidoujisho-" in sound_line or sound_line == "":
-        sound_line = audio_files.get_timestamps_from_sentence_text(sentence_text)
+        block, subtitle_path = audio_files.get_block_and_subtitle_file_from_sentence_text(sentence_text)
+        sound_line = audio_files.get_sound_line_from_block_and_path(block, subtitle_path)
+    else:
+        data = audio_files.format_subtitle_block(sound_line)
+        if relative_index == 1:
+            target_index = data["end_index"]
+        else:
+            target_index = data["start_index"]
+        subtitle_path = data["subtitle_path"]
+
+        block = audio_files.get_subtitle_block_from_index_and_path(target_index, subtitle_path)
 
 
     sentence_lines = [line for line in sentence_text.splitlines() if line.strip()]
@@ -110,7 +118,8 @@ def add_context_line(editor, relative_index):
     last_line = sentence_lines[-1]
 
     if relative_index == 1:
-        target_block = audio_files.get_subtitle_block_from_relative_index(last_line, relative_index)
+        target_block = audio_files.get_subtitle_block_from_relative_index(relative_index, "subtitle_index", subtitle_path)
+        target_line = ""
         if target_line is None or target_line == "":
             showInfo(f"This is the last line of the file: {target_line}")
             return
@@ -186,8 +195,6 @@ def add_context_line(editor, relative_index):
 
     return
 
-
-
 def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
 
@@ -200,25 +207,24 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         start_delta *= 5
         end_delta *= 5
 
-
-
     if "jidoujisho-" in sound_line or sound_line == "":
-        new_sound_name = audio_files.get_timestamps_from_sentence_text(sentence_text)
-        print(f"new sound name: {new_sound_name}, sending for new sound tag")
-        new_sound_tag = audio_files.alter_sound_file_times(new_sound_name, start_delta, end_delta)
+        block, subtitle_path = audio_files.get_block_and_subtitle_file_from_sentence_text(sentence_text)
+        sound_line = audio_files.get_sound_line_from_block_and_path(block, subtitle_path)
+        print(f"new sound line: {sound_line}, sending for new sound tag")
+        new_sound_line = audio_files.alter_sound_file_times(sound_line, start_delta, end_delta)
     else:
-        new_sound_tag = audio_files.alter_sound_file_times(sound_line, start_delta, end_delta)
-    print("new_sound_tag:", new_sound_tag)
+        new_sound_line = audio_files.alter_sound_file_times(sound_line, start_delta, end_delta)
+    print("new_sound_tag:", new_sound_line)
 
-    if new_sound_tag:
-        print("extracted text: ", new_sound_tag)
-        editor.note.fields[sound_idx] = new_sound_tag
+    if new_sound_line:
+        print("extracted text: ", new_sound_line)
+        editor.note.fields[sound_idx] = new_sound_line
         editor.loadNote()
-        print(f"now playing {new_sound_tag}")
+        print(f"now playing {new_sound_line}")
 
         # 3 is temporary screenshot index
-        audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_tag)
-        sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_tag).group(1)
+        audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_line)
+        sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_line).group(1)
         QTimer.singleShot(0, lambda: play(sound_filename))
 
     else:
@@ -226,13 +232,6 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     return
 
     showInfo("No [sound:] tag found in any field.")
-
-
-
-
-
-
-
 
 def on_note_loaded(editor: Editor):
     if getattr(editor, "_auto_play_enabled", False):
@@ -250,11 +249,7 @@ def toggle_auto_play_audio(editor: Editor):
     state = "enabled" if editor._auto_play_enabled else "disabled"
     print(f"Auto-play {state} for editor {id(editor)}")
 
-
 editor_did_load_note.append(on_note_loaded)
-
-
-
 
 def add_custom_editor_button(html_buttons: list[str], editor: Editor) -> None:
     # avoid adding the button multiple times per editor

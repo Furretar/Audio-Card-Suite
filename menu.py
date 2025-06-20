@@ -1,5 +1,6 @@
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication
+from aqt import gui_hooks
 from aqt.sound import play
 from aqt.utils import showInfo
 import re
@@ -43,10 +44,10 @@ def get_sound_and_sentence_from_editor(editor: Editor):
     screenshot_idx = 3
 
     sound_line = ""
-    for idx, field_text in enumerate(editor.note.fields):
-        if "[sound:" in field_text:
-            sound_line = field_text
-            sound_idx = idx
+    if sound_idx < len(editor.note.fields):
+        field_text_at_sound_idx = editor.note.fields[sound_idx]
+        if "[sound:" in field_text_at_sound_idx:
+            sound_line = field_text_at_sound_idx
 
     selected_text = editor.web.selectedText().strip()
     if selected_text:
@@ -57,9 +58,9 @@ def get_sound_and_sentence_from_editor(editor: Editor):
     sound_line = strip_html_tags(sound_line)
     sentence_text = strip_html_tags(sentence_text)
 
-    if not sound_line:
-        block, subtitle_path = audio_files.get_block_and_subtitle_file_from_sentence_text(sentence_text)
-        sound_line = audio_files.get_sound_line_from_block_and_path(block, subtitle_path)
+    # if not sound_line:
+    #     block, subtitle_path = audio_files.get_block_and_subtitle_file_from_sentence_text(sentence_text)
+    #     sound_line = audio_files.get_sound_line_from_block_and_path(block, subtitle_path)
 
     return sound_line, sound_idx, sentence_text, sentence_idx, screenshot_idx
 
@@ -271,13 +272,15 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
 
 def on_note_loaded(editor: Editor):
     if getattr(editor, "_auto_play_enabled", False):
-        for field_text in editor.note.fields:
+        sound_line, sound_idx, _, _, _ = get_sound_and_sentence_from_editor(editor)
+        if sound_idx < len(editor.note.fields):
+            field_text = editor.note.fields[sound_idx]
             match = re.search(r"\[sound:([^\]]+)\]", field_text)
             if match:
                 filename = match.group(1)
-                print(f"Playing sound: {filename}")
+                print(f"Playing sound from field {sound_idx}: {filename}")
                 QTimer.singleShot(0, lambda fn=filename: play(fn))
-                break
+
 
 
 def set_auto_play_audio(editor: Editor, enabled: bool) -> None:
@@ -378,17 +381,17 @@ def add_custom_controls(editor: Editor) -> None:
     # spinboxes container
 
     target_fields = [
-        ("Target Audio Field", 1, 99, 1),
-        ("Target Sentence Field", 1, 99, 1),
+        # ("Target Audio Track", 1, 99, 1),
+        # ("Target Sentence Track", 1, 99, 1),
     ]
     translation_fields = [
-        ("Translation Audio Field", 1, 99, 1),
-        ("Translation Text Field", 1, 99, 1),
+        # ("Translation Audio Track", 1, 99, 1),
+        # ("Translation Text Track", 1, 99, 1),
     ]
     other_fields = [
-        ("Start offset", -999999, 999999, 0),
-        ("End offset", -999999, 999999, 0),
-        ("Subtitle Offset", -999999, 999999, 0),
+        # ("Start offset", -999999, 999999, 0),
+        # ("End offset", -999999, 999999, 0),
+        # ("Subtitle Offset", -999999, 999999, 0),
     ]
 
     spinboxes_container = QWidget()
@@ -462,3 +465,5 @@ def add_custom_controls(editor: Editor) -> None:
     editor._custom_controls_container_spinboxes = spinboxes_container
 
     print("Custom editor control buttons, spinboxes, and autoplay checkbox added.")
+
+gui_hooks.editor_did_load_note.append(on_note_loaded)

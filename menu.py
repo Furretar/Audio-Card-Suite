@@ -340,7 +340,6 @@ def add_custom_controls_above_first_field(editor: Editor) -> None:
         return w, spin
 
     # top buttons container
-
     buttons_container = QWidget()
     buttons_layout = QVBoxLayout(buttons_container)
     buttons_layout.setContentsMargins(*CONTAINER_MARGINS)
@@ -351,12 +350,10 @@ def add_custom_controls_above_first_field(editor: Editor) -> None:
     add_remove_layout = QHBoxLayout(add_remove_row)
     add_remove_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
     add_remove_layout.setSpacing(BUTTON_ROW_SPACING)
-
     add_remove_layout.addWidget(make_button("Add Previous Line", lambda: add_context_line_helper(editor, -1)))
     add_remove_layout.addWidget(make_button("Remove First Line", lambda: remove_edge_lines_helper(editor, -1), danger=True))
     add_remove_layout.addWidget(make_button("Add Next Line", lambda: add_context_line_helper(editor, 1)))
     add_remove_layout.addWidget(make_button("Remove Last Line", lambda: remove_edge_lines_helper(editor, 1), danger=True))
-
     buttons_layout.addWidget(add_remove_row)
 
     # timing buttons
@@ -364,13 +361,22 @@ def add_custom_controls_above_first_field(editor: Editor) -> None:
     timing_btn_layout = QHBoxLayout(timing_btn_row)
     timing_btn_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
     timing_btn_layout.setSpacing(BUTTON_ROW_SPACING)
-
     timing_btn_layout.addWidget(make_button("Start +50ms", lambda: adjust_sound_tag(editor, -ms_amount, 0)))
     timing_btn_layout.addWidget(make_button("Start -50ms", lambda: adjust_sound_tag(editor, ms_amount, 0), danger=True))
     timing_btn_layout.addWidget(make_button("End +50ms", lambda: adjust_sound_tag(editor, 0, ms_amount)))
     timing_btn_layout.addWidget(make_button("End -50ms", lambda: adjust_sound_tag(editor, 0, -ms_amount), danger=True))
-
     buttons_layout.addWidget(timing_btn_row)
+
+    # generate button
+    generate_btn_row = QWidget()
+    generate_btn_layout = QHBoxLayout(generate_btn_row)
+    generate_btn_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
+    generate_btn_layout.setSpacing(BUTTON_ROW_SPACING)
+    generate_btn_layout.addWidget(make_button("Generate Fields", lambda: adjust_sound_tag(editor, -0, 0)))
+    buttons_layout.addWidget(generate_btn_row)
+
+
+
 
     main_layout.insertWidget(0, buttons_container)
     editor._custom_controls_container_buttons = buttons_container

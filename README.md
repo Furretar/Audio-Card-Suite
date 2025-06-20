@@ -13,13 +13,9 @@ mpv to anki tool
 
 edit already made cards
 - [ ] add/subtract 1db for each audio
-- [ ] setting to set sentence and audio fields so you can use subtitle line to find audio even if two have the same name
-- [ ] update buttons, change numbers if shift or ctrl held down
 - [ ] move buttons to above audio field
 - [ ] figure out a system to use language codes to always get the right audio track (box with order of priority?)
 - [ ] equalize all audio in current deck, auto equalize when adding
-- [ ] automatically extract subs
-- [ ] store original audios in a folder, tag cards automatically with video name (for jidoujisho cards)
 
 Spin boxes:
 Target Audio Field | Target Sentence Field | Translation Audio Field | Translation Text Field |

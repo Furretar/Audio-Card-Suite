@@ -1,13 +1,11 @@
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication
-from aqt.gui_hooks import editor_did_load_note
 from aqt.sound import play
 from aqt.utils import showInfo
 import re
-from aqt import gui_hooks
 from aqt.editor import Editor
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox, QSizePolicy
+    QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
 )
 
 try:
@@ -19,9 +17,6 @@ except ImportError:
     import audio_files
 
 ms_amount = 50
-const_screenshot_index = 3
-const_sound_index = 2
-const_sentence_index = 0
 
 CONTAINER_MARGINS = (2, 2, 2, 2)
 CONTAINER_SPACING = 8
@@ -42,10 +37,12 @@ SHIFT_BUTTON_BG_COLOR = "#f0d0d0"
 def strip_html_tags(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text)
 
-def get_sound_and_sentence_from_editor(editor: Editor) -> tuple[str, int, str, int]:
-    sound_line = ""
-    sound_idx = const_sound_index
+def get_sound_and_sentence_from_editor(editor: Editor):
+    sound_idx = 2
+    sentence_idx = 0
+    screenshot_idx = 3
 
+    sound_line = ""
     for idx, field_text in enumerate(editor.note.fields):
         if "[sound:" in field_text:
             sound_line = field_text
@@ -54,10 +51,8 @@ def get_sound_and_sentence_from_editor(editor: Editor) -> tuple[str, int, str, i
     selected_text = editor.web.selectedText().strip()
     if selected_text:
         sentence_text = selected_text
-        sentence_idx = const_sentence_index
     else:
-        sentence_text = editor.note.fields[const_sentence_index]
-        sentence_idx = const_sentence_index
+        sentence_text = editor.note.fields[sentence_idx]
 
     sound_line = strip_html_tags(sound_line)
     sentence_text = strip_html_tags(sentence_text)
@@ -66,7 +61,7 @@ def get_sound_and_sentence_from_editor(editor: Editor) -> tuple[str, int, str, i
         block, subtitle_path = audio_files.get_block_and_subtitle_file_from_sentence_text(sentence_text)
         sound_line = audio_files.get_sound_line_from_block_and_path(block, subtitle_path)
 
-    return sound_line, sound_idx, sentence_text, sentence_idx
+    return sound_line, sound_idx, sentence_text, sentence_idx, screenshot_idx
 
 
 def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index):
@@ -133,7 +128,7 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
     return new_sentence_text, new_sound_line
 
 def remove_edge_lines_helper(editor, relative_index):
-    sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
+    sound_line, sound_idx, sentence_text, sentence_idx, screenshot_idx = get_sound_and_sentence_from_editor(editor)
 
     new_sentence_text, new_sound_line = remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index)
 
@@ -147,13 +142,13 @@ def remove_edge_lines_helper(editor, relative_index):
 
     data = audio_files.add_image_if_empty_data(new_sound_line)
     if data:
-        audio_files.add_image_if_empty_helper(editor, const_screenshot_index, data, new_sound_line)
+        audio_files.add_image_if_empty_helper(editor, screenshot_idx, data, new_sound_line)
 
     print(f"Removed {'last' if relative_index==1 else 'first'} block, new text:\n{new_sentence_text}")
 
 
 def add_context_line_helper(editor: Editor, relative_index):
-    sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
+    sound_line, sound_idx, sentence_text, sentence_idx, screenshot_idx = get_sound_and_sentence_from_editor(editor)
     print(f"sound_line from editor: {sound_line}")
     new_sound_tag, new_sentence_text = add_context_line_data(sound_line, sentence_text, relative_index)
 
@@ -168,7 +163,7 @@ def add_context_line_helper(editor: Editor, relative_index):
 
         data = audio_files.add_image_if_empty_data(new_sound_tag)
         if data:
-            audio_files.add_image_if_empty_helper(editor, const_screenshot_index, data, new_sound_tag)
+            audio_files.add_image_if_empty_helper(editor, screenshot_idx, data, new_sound_tag)
 
         print(f"new line {new_sentence_text}")
 
@@ -226,7 +221,7 @@ def add_context_line_data(sound_line, sentence_text, relative_index):
     return new_sound_line.strip(), new_sentence_text.strip()
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
-    sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
+    sound_line, sound_idx, sentence_text, sentence_idx, screenshot_idx = get_sound_and_sentence_from_editor(editor)
     print(f"editor sound line: {sound_line}")
     print(f"editor sentence text: {sentence_text}")
 
@@ -262,7 +257,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
 
         data = audio_files.add_image_if_empty_data(new_sound_line)
         if data:
-            audio_files.add_image_if_empty_helper(editor, const_screenshot_index, data, new_sound_line)
+            audio_files.add_image_if_empty_helper(editor, screenshot_idx, data, new_sound_line)
 
 
         sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_line).group(1)
@@ -284,7 +279,6 @@ def on_note_loaded(editor: Editor):
                 QTimer.singleShot(0, lambda fn=filename: play(fn))
                 break
 
-gui_hooks.editor_did_load_note.append(on_note_loaded)
 
 def set_auto_play_audio(editor: Editor, enabled: bool) -> None:
     editor._auto_play_enabled = enabled
@@ -299,7 +293,7 @@ def handle_autoplay_checkbox_toggle(_, editor):
     print(f"Autoplay {'enabled' if new_state else 'disabled'} for editor {id(editor)}")
 
 
-def add_custom_controls_above_first_field(editor: Editor) -> None:
+def add_custom_controls(editor: Editor) -> None:
 
     if not hasattr(editor, "widget") or editor.widget is None:
         return
@@ -345,17 +339,6 @@ def add_custom_controls_above_first_field(editor: Editor) -> None:
     buttons_layout.setContentsMargins(*CONTAINER_MARGINS)
     buttons_layout.setSpacing(CONTAINER_SPACING)
 
-    # add and remove line buttons
-    add_remove_row = QWidget()
-    add_remove_layout = QHBoxLayout(add_remove_row)
-    add_remove_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
-    add_remove_layout.setSpacing(BUTTON_ROW_SPACING)
-    add_remove_layout.addWidget(make_button("Add Previous Line", lambda: add_context_line_helper(editor, -1)))
-    add_remove_layout.addWidget(make_button("Remove First Line", lambda: remove_edge_lines_helper(editor, -1), danger=True))
-    add_remove_layout.addWidget(make_button("Add Next Line", lambda: add_context_line_helper(editor, 1)))
-    add_remove_layout.addWidget(make_button("Remove Last Line", lambda: remove_edge_lines_helper(editor, 1), danger=True))
-    buttons_layout.addWidget(add_remove_row)
-
     # timing buttons
     timing_btn_row = QWidget()
     timing_btn_layout = QHBoxLayout(timing_btn_row)
@@ -363,9 +346,20 @@ def add_custom_controls_above_first_field(editor: Editor) -> None:
     timing_btn_layout.setSpacing(BUTTON_ROW_SPACING)
     timing_btn_layout.addWidget(make_button("Start +50ms", lambda: adjust_sound_tag(editor, -ms_amount, 0)))
     timing_btn_layout.addWidget(make_button("Start -50ms", lambda: adjust_sound_tag(editor, ms_amount, 0), danger=True))
-    timing_btn_layout.addWidget(make_button("End +50ms", lambda: adjust_sound_tag(editor, 0, ms_amount)))
     timing_btn_layout.addWidget(make_button("End -50ms", lambda: adjust_sound_tag(editor, 0, -ms_amount), danger=True))
+    timing_btn_layout.addWidget(make_button("End +50ms", lambda: adjust_sound_tag(editor, 0, ms_amount)))
     buttons_layout.addWidget(timing_btn_row)
+
+    # add and remove line buttons
+    add_remove_row = QWidget()
+    add_remove_layout = QHBoxLayout(add_remove_row)
+    add_remove_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
+    add_remove_layout.setSpacing(BUTTON_ROW_SPACING)
+    add_remove_layout.addWidget(make_button("Add Previous Line", lambda: add_context_line_helper(editor, -1)))
+    add_remove_layout.addWidget(make_button("Remove First Line", lambda: remove_edge_lines_helper(editor, -1), danger=True))
+    add_remove_layout.addWidget(make_button("Remove Last Line", lambda: remove_edge_lines_helper(editor, 1), danger=True))
+    add_remove_layout.addWidget(make_button("Add Next Line", lambda: add_context_line_helper(editor, 1)))
+    buttons_layout.addWidget(add_remove_row)
 
     # generate button
     generate_btn_row = QWidget()
@@ -384,17 +378,17 @@ def add_custom_controls_above_first_field(editor: Editor) -> None:
     # spinboxes container
 
     target_fields = [
-        ("Target Audio Field", 0, 10, 0),
-        ("Target Sentence Field", 0, 10, 0),
+        ("Target Audio Field", 1, 99, 1),
+        ("Target Sentence Field", 1, 99, 1),
     ]
     translation_fields = [
-        ("Translation Audio Field", 0, 10, 0),
-        ("Translation Text Field", 0, 10, 0),
+        ("Translation Audio Field", 1, 99, 1),
+        ("Translation Text Field", 1, 99, 1),
     ]
     other_fields = [
-        ("Start offset", -1000, 1000, 0),
-        ("End offset", -1000, 1000, 0),
-        ("Subtitle Offset", -1000, 1000, 0),
+        ("Start offset", -999999, 999999, 0),
+        ("End offset", -999999, 999999, 0),
+        ("Subtitle Offset", -999999, 999999, 0),
     ]
 
     spinboxes_container = QWidget()
@@ -407,9 +401,16 @@ def add_custom_controls_above_first_field(editor: Editor) -> None:
     row_target_layout = QHBoxLayout(row_target)
     row_target_layout.setContentsMargins(*ROW_MARGINS)
     row_target_layout.setSpacing(ROW_SPACING)
+
     for label, mn, mx, default in target_fields:
-        widget, _ = make_labeled_spinbox(label, mn, mx, default)
+        widget, spin = make_labeled_spinbox(label, mn, mx, default)
         row_target_layout.addWidget(widget)
+
+        if "Audio" in label:
+            editor._audio_field_index_spinbox = spin
+        elif "Sentence" in label:
+            editor._sentence_field_index_spinbox = spin
+
     spinboxes_layout.addWidget(row_target)
 
     # translation fields row
@@ -417,9 +418,16 @@ def add_custom_controls_above_first_field(editor: Editor) -> None:
     row_trans_layout = QHBoxLayout(row_trans)
     row_trans_layout.setContentsMargins(*ROW_MARGINS)
     row_trans_layout.setSpacing(ROW_SPACING)
+
     for label, mn, mx, default in translation_fields:
-        widget, _ = make_labeled_spinbox(label, mn, mx, default)
+        widget, spin = make_labeled_spinbox(label, mn, mx, default)
         row_trans_layout.addWidget(widget)
+
+        if "Audio" in label:
+            editor._translation_audio_index_spinbox = spin
+        elif "Text" in label:
+            editor._translation_text_index_spinbox = spin
+
     spinboxes_layout.addWidget(row_trans)
 
     # offsets and autoplay
@@ -430,6 +438,13 @@ def add_custom_controls_above_first_field(editor: Editor) -> None:
     for label, mn, mx, default in other_fields:
         widget, _ = make_labeled_spinbox(label, mn, mx, default)
         row_other_layout.addWidget(widget)
+
+        if "Start offset" in label:
+            editor._start_offset_spinbox = spin
+        elif "End offset" in label:
+            editor._end_offset_spinbox = spin
+        elif "Subtitle Offset" in label:
+            editor._subtitle_offset_spinbox = spin
 
     autoplay_checkbox = QCheckBox("Autoplay")
     autoplay_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)

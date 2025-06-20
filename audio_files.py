@@ -52,6 +52,9 @@ SUBS2SRS_PATTERN = re.compile(
 
 
 def detect_format(sound_line: str) -> str:
+    if not sound_line:
+        return None
+
     line = sound_line.strip()
     if BACKTICK_PATTERN.match(line):
         return "backtick"
@@ -211,24 +214,27 @@ def is_backtick_format(sound_line: str) -> bool:
 def is_subs2srs_format(sound_line: str) -> bool:
     return '_' in sound_line and '-' in sound_line and ']' in sound_line
 
-def get_valid_backtick_sound_line(sound_line, sentence_text) -> str:
+def get_valid_backtick_sound_line_and_block(sound_line, sentence_text) -> str:
     format = detect_format(sound_line)
     if format == "backtick":
-        return sound_line
+        return sound_line, None
     if format == "subs2srs":
         data = extract_sound_line_data(sound_line)
         subtitle_path = data["subtitle_path"]
-        block = get_block_from_subtitle_path_and_sentence_text(subtitle_path, sentence_text)
+        first_sentence = sentence_text.strip().split()[0]
+
+        # returns first matching sentence so subs2srs card can be reformatted
+        block = get_block_from_subtitle_path_and_sentence_text(subtitle_path, first_sentence)
         if block is None:
-            return ""
+            return None, None
         sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
     else:
         block, subtitle_path = get_block_and_subtitle_file_from_sentence_text(sentence_text)
         if block is None or subtitle_path is None:
-            return ""
+            return None, None
         sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
 
-    return sound_line
+    return sound_line, block
 
 
 def get_block_from_subtitle_path_and_sentence_text(subtitle_file: str, sentence_text: str):
@@ -243,8 +249,6 @@ def get_block_from_subtitle_path_and_sentence_text(subtitle_file: str, sentence_
         formatted_block = format_subtitle_block(block)
         if formatted_block and len(formatted_block) == 4:
             subtitle_text = formatted_block[3]
-            print(f"sentence_text: {sentence_text}")
-            print(f"subtitle_text: {subtitle_text}")
             if normalize_text(sentence_text) in normalize_text(subtitle_text):
                 return formatted_block
 
@@ -575,7 +579,6 @@ def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
 
     if os.path.exists(altered_data["old_path"]):
         send2trash(altered_data["old_path"])
-        print(f"Moved existing file {altered_data['old_path']} to recycle bin.")
 
     cmd = create_ffmpeg_extract_audio_command(
         altered_data["source_path"],
@@ -619,12 +622,13 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     if relative_index == 1:
         if lengthen_end_ms > 0:
             end_index += 1
-        else:
+
+        elif lengthen_start_ms < 0:
             end_index -= 1
     elif relative_index == -1:
         if lengthen_start_ms > 0:
             start_index -= 1
-        else:
+        elif lengthen_start_ms < 0:
             start_index += 1
     else:
         # just apply both deltas

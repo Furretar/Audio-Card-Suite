@@ -22,6 +22,9 @@ const_screenshot_index = 3
 const_sound_index = 2
 const_sentence_index = 0
 
+def strip_html_tags(text: str) -> str:
+    return re.sub(r"<[^>]+>", "", text)
+
 def get_sound_and_sentence_from_editor(editor: Editor) -> tuple[str, int, str, int]:
     sound_line = ""
     sound_idx = const_sound_index
@@ -31,9 +34,19 @@ def get_sound_and_sentence_from_editor(editor: Editor) -> tuple[str, int, str, i
             sound_line = field_text
             sound_idx = idx
 
-    sentence_text = editor.note.fields[const_sentence_index]
-    sentence_idx = const_sentence_index
+    selected_text = editor.web.selectedText().strip()
+    if selected_text:
+        sentence_text = selected_text
+        sentence_idx = const_sentence_index
+    else:
+        sentence_text = editor.note.fields[const_sentence_index]
+        sentence_idx = const_sentence_index
+
+    sound_line = strip_html_tags(sound_line)
+    sentence_text = strip_html_tags(sentence_text)
+
     return sound_line, sound_idx, sentence_text, sentence_idx
+
 
 def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index):
     data = audio_files.extract_sound_line_data(sound_line)
@@ -63,7 +76,6 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
         new_edge_text = new_blocks[0]
         start_index += 1
 
-    print(f"new edge text: {new_edge_text}")
     new_edge_block = audio_files.get_block_from_subtitle_path_and_sentence_text(subtitle_path, new_edge_text)
     if not new_edge_block or len(new_edge_block) < 3:
         print(f"Could not locate boundary block: {new_edge_block}")
@@ -91,7 +103,6 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
         lengthen_end if relative_index == 1 else 0,
         relative_index
     )
-    print(f"new_sound_tag: {new_sound_line}")
 
     if not new_sound_line:
         print("No new sound tag returned, field not updated.")
@@ -120,7 +131,6 @@ def remove_edge_lines_helper(editor, relative_index):
 def add_context_line_helper(editor: Editor, relative_index):
     sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
     new_sound_tag, new_sentence_text = add_context_line_data(sound_line, sentence_text, relative_index)
-    print(f"new_sound_tag: {new_sound_tag}, new_sentence_text: {new_sentence_text}")
 
     if new_sound_tag and new_sentence_text:
         editor.note.fields[sound_idx] = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
@@ -141,7 +151,11 @@ def add_context_line_data(sound_line, sentence_text, relative_index):
     else:
         edge_line = sentence_lines[0]
 
-    sound_line = audio_files.get_valid_backtick_sound_line(sound_line, edge_line)
+    sound_line, subs2srs_block = audio_files.get_valid_backtick_sound_line_and_block(sound_line, edge_line)
+    if subs2srs_block:
+        print(f"subs2srs_block: {subs2srs_block}")
+        sentence_text = subs2srs_block[3]
+
     print(f"sound line: {sound_line}")
 
     data = audio_files.extract_sound_line_data(sound_line)
@@ -184,6 +198,9 @@ def add_context_line_data(sound_line, sentence_text, relative_index):
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
+    print(f"editor sound line: {sound_line}")
+    print(f"editor sentence text: {sentence_text}")
+
 
     # check for modifier keys
     modifiers = QApplication.keyboardModifiers()
@@ -194,9 +211,11 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         start_delta *= 5
         end_delta *= 5
 
-    sound_line = audio_files.get_valid_backtick_sound_line(sound_line, sentence_text)
+    sound_line, block = audio_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_text)
+    print(f"get valid backtick sound line: {sound_line}")
+    print(f"get valid backtick sentence text: {sentence_text}")
 
-    new_sound_line = audio_files.alter_sound_file_times(sound_line, -start_delta, -end_delta, None)
+    new_sound_line = audio_files.alter_sound_file_times(sound_line, -start_delta, end_delta, None)
     print("new_sound_tag:", new_sound_line)
 
     if new_sound_line:
@@ -205,7 +224,6 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         editor.loadNote()
         print(f"now playing {new_sound_line}")
 
-        # 3 is temporary screenshot index
         audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_line)
         sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_line).group(1)
         QTimer.singleShot(0, lambda: play(sound_filename))

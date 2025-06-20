@@ -225,6 +225,8 @@ def is_subs2srs_format(sound_line: str) -> bool:
     return '_' in sound_line and '-' in sound_line and ']' in sound_line
 
 def get_valid_backtick_sound_line_and_block(sound_line, sentence_text) -> str:
+    print(f" get_valid_backtick_sound_line_and_block sentence_text: {sentence_text}")
+
     if not sound_line:
         block, subtitle_path = get_block_and_subtitle_file_from_sentence_text(sentence_text)
         print(f"block from text {sentence_text}: {block}")
@@ -233,14 +235,21 @@ def get_valid_backtick_sound_line_and_block(sound_line, sentence_text) -> str:
         sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
         return sound_line, block
 
+    data = extract_sound_line_data(sound_line)
+    subtitle_path = data["subtitle_path"]
+
     format = detect_format(sound_line)
     if format == "backtick":
-        return sound_line, None
-    if format == "subs2srs":
-        data = extract_sound_line_data(sound_line)
-        subtitle_path = data["subtitle_path"]
+        start_index = data["start_index"]
+        end_index = data["end_index"]
+        if start_index - end_index == 0:
+            single_block = get_block_from_subtitle_path_and_sentence_text(subtitle_path, sentence_text)
+            return sound_line, single_block
+        else:
+            return sound_line, None
+    elif format == "subs2srs":
         first_sentence = sentence_text.strip().split()[0]
-
+        print(f"first_sentence: {first_sentence}")
         # returns first matching sentence so subs2srs card can be reformatted
         block = get_block_from_subtitle_path_and_sentence_text(subtitle_path, first_sentence)
         if block is None:
@@ -311,6 +320,10 @@ def convert_timestamp_dot_to_hmsms(ts: str) -> str:
 
 
 def get_sound_line_from_block_and_path(block, subtitle_path) -> str:
+    if not subtitle_path:
+        print("Error: subtitle_path is None")
+        return ""
+
     filename_base, _ = os.path.splitext(os.path.basename(subtitle_path))
 
     try:
@@ -331,7 +344,6 @@ def check_for_video_source(filename_base) -> str:
     for name in alt_names:
         for ext in set(video_exts):
             path = os.path.join(addon_source_folder, name + ext)
-            print("now checking: ", path)
             if os.path.exists(path):
                 return path
     return ""
@@ -412,7 +424,6 @@ def add_image_if_empty_helper(editor: Editor, screenshot_index: int, data: dict,
 
 
 def add_image_if_empty_data(new_sound_tag: str):
-    print("extracting data from: " + new_sound_tag)
     data = extract_sound_line_data(new_sound_tag)
     if not data:
         print("Failed to extract data from sound tag.")
@@ -428,8 +439,6 @@ def add_image_if_empty_data(new_sound_tag: str):
     if not video_source_path:
         print(f"No video source found for {filename_base}")
         return None
-
-    print(f"temp video source: {video_source_path}")
 
     return {
         "start_time": start_time,

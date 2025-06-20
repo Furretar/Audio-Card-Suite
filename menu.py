@@ -127,14 +127,19 @@ def remove_edge_lines_helper(editor, relative_index):
 
     sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_line).group(1)
     QTimer.singleShot(0, lambda: play(sound_filename))
-    audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_line)
+
+    data = audio_files.add_image_if_empty_data(new_sound_line)
+    if data:
+        audio_files.add_image_if_empty_helper(editor, const_screenshot_index, data, new_sound_line)
 
     print(f"Removed {'last' if relative_index==1 else 'first'} block, new text:\n{new_sentence_text}")
 
 
 def add_context_line_helper(editor: Editor, relative_index):
     sound_line, sound_idx, sentence_text, sentence_idx = get_sound_and_sentence_from_editor(editor)
+    print(f"sound_line from editor: {sound_line}")
     new_sound_tag, new_sentence_text = add_context_line_data(sound_line, sentence_text, relative_index)
+
 
     if new_sound_tag and new_sentence_text:
         editor.note.fields[sound_idx] = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
@@ -144,7 +149,9 @@ def add_context_line_helper(editor: Editor, relative_index):
         sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_tag).group(1)
         QTimer.singleShot(0, lambda: play(sound_filename))
 
-        audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_tag)
+        data = audio_files.add_image_if_empty_data(new_sound_tag)
+        if data:
+            audio_files.add_image_if_empty_helper(editor, const_screenshot_index, data, new_sound_tag)
 
         print(f"new line {new_sentence_text}")
 
@@ -152,18 +159,17 @@ def add_context_line_data(sound_line, sentence_text, relative_index):
     sentence_lines = [line for line in sentence_text.splitlines() if line.strip()]
     if relative_index == 1:
         edge_line = sentence_lines[-1]
+        print(f"relative index is 1, {edge_line}")
     else:
         edge_line = sentence_lines[0]
+        print(f"relative index is -1, {edge_line}")
 
     sound_line, block = audio_files.get_valid_backtick_sound_line_and_block(sound_line, edge_line)
-    print(f"temp return block: {block}")
-    print(f"temp return sound_line: {sound_line}")
+    print(f"block {block}")
 
     if block:
-        print(f"subs2srs_block: {block}")
         sentence_text = block[3]
 
-    print(f"sound line: {sound_line}")
 
     data = audio_files.extract_sound_line_data(sound_line)
     if not data:
@@ -219,20 +225,20 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         end_delta *= 5
 
     fixed_sound_line, block = audio_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_text)
-    # if not sound_line:
-    #     sentence_text = block[3]
+    print(f"fixed sound line: {fixed_sound_line}")
+    print(f"block {block}")
 
-    print(f"get valid backtick sound line: {fixed_sound_line}")
-    print(f"get valid backtick sentence text: {sentence_text}")
+    sentence_blocks = [b.strip() for b in sentence_text.split("\n\n") if b.strip()]
+
+    if len(sentence_blocks) == 1:
+        sentence_text = block[3]
+        editor.note.fields[sentence_idx] = sentence_text
 
     new_sound_line = audio_files.alter_sound_file_times(fixed_sound_line, -start_delta, end_delta, None)
-    print("new_sound_tag:", new_sound_line)
 
     if new_sound_line:
-        print("extracted text: ", new_sound_line)
         editor.note.fields[sound_idx] = new_sound_line
         editor.loadNote()
-        print(f"now playing {new_sound_line}")
 
         data = audio_files.add_image_if_empty_data(new_sound_line)
         if data:

@@ -174,6 +174,9 @@ def extract_first_subtitle_file(video_path, srt_output_path):
         print(f"Failed to extract subtitles from {video_path}: {e}")
 
 def format_subtitle_block(subtitle_block):
+    if not subtitle_block:
+        print("No subtitle block")
+        return []
     lines = subtitle_block.strip().splitlines()
 
     if len(lines) < 3:
@@ -215,6 +218,14 @@ def is_subs2srs_format(sound_line: str) -> bool:
     return '_' in sound_line and '-' in sound_line and ']' in sound_line
 
 def get_valid_backtick_sound_line_and_block(sound_line, sentence_text) -> str:
+    if not sound_line:
+        block, subtitle_path = get_block_and_subtitle_file_from_sentence_text(sentence_text)
+        print(f"block from text {sentence_text}: {block}")
+        if not block or not subtitle_path:
+            return None, None
+        sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
+        return sound_line, block
+
     format = detect_format(sound_line)
     if format == "backtick":
         return sound_line, None

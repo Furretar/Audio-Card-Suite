@@ -45,6 +45,10 @@ def get_sound_and_sentence_from_editor(editor: Editor) -> tuple[str, int, str, i
     sound_line = strip_html_tags(sound_line)
     sentence_text = strip_html_tags(sentence_text)
 
+    if not sound_line:
+        block, subtitle_path = audio_files.get_block_and_subtitle_file_from_sentence_text(sentence_text)
+        sound_line = audio_files.get_sound_line_from_block_and_path(block, subtitle_path)
+
     return sound_line, sound_idx, sentence_text, sentence_idx
 
 
@@ -151,10 +155,13 @@ def add_context_line_data(sound_line, sentence_text, relative_index):
     else:
         edge_line = sentence_lines[0]
 
-    sound_line, subs2srs_block = audio_files.get_valid_backtick_sound_line_and_block(sound_line, edge_line)
-    if subs2srs_block:
-        print(f"subs2srs_block: {subs2srs_block}")
-        sentence_text = subs2srs_block[3]
+    sound_line, block = audio_files.get_valid_backtick_sound_line_and_block(sound_line, edge_line)
+    print(f"temp return block: {block}")
+    print(f"temp return sound_line: {sound_line}")
+
+    if block:
+        print(f"subs2srs_block: {block}")
+        sentence_text = block[3]
 
     print(f"sound line: {sound_line}")
 
@@ -211,11 +218,14 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         start_delta *= 5
         end_delta *= 5
 
-    sound_line, block = audio_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_text)
-    print(f"get valid backtick sound line: {sound_line}")
+    fixed_sound_line, block = audio_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_text)
+    # if not sound_line:
+    #     sentence_text = block[3]
+
+    print(f"get valid backtick sound line: {fixed_sound_line}")
     print(f"get valid backtick sentence text: {sentence_text}")
 
-    new_sound_line = audio_files.alter_sound_file_times(sound_line, -start_delta, end_delta, None)
+    new_sound_line = audio_files.alter_sound_file_times(fixed_sound_line, -start_delta, end_delta, None)
     print("new_sound_tag:", new_sound_line)
 
     if new_sound_line:

@@ -170,7 +170,6 @@ def add_context_line_data(sound_line, sentence_text, relative_index):
     if block:
         sentence_text = block[3]
 
-
     data = audio_files.extract_sound_line_data(sound_line)
     if not data:
         return "", ""
@@ -231,8 +230,12 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     sentence_blocks = [b.strip() for b in sentence_text.split("\n\n") if b.strip()]
 
     if len(sentence_blocks) == 1:
-        sentence_text = block[3]
-        editor.note.fields[sentence_idx] = sentence_text
+        if block and len(block) > 3:
+            sentence_text = block[3]
+            editor.note.fields[sentence_idx] = sentence_text
+        else:
+            print(f"adjust_sound_tag: invalid block: {block}")
+            return
 
     new_sound_line = audio_files.alter_sound_file_times(fixed_sound_line, -start_delta, end_delta, None)
 

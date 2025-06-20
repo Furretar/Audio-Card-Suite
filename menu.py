@@ -237,8 +237,6 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         end_delta *= 5
 
     fixed_sound_line, block = audio_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_text)
-    print(f"fixed sound line: {fixed_sound_line}")
-    print(f"block {block}")
 
     sentence_blocks = [b.strip() for b in sentence_text.split("\n\n") if b.strip()]
 

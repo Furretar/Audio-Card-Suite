@@ -286,8 +286,9 @@ def get_block_from_subtitle_path_and_sentence_text(subtitle_file: str, sentence_
 
 def get_block_and_subtitle_file_from_sentence_text(sentence_text: str):
     for filename in os.listdir(addon_source_folder):
+        print(f"checking filename: {filename}")
         filename_base, file_extension = os.path.splitext(filename)
-        if file_extension.lower() in video_exts:
+        if file_extension.lower() in video_exts or file_extension.lower() in audio_exts:
             video_path = os.path.join(addon_source_folder, filename)
             subtitle_path = os.path.join(addon_source_folder, filename_base + ".srt")
 
@@ -303,8 +304,12 @@ def get_block_and_subtitle_file_from_sentence_text(sentence_text: str):
 
             for block in blocks:
                 formatted_block = format_subtitle_block(block)
+                print("----- Subtitle Block -----")
+                print(block.strip())
+                print("Formatted:", formatted_block)
                 if formatted_block and len(formatted_block) == 4:
-                    subtitle_text  = formatted_block[3]
+                    subtitle_text = formatted_block[3]
+
                     if normalize_text(sentence_text) in normalize_text(subtitle_text):
                         return formatted_block, subtitle_path
 

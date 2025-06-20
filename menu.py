@@ -234,7 +234,11 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         editor.loadNote()
         print(f"now playing {new_sound_line}")
 
-        audio_files.add_image_if_empty(editor, const_screenshot_index, new_sound_line)
+        data = audio_files.add_image_if_empty_data(new_sound_line)
+        if data:
+            audio_files.add_image_if_empty_helper(editor, const_screenshot_index, data, new_sound_line)
+
+
         sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_line).group(1)
         QTimer.singleShot(0, lambda: play(sound_filename))
 

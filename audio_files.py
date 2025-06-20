@@ -114,11 +114,16 @@ def extract_sound_line_data(sound_line):
 
     start_time = convert(start_time_raw)
     end_time = convert(end_time_raw)
-
     audio_collection_path = os.path.join(collection_dir, timestamp_filename)
-    screenshot_filename = f"{filename_base}`{start_time}.jpg"
-    screenshot_collection_path = os.path.join(collection_dir, screenshot_filename)
+
     source_path = get_source_file(filename_base)
+
+    m4b_screenshot_filename = f"{filename_base}.jpg"
+    screenshot_filename = f"{filename_base}`{start_time}.jpg"
+
+    screenshot_collection_path = os.path.join(collection_dir, screenshot_filename)
+    m4b_screenshot_collection_path = os.path.join(collection_dir, m4b_screenshot_filename)
+
     subtitle_path = os.path.splitext(source_path)[0] + ".srt"
 
     return {
@@ -134,7 +139,9 @@ def extract_sound_line_data(sound_line):
         "timestamp_filename": timestamp_filename,
         "collection_path": audio_collection_path,
         "screenshot_filename": screenshot_filename,
+        "m4b_screenshot_filename": m4b_screenshot_filename,
         "screenshot_collection_path": screenshot_collection_path,
+        "m4b_screenshot_collection_path": m4b_screenshot_collection_path,
         "source_path": source_path,
         "subtitle_path": subtitle_path,
     }
@@ -369,52 +376,88 @@ def get_video_duration_seconds(path):
         print("Failed to get duration:", e)
         return 0
 
-def add_image_if_empty(editor: Editor, screenshot_index, new_sound_tag: str):
+def add_image_if_empty_helper(editor: Editor, screenshot_index: int, data: dict, sound_line):
     # check if any field already has an image
-    for idx, field_text in enumerate(editor.note.fields):
+    for field_text in editor.note.fields:
         if ".jpg" in field_text or ".png" in field_text:
             return ""
+    print("No image found, extracting from source.")
 
-    print(f"no image found, extracting from source")
-
-    print("extracting data from: " + new_sound_tag)
-    data = extract_sound_line_data(new_sound_tag)
-    start_time = data["start_time"]
+    data = extract_sound_line_data(sound_line)
     filename_base = data["filename_base"]
-    source_path = data["source_path"]
-    screenshot_collection_path = data["screenshot_collection_path"]
-    screenshot_filename = data["screenshot_filename"]
     video_source_path = check_for_video_source(filename_base)
-    if not video_source_path:
-        print(f"No video source found for {filename_base}")
-        return ""
+    _, ext = os.path.splitext(video_source_path)  # ext includes the dot, ".m4b"
+    video_extension = ext.lower()
 
-    screenshot_path = run_ffmpeg_extract_screenshot_command(video_source_path, start_time, screenshot_collection_path)
+    screenshot_path = run_ffmpeg_extract_screenshot_command(
+        video_source_path,
+        data["start_time"],
+        data["screenshot_collection_path"],
+        data["m4b_screenshot_collection_path"]
+    )
 
     if screenshot_path:
-        embed_screenshot = f'<img src="{screenshot_filename}">'
+        print(f"video extension: {video_extension}")
+        if video_extension == ".m4b":
+            print("EXTENSION IS M4B")
+            embed_screenshot = f'<img src="{data["m4b_screenshot_filename"]}">'
+        else:
+            embed_screenshot = f'<img src="{data["screenshot_filename"]}">'
+
         print(f"add screenshot: {embed_screenshot}")
         editor.note.fields[screenshot_index] = embed_screenshot
         editor.loadNote()
     else:
         showInfo("Could not add screenshot")
 
-def run_ffmpeg_extract_screenshot_command(source_path, screenshot_timestamp, screenshot_collection_path) -> str:
+
+def add_image_if_empty_data(new_sound_tag: str):
+    print("extracting data from: " + new_sound_tag)
+    data = extract_sound_line_data(new_sound_tag)
+    if not data:
+        print("Failed to extract data from sound tag.")
+        return None
+
+    start_time = data["start_time"]
+    filename_base = data["filename_base"]
+    screenshot_collection_path = data["screenshot_collection_path"]
+    m4b_screenshot_collection_path = data["m4b_screenshot_collection_path"]
+    screenshot_filename = data["screenshot_filename"]
+    video_source_path = check_for_video_source(filename_base)
+
+    if not video_source_path:
+        print(f"No video source found for {filename_base}")
+        return None
+
+    print(f"temp video source: {video_source_path}")
+
+    return {
+        "start_time": start_time,
+        "screenshot_collection_path": screenshot_collection_path,
+        "screenshot_filename": screenshot_filename,
+        "video_source_path": video_source_path,
+        "m4b_screenshot_collection_path": m4b_screenshot_collection_path
+    }
+
+
+def run_ffmpeg_extract_screenshot_command(source_path, screenshot_timestamp, screenshot_collection_path, m4b_screenshot_collection_path) -> str:
     if source_path.lower().endswith(".m4b"):
+        print("m4b detected")
+        output_path = m4b_screenshot_collection_path
         cmd = [
             "ffmpeg", "-y",
             "-i", source_path,
             "-an",
             "-vcodec", "copy",
             "-loglevel", "error",
-            screenshot_collection_path
+            output_path
         ]
         try:
             print(f"Extracting cover from m4b: {cmd}")
             subprocess.run(cmd, check=True)
-            if os.path.exists(screenshot_collection_path):
-                print(f"Extracted cover: {screenshot_collection_path}")
-                return screenshot_collection_path
+            if os.path.exists(output_path):
+                print(f"Extracted cover: {output_path}")
+                return output_path
             else:
                 print("Cover extraction failed: file not found")
                 return ""
@@ -422,9 +465,8 @@ def run_ffmpeg_extract_screenshot_command(source_path, screenshot_timestamp, scr
             print("FFmpeg cover extraction failed:", e)
             return ""
 
-
+    # For all other formats (e.g., mp4, mkv, webm, etc.)
     timestamp = convert_to_default_time_notation(screenshot_timestamp)
-
     cmd = [
         "ffmpeg", "-y",
         "-ss", timestamp,
@@ -435,13 +477,13 @@ def run_ffmpeg_extract_screenshot_command(source_path, screenshot_timestamp, scr
     ]
 
     try:
-        # print(f"running command: {cmd}")
         subprocess.run(cmd, check=True)
-        print(f"extracted screenshot: {screenshot_collection_path}")
+        print(f"Extracted screenshot: {screenshot_collection_path}")
         return screenshot_collection_path
     except subprocess.CalledProcessError as e:
         print("FFmpeg failed:", e)
         return ""
+
 
 def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, kbps, collection_path) -> str:
     start = convert_to_default_time_notation(start_time)

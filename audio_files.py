@@ -235,10 +235,17 @@ def get_valid_backtick_sound_line_and_block(sound_line, sentence_text) -> str:
         sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
         return sound_line, block
 
+    format = detect_format(sound_line)
+    if format != "backtick" and format!= "subs2srs":
+        block, subtitle_path = get_block_and_subtitle_file_from_sentence_text(sentence_text)
+        if block is None or subtitle_path is None:
+            return None, None
+        sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
+
     data = extract_sound_line_data(sound_line)
     subtitle_path = data["subtitle_path"]
 
-    format = detect_format(sound_line)
+
     if format == "backtick":
         start_index = data["start_index"]
         end_index = data["end_index"]
@@ -255,11 +262,7 @@ def get_valid_backtick_sound_line_and_block(sound_line, sentence_text) -> str:
         if block is None:
             return None, None
         sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
-    else:
-        block, subtitle_path = get_block_and_subtitle_file_from_sentence_text(sentence_text)
-        if block is None or subtitle_path is None:
-            return None, None
-        sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
+
 
     return sound_line, block
 

@@ -118,11 +118,11 @@ def extract_sound_line_data(sound_line):
 
     source_path = get_source_file(filename_base)
 
-    m4b_screenshot_filename = f"{filename_base}.jpg"
-    screenshot_filename = f"{filename_base}`{start_time}.jpg"
+    m4b_image_filename = f"{filename_base}.jpg"
+    image_filename = f"{filename_base}`{start_time}.jpg"
 
-    screenshot_collection_path = os.path.join(collection_dir, screenshot_filename)
-    m4b_screenshot_collection_path = os.path.join(collection_dir, m4b_screenshot_filename)
+    image_collection_path = os.path.join(collection_dir, image_filename)
+    m4b_image_collection_path = os.path.join(collection_dir, m4b_image_filename)
 
     subtitle_path = os.path.splitext(source_path)[0] + ".srt"
 
@@ -138,10 +138,10 @@ def extract_sound_line_data(sound_line):
         "full_source_filename": f"{filename_base}.{file_extension}",
         "timestamp_filename": timestamp_filename,
         "collection_path": audio_collection_path,
-        "screenshot_filename": screenshot_filename,
-        "m4b_screenshot_filename": m4b_screenshot_filename,
-        "screenshot_collection_path": screenshot_collection_path,
-        "m4b_screenshot_collection_path": m4b_screenshot_collection_path,
+        "image_filename": image_filename,
+        "m4b_image_filename": m4b_image_filename,
+        "image_collection_path": image_collection_path,
+        "m4b_image_collection_path": m4b_image_collection_path,
         "source_path": source_path,
         "subtitle_path": subtitle_path,
     }
@@ -224,23 +224,22 @@ def is_backtick_format(sound_line: str) -> bool:
 def is_subs2srs_format(sound_line: str) -> bool:
     return '_' in sound_line and '-' in sound_line and ']' in sound_line
 
-def get_valid_backtick_sound_line_and_block(sound_line, sentence_text) -> str:
-    print(f" get_valid_backtick_sound_line_and_block sentence_text: {sentence_text}")
+def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str) -> str:
 
     if not sound_line:
-        block, subtitle_path = get_block_and_subtitle_file_from_sentence_text(sentence_text)
+        block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text)
         print(f"\nblock from text {sentence_text}: {block}\n")
         if not block or not subtitle_path:
             return None, None
-        sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
+        sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
         return sound_line, block
 
     format = detect_format(sound_line)
     if format != "backtick" and format!= "subs2srs":
-        block, subtitle_path = get_block_and_subtitle_file_from_sentence_text(sentence_text)
+        block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text)
         if block is None or subtitle_path is None:
             return None, None
-        sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
+        sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
 
     data = extract_sound_line_data(sound_line)
     subtitle_path = data["subtitle_path"]
@@ -249,30 +248,37 @@ def get_valid_backtick_sound_line_and_block(sound_line, sentence_text) -> str:
     if format == "backtick":
         start_index = data["start_index"]
         end_index = data["end_index"]
-        if start_index - end_index == 0:
-            single_block = get_block_from_subtitle_path_and_sentence_text(subtitle_path, sentence_text)
-            return sound_line, single_block
-        else:
-            return sound_line, None
+        single_block = get_subtitle_block_from_sound_line_and_sentence_text(subtitle_path, sentence_text)
+        return sound_line, single_block
     elif format == "subs2srs":
         first_sentence = sentence_text.strip().split()[0]
         print(f"first_sentence: {first_sentence}")
         # returns first matching sentence so subs2srs card can be reformatted
-        block = get_block_from_subtitle_path_and_sentence_text(subtitle_path, first_sentence)
+        block = get_subtitle_block_from_sound_line_and_sentence_text(subtitle_path, first_sentence)
         if block is None:
             return None, None
-        sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
+        sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
 
 
     return sound_line, block
 
 
-def get_block_from_subtitle_path_and_sentence_text(subtitle_file: str, sentence_text: str):
-    if not os.path.exists(subtitle_file):
-        print(f"Subtitle file not found: {subtitle_file}")
+
+def get_subtitle_block_from_sound_line_and_sentence_text(sound_line: str, sentence_text: str):
+    data = extract_sound_line_data(sound_line)
+    if not data:
+        print(f"no data extracted from {sound_line}")
+        return None, None
+
+    start_index = data["start_index"]
+    end_index   = data["end_index"]
+    subtitle_path = data["subtitle_path"]
+
+    if not os.path.exists(subtitle_path):
+        print(f"Subtitle file not found: {subtitle_path}")
         return None
 
-    with open(subtitle_file, 'r', encoding='utf-8') as f:
+    with open(subtitle_path, 'r', encoding='utf-8') as f:
         blocks = f.read().strip().split('\n\n')
 
     for block in blocks:
@@ -284,7 +290,7 @@ def get_block_from_subtitle_path_and_sentence_text(subtitle_file: str, sentence_
 
     return None
 
-def get_block_and_subtitle_file_from_sentence_text(sentence_text: str):
+def get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text: str):
     for filename in os.listdir(addon_source_folder):
         print(f"checking filename: {filename}")
         filename_base, file_extension = os.path.splitext(filename)
@@ -324,7 +330,7 @@ def convert_timestamp_dot_to_hmsms(ts: str) -> str:
     return f"{hours}h{minutes}m{seconds}s{milliseconds}ms"
 
 
-def get_sound_line_from_block_and_path(block, subtitle_path) -> str:
+def get_sound_line_from_subtitle_block_and_path(block, subtitle_path) -> str:
     if not subtitle_path:
         print("Error: subtitle_path is None")
         return ""
@@ -393,71 +399,57 @@ def get_video_duration_seconds(path):
         print("Failed to get duration:", e)
         return 0
 
-def add_image_if_empty_helper(editor: Editor, screenshot_index: int, data: dict, sound_line):
+def get_image_if_empty_helper(image_line, sound_line):
     # check if any field already has an image
-    for field_text in editor.note.fields:
-        if ".jpg" in field_text or ".png" in field_text:
-            return ""
+    if image_line:
+        return image_line
+
     print("No image found, extracting from source.")
 
     data = extract_sound_line_data(sound_line)
-    filename_base = data["filename_base"]
+    if not data:
+        print("Failed to extract data from sound tag.")
+        return ""
+
+    filename_base = data.get("filename_base")
+    image_collection_path = data.get("image_collection_path")
+    m4b_image_collection_path = data.get("m4b_image_collection_path")
+    image_filename = data.get("image_filename")
+    start_time = data.get("start_time")
+
     video_source_path = check_for_video_source(filename_base)
-    _, ext = os.path.splitext(video_source_path)  # ext includes the dot, ".m4b"
+    if not video_source_path:
+        return ""
+
+    _, ext = os.path.splitext(video_source_path)
     video_extension = ext.lower()
 
-    screenshot_path = run_ffmpeg_extract_screenshot_command(
+    image_path = run_ffmpeg_extract_image_command(
         video_source_path,
-        data["start_time"],
-        data["screenshot_collection_path"],
-        data["m4b_screenshot_collection_path"]
+        start_time,
+        image_collection_path,
+        m4b_image_collection_path
     )
 
-    if screenshot_path:
+    if image_path:
         print(f"video extension: {video_extension}")
         if video_extension == ".m4b":
             print("EXTENSION IS M4B")
-            embed_screenshot = f'<img src="{data["m4b_screenshot_filename"]}">'
+            embed_image = f'<img src="{m4b_image_collection_path}">'
         else:
-            embed_screenshot = f'<img src="{data["screenshot_filename"]}">'
+            embed_image = f'<img src="{image_filename}">'
 
-        print(f"add screenshot: {embed_screenshot}")
-        editor.note.fields[screenshot_index] = embed_screenshot
-        editor.loadNote()
+        print(f"add image: {embed_image}")
+        return embed_image
     else:
-        showInfo("Could not add screenshot")
+        showInfo("Could not add image")
+        return ""
 
 
-def add_image_if_empty_data(new_sound_tag: str):
-    data = extract_sound_line_data(new_sound_tag)
-    if not data:
-        print("Failed to extract data from sound tag.")
-        return None
-
-    start_time = data["start_time"]
-    filename_base = data["filename_base"]
-    screenshot_collection_path = data["screenshot_collection_path"]
-    m4b_screenshot_collection_path = data["m4b_screenshot_collection_path"]
-    screenshot_filename = data["screenshot_filename"]
-    video_source_path = check_for_video_source(filename_base)
-
-    if not video_source_path:
-        print(f"No video source found for {filename_base}")
-        return None
-
-    return {
-        "start_time": start_time,
-        "screenshot_collection_path": screenshot_collection_path,
-        "screenshot_filename": screenshot_filename,
-        "video_source_path": video_source_path,
-        "m4b_screenshot_collection_path": m4b_screenshot_collection_path
-    }
-
-
-def run_ffmpeg_extract_screenshot_command(source_path, screenshot_timestamp, screenshot_collection_path, m4b_screenshot_collection_path) -> str:
+def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collection_path, m4b_image_collection_path) -> str:
     if source_path.lower().endswith(".m4b"):
         print("m4b detected")
-        output_path = m4b_screenshot_collection_path
+        output_path = m4b_image_collection_path
         cmd = [
             "ffmpeg", "-y",
             "-i", source_path,
@@ -480,20 +472,20 @@ def run_ffmpeg_extract_screenshot_command(source_path, screenshot_timestamp, scr
             return ""
 
     # For all other formats (e.g., mp4, mkv, webm, etc.)
-    timestamp = convert_to_default_time_notation(screenshot_timestamp)
+    timestamp = convert_to_default_time_notation(image_timestamp)
     cmd = [
         "ffmpeg", "-y",
         "-ss", timestamp,
         "-i", source_path,
         "-frames:v", "1",
         "-q:v", "15",
-        screenshot_collection_path
+        image_collection_path
     ]
 
     try:
         subprocess.run(cmd, check=True)
-        print(f"Extracted screenshot: {screenshot_collection_path}")
-        return screenshot_collection_path
+        print(f"Extracted image: {image_collection_path}")
+        return image_collection_path
     except subprocess.CalledProcessError as e:
         print("FFmpeg failed:", e)
         return ""
@@ -689,18 +681,14 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     if relative_index == 1:
         if lengthen_end_ms > 0:
             end_index += 1
-
-        elif lengthen_start_ms < 0:
+        elif lengthen_end_ms < 0:
             end_index -= 1
     elif relative_index == -1:
+
         if lengthen_start_ms > 0:
             start_index -= 1
         elif lengthen_start_ms < 0:
             start_index += 1
-    else:
-        # just apply both deltas
-        new_start_ms = max(0, orig_start_ms - lengthen_start_ms)
-        new_end_ms = orig_end_ms + lengthen_end_ms
 
     new_start_ms = max(0, orig_start_ms - lengthen_start_ms)
     new_end_ms = max(0, orig_end_ms + lengthen_end_ms)
@@ -708,8 +696,6 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     if new_end_ms <= new_start_ms:
         print(f"Invalid time range for {sound_line}: {new_start_ms}-{new_end_ms}")
         return {}
-
-
 
     new_start_time = milliseconds_to_anki_time_hmsms_format(new_start_ms)
     new_end_time = milliseconds_to_anki_time_hmsms_format(new_end_ms)

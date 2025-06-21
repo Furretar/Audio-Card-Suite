@@ -5,6 +5,10 @@ from aqt.sound import play
 from aqt.utils import showInfo
 import re
 from aqt.editor import Editor
+from aqt.sound import av_player
+
+
+
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
 )
@@ -180,6 +184,8 @@ def add_context_line_data(sound_line, sentence_text, relative_index):
     sound_line, block = audio_files.get_valid_backtick_sound_line_and_block(sound_line, edge_line)
     print(f"block {block}")
 
+    # replaces sentence field with just the block text if it detects-
+    # that there's only 1 block, i.e. currently unformatted
     if block:
         parts = block[3].split("\n\n")
         if len(parts) > 1:
@@ -269,8 +275,8 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     return
 
     showInfo("No [sound:] tag found in any field.")
-
 def on_note_loaded(editor: Editor):
+    av_player.stop_and_clear_queue()
     if getattr(editor, "_auto_play_enabled", False):
         sound_line, sound_idx, _, _, _ = get_sound_and_sentence_from_editor(editor)
         if sound_idx < len(editor.note.fields):

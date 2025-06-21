@@ -181,7 +181,9 @@ def add_context_line_data(sound_line, sentence_text, relative_index):
     print(f"block {block}")
 
     if block:
-        sentence_text = block[3]
+        parts = block[3].split("\n\n")
+        if len(parts) > 1:
+            sentence_text = block[3]
 
     data = audio_files.extract_sound_line_data(sound_line)
     if not data:

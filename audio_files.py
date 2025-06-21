@@ -229,7 +229,7 @@ def get_valid_backtick_sound_line_and_block(sound_line, sentence_text) -> str:
 
     if not sound_line:
         block, subtitle_path = get_block_and_subtitle_file_from_sentence_text(sentence_text)
-        print(f"block from text {sentence_text}: {block}")
+        print(f"\nblock from text {sentence_text}: {block}\n")
         if not block or not subtitle_path:
             return None, None
         sound_line = get_sound_line_from_block_and_path(block, subtitle_path)
@@ -304,9 +304,6 @@ def get_block_and_subtitle_file_from_sentence_text(sentence_text: str):
 
             for block in blocks:
                 formatted_block = format_subtitle_block(block)
-                print("----- Subtitle Block -----")
-                print(block.strip())
-                print("Formatted:", formatted_block)
                 if formatted_block and len(formatted_block) == 4:
                     subtitle_text = formatted_block[3]
 

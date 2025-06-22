@@ -369,6 +369,7 @@ def generate_fields_sound_sentence_image(sound_line, sound_idx, sentence_text, s
 
 
 def on_note_loaded(editor: Editor):
+    editor.web.eval("window.getSelection().removeAllRanges();")
     print(f"note loaded")
     av_player.stop_and_clear_queue()
     if getattr(editor, "_auto_play_enabled", False):

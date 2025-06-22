@@ -291,7 +291,7 @@ def generate_fields_button(editor):
     sound_filename = generate_fields_helper(editor)
     if sound_filename:
         print(f"Playing sound filename: {sound_filename}")
-        QTimer.singleShot(0, lambda: play(sound_filename))
+        QTimer.singleShot(100, lambda: play(sound_filename))
 
 
 def generate_fields_helper(editor):
@@ -299,21 +299,24 @@ def generate_fields_helper(editor):
 
     updated = False
 
-    if not image_line.strip():
-        generated_img = audio_files.get_image_if_empty_helper(image_line, sound_line)
-        if generated_img and isinstance(generated_img, str):
-            if editor.note.fields[image_idx] != generated_img:
-                editor.note.fields[image_idx] = generated_img
-                updated = True
-        else:
-            print("Image generation failed or result was not a string.")
-
-    new_result = generate_fields_sound_sentence_image(sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx)
+    new_result = generate_fields_sound_sentence_image(
+        sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx
+    )
+    
     if not new_result or not all(new_result):
         print("generate_fields_sound_sentence_image failed to return valid values.")
         return None
-
+    
     new_sound_line, new_sentence_text = new_result
+
+    generated_img = None
+    if not editor.note.fields[image_idx].strip():
+        generated_img = audio_files.get_image_if_empty_helper("", new_sound_line)
+        if generated_img and isinstance(generated_img, str):
+            editor.note.fields[image_idx] = generated_img
+            updated = True
+        else:
+            print("Image generation failed or result was not a string.")
 
     if new_sound_line and editor.note.fields[sound_idx] != new_sound_line:
         editor.note.fields[sound_idx] = new_sound_line

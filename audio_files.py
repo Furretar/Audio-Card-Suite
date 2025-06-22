@@ -26,16 +26,14 @@ video_exts = [
 ]
 
 BACKTICK_PATTERN = re.compile(
-    r"""\[sound:
-    (?P<filename_base>.+?)`                           # base filename
-    (?P<sha>[a-zA-Z0-9]{4})`                          # SHA
-    (?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-        # start time
-    (?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`          # end time
-    (?P<subtitle_range>\d+-\d+)                       # subtitle range
-    (?:`(?P<normalize_tag>[a-z]{2}))?                 # optional normalize tag
-    \.(?P<file_extension>\w+)                         # extension
-    \]$""",
-    re.VERBOSE
+    r'^\[sound:'
+    r'(?P<filename_base>[^`]+?)`'           # everything up to the first backtick
+    r'(?P<sha>[A-Za-z0-9]{4})`'             # exactly 4-char SHA
+    r'(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'  # e.g. 00h17m19s540ms-
+    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'     # e.g. 00h17m24s828ms`
+    r'(?P<subtitle_range>\d+-\d+)'          # e.g. 339-340
+    r'(?:`(?P<normalize_tag>[a-z]{2}))?'    # optional `xx
+    r'\.(?P<file_extension>\w+)\]$'         # .mp3]
 )
 
 
@@ -69,6 +67,7 @@ def extract_sound_line_data(sound_line):
     if format_type == "backtick":
         match = BACKTICK_PATTERN.match(sound_line)
         if not match:
+            print(f"no match for backtick")
             return None
         groups = match.groupdict()
         filename_base = groups["filename_base"].replace(" ", "_")
@@ -447,17 +446,24 @@ def get_image_if_empty_helper(image_line, sound_line):
 
 
 def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collection_path, m4b_image_collection_path) -> str:
+    out_dir = os.path.dirname(image_collection_path)
+    os.makedirs(out_dir, exist_ok=True)          # create it if needed
+    if not os.access(out_dir, os.W_OK):
+        raise RuntimeError(f"Cannot write to directory: {out_dir}")
+
+    
     if source_path.lower().endswith(".m4b"):
         print("m4b detected")
         output_path = m4b_image_collection_path
         cmd = [
             "ffmpeg", "-y",
             "-i", source_path,
-            "-an",
-            "-vcodec", "copy",
+            "-map", "0:v",
+            "-codec", "copy",
             "-loglevel", "error",
             output_path
         ]
+
         try:
             print(f"Extracting cover from m4b: {cmd}")
             subprocess.run(cmd, check=True)

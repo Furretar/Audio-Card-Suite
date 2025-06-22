@@ -359,10 +359,10 @@ def check_for_video_source(filename_base) -> str:
 
 def get_source_file(filename_base) -> str:
     mp3_path = os.path.join(addon_source_folder, filename_base + ".mp3")
-    if os.path.exists(mp3_path):
-        return mp3_path
-    elif os.path.exists(mp3_path.replace("_", " ")):
-        return mp3_path.replace("_", " ")
+    # if os.path.exists(mp3_path):
+    #     return mp3_path
+    # elif os.path.exists(mp3_path.replace("_", " ")):
+    #     return mp3_path.replace("_", " ")
 
     alt_names = [filename_base, filename_base.replace("_", " ")]
 
@@ -370,6 +370,11 @@ def get_source_file(filename_base) -> str:
     for name in alt_names:
         video_source_path = check_for_video_source(name)
         if video_source_path:
+
+            # temp
+            return video_source_path
+
+
             mp3_path = ffmpeg_extract_full_audio(video_source_path)
             return mp3_path
 
@@ -433,9 +438,10 @@ def get_image_if_empty_helper(image_line, sound_line):
         print(f"video extension: {video_extension}")
         if video_extension == ".m4b":
             print("EXTENSION IS M4B")
-            embed_image = f'<img src="{m4b_image_collection_path}">'
+            embed_image = f'<img src="{os.path.basename(m4b_image_collection_path)}">'
         else:
-            embed_image = f'<img src="{image_filename}">'
+            embed_image = f'<img src="{os.path.basename(image_filename)}">'
+
 
         print(f"add image: {embed_image}")
         return embed_image

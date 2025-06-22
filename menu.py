@@ -9,7 +9,6 @@ from aqt.sound import av_player
 import os
 
 
-
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
 )
@@ -292,7 +291,7 @@ def generate_fields_button(editor):
     sound_filename = generate_fields_helper(editor)
     if sound_filename:
         print(f"Playing sound filename: {sound_filename}")
-        QTimer.singleShot(1000, lambda: play(sound_filename))
+        QTimer.singleShot(0, lambda: play(sound_filename))
 
 
 def generate_fields_helper(editor):
@@ -367,6 +366,7 @@ def generate_fields_sound_sentence_image(sound_line, sound_idx, sentence_text, s
 
 
 def on_note_loaded(editor: Editor):
+    print(f"note loaded")
     av_player.stop_and_clear_queue()
     if getattr(editor, "_auto_play_enabled", False):
         sound_line, sound_idx, _, _, _, _ = get_sound_and_sentence_from_editor(editor)
@@ -560,4 +560,7 @@ def add_custom_controls(editor: Editor) -> None:
 
     print("Custom editor control buttons, spinboxes, and autoplay checkbox added.")
 
-gui_hooks.editor_did_load_note.append(on_note_loaded)
+gui_hooks.editor_did_init.append(add_custom_controls)
+
+def on_profile_loaded():
+    gui_hooks.editor_did_load_note.append(on_note_loaded)

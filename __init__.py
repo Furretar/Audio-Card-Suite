@@ -1,4 +1,4 @@
-from .menu import add_custom_controls
 from aqt import gui_hooks
+from . import menu
 
-gui_hooks.editor_did_init.append(add_custom_controls)
+gui_hooks.profile_did_open.append(menu.on_profile_loaded)

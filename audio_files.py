@@ -10,12 +10,11 @@ from aqt.editor import Editor
 import subprocess
 import re
 
-# temp for testing outside of anki
-if mw is not None and mw.col is not None and mw.col.media is not None:
-    collection_dir = mw.col.media.dir()
-else:
-    # fallback path when running outside Anki
-    collection_dir = r"C:\Users\wyatt\AppData\Roaming\Anki2\Furretar\collection.media"
+def get_collection_dir():
+    from aqt import mw
+    if not mw or not mw.col:
+        raise RuntimeError("Collection is not loaded yet.")
+    return mw.col.media.dir()
 
 audio_exts = [
     ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma", ".opus", ".m4b"
@@ -113,15 +112,15 @@ def extract_sound_line_data(sound_line):
 
     start_time = convert(start_time_raw)
     end_time = convert(end_time_raw)
-    audio_collection_path = os.path.join(collection_dir, timestamp_filename)
+    audio_collection_path = os.path.join(get_collection_dir(), timestamp_filename)
 
     source_path = get_source_file(filename_base)
 
     m4b_image_filename = f"{filename_base}.jpg"
     image_filename = f"{filename_base}`{start_time}.jpg"
 
-    image_collection_path = os.path.join(collection_dir, image_filename)
-    m4b_image_collection_path = os.path.join(collection_dir, m4b_image_filename)
+    image_collection_path = os.path.join(get_collection_dir(), image_filename)
+    m4b_image_collection_path = os.path.join(get_collection_dir(), m4b_image_filename)
 
     subtitle_path = os.path.splitext(source_path)[0] + ".srt"
 
@@ -247,13 +246,13 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str)
     if format == "backtick":
         start_index = data["start_index"]
         end_index = data["end_index"]
-        single_block = get_subtitle_block_from_sound_line_and_sentence_text(subtitle_path, sentence_text)
+        single_block = get_subtitle_block_from_sound_line_and_sentence_text(sound_line, sentence_text)
         return sound_line, single_block
     elif format == "subs2srs":
         first_sentence = sentence_text.strip().split()[0]
         print(f"first_sentence: {first_sentence}")
         # returns first matching sentence so subs2srs card can be reformatted
-        block = get_subtitle_block_from_sound_line_and_sentence_text(subtitle_path, first_sentence)
+        block = get_subtitle_block_from_sound_line_and_sentence_text(sound_line, first_sentence)
         if block is None:
             return None, None
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
@@ -717,7 +716,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
         filename_parts.append(normalize_tag)
 
     new_filename = "`".join(filename_parts) + f".{data['file_extension']}"
-    new_path = os.path.join(collection_dir, new_filename)
+    new_path = os.path.join(get_collection_dir(), new_filename)
 
     return {
         "new_start_time": new_start_time,

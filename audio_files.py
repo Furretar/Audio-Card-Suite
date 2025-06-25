@@ -1,5 +1,6 @@
 
 import os
+import shutil
 
 from aqt.utils import showInfo
 from send2trash import send2trash
@@ -34,8 +35,6 @@ BACKTICK_PATTERN = re.compile(
     r'(?:`(?P<normalize_tag>[a-z]{2}))?'    # optional `xx
     r'\.(?P<file_extension>\w+)\]$'         # .mp3]
 )
-
-
 
 SUBS2SRS_PATTERN = re.compile(
     r"""\[sound:
@@ -166,6 +165,11 @@ def get_subtitle_block_from_index_and_path(subtitle_index, subtitle_path):
     return []
 
 def extract_first_subtitle_file(video_path, srt_output_path):
+    if shutil.which("ffmpeg") is None:
+        print("FFmpeg is not installed or not in PATH.")
+        showInfo("FFmpeg is not installed or not in PATH.")
+        return
+    
     try:
         print(f"Extracting first subtitle for {video_path}")
         subprocess.run([
@@ -386,6 +390,7 @@ def get_source_file(filename_base) -> str:
                 return mp3_path
 
     print(f"No source file found for base name: {filename_base}")
+    showInfo(f"No source file found for base name: {filename_base}")
     return ""
 
 def get_video_duration_seconds(path):

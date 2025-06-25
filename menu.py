@@ -41,6 +41,229 @@ CHECKBOX_MIN_WIDTH = 150
 BUTTON_PADDING = "padding: 1px 4px;"
 SHIFT_BUTTON_BG_COLOR = "#f0d0d0"
 
+from aqt import mw
+from aqt.qt import *
+
+class AudioToolsDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.settings = {
+            "default_model": "Basic",
+            "default_deck": "Default",
+            "audio_ext": "mp3",
+            "bitrate": "192k",
+            "image_height": 1080,
+            "pad_start": 0,
+            "pad_end": 0,
+            "subs_target_language": "",
+            "subs_native_language": "",
+            "subs_target_language_code": "",
+            "subs_native_language_code": "",
+        }
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle('mpv2anki')
+
+        vbox = QVBoxLayout()
+
+        importGroup = QGroupBox("Import Options")
+        self.modelButton = QPushButton()
+        if mw.col.models.by_name(self.settings["default_model"]):
+            self.modelButton.setText(self.settings["default_model"])
+        else:
+            self.modelButton.setText(mw.col.models.current()['name'])
+        self.modelButton.setAutoDefault(False)
+        self.modelButton.clicked.connect(lambda: None)
+        self.modelFieldsButton = QPushButton()
+        self.modelFieldsButton.clicked.connect(lambda: None)
+        self.deckButton = QPushButton(self.settings["default_deck"])
+        self.deckButton.clicked.connect(lambda: None)
+
+        icon = QIcon.fromTheme("preferences-system")
+        self.modelFieldsButton.setIcon(icon)
+
+        grid = QGridLayout()
+        grid.addWidget(QLabel("Type:"), 0, 0)
+        grid.addWidget(self.modelButton, 0, 1)
+        grid.setColumnStretch(1, 1)
+        grid.addWidget(self.modelFieldsButton, 0, 2)
+        grid.addWidget(QLabel("Deck:"), 0, 3)
+        grid.addWidget(self.deckButton, 0, 4)
+        grid.setColumnStretch(4, 1)
+
+        importGroup.setLayout(grid)
+        vbox.addWidget(importGroup)
+
+        # Editable input groups: Screenshot, Pad Timings, Audio (new)
+        hbox = QHBoxLayout()
+
+        # Screenshot group (Height only)
+        screenshotGroup = QGroupBox("Screenshot")
+        screenshotLayout = QGridLayout()
+        screenshotLayout.addWidget(QLabel("Height:"), 0, 0)
+        self.imageHeightEdit = QLineEdit(str(self.settings["image_height"]))
+        self.imageHeightEdit.setFixedWidth(60)
+        screenshotLayout.addWidget(self.imageHeightEdit, 0, 1)
+        screenshotLayout.addWidget(QLabel("px"), 0, 2)
+        screenshotGroup.setLayout(screenshotLayout)
+        hbox.addWidget(screenshotGroup)
+
+        # Pad Timings group (Start and End)
+        padGroup = QGroupBox("Pad Timings")
+        padLayout = QGridLayout()
+        padLayout.addWidget(QLabel("Start:"), 0, 0)
+        padLayout.addWidget(QLabel("End:"), 1, 0)
+        self.padStartEdit = QLineEdit(str(self.settings["pad_start"]))
+        self.padEndEdit = QLineEdit(str(self.settings["pad_end"]))
+        self.padStartEdit.setFixedWidth(60)
+        self.padEndEdit.setFixedWidth(60)
+        padLayout.addWidget(self.padStartEdit, 0, 1)
+        padLayout.addWidget(self.padEndEdit, 1, 1)
+        padLayout.addWidget(QLabel("ms"), 0, 2)
+        padLayout.addWidget(QLabel(""), 1, 2)  # empty for alignment
+        padGroup.setLayout(padLayout)
+        hbox.addWidget(padGroup)
+
+        # Audio group (File ext and Bitrate)
+        audioGroup = QGroupBox("Audio")
+        audioLayout = QGridLayout()
+        audioLayout.addWidget(QLabel("File ext:"), 0, 0)
+        self.audioExtCombo = QComboBox()
+        self.audioExtCombo.addItems(["opus", "mp3", "flac"])
+        current_index = self.audioExtCombo.findText(self.settings["audio_ext"])
+        if current_index >= 0:
+            self.audioExtCombo.setCurrentIndex(current_index)
+        self.audioExtCombo.currentTextChanged.connect(self.on_audio_ext_changed)
+        audioLayout.addWidget(self.audioExtCombo, 0, 1)
+        audioLayout.addWidget(QLabel(""), 0, 2)
+
+        self.bitrateLabel = QLabel("Bitrate:")
+        audioLayout.addWidget(self.bitrateLabel, 1, 0)
+        self.bitrateEdit = QLineEdit(self.settings["bitrate"])
+        self.bitrateEdit.setFixedWidth(60)
+        audioLayout.addWidget(self.bitrateEdit, 1, 1)
+        audioLayout.addWidget(QLabel(""), 1, 2)
+        audioGroup.setLayout(audioLayout)
+        hbox.addWidget(audioGroup)
+
+        vbox.addLayout(hbox)
+
+        # Subtitles group with tabs
+        subsGroup = QGroupBox("Subtitles")
+        subsLayout = QVBoxLayout()
+
+        info_label = QLabel("The currently selected tab will have its settings used.")
+        subsLayout.addWidget(info_label)
+
+        tabs = QTabWidget()
+
+        # Language Codes Tab
+        langCodesTab = QWidget()
+        langGrid = QGridLayout()
+
+        lang_labels = [
+            "Target Audio Code",
+            "Target subtitle code",
+            "Translation Audio Code",
+            "Translation subtitle code",
+        ]
+
+        self.langCodeCombos = []
+        self.langCodeEdits = []
+
+        for i, label_text in enumerate(lang_labels):
+            langGrid.addWidget(QLabel(label_text + ":"), i, 0)
+            combo = QComboBox()
+            edit = QLineEdit("")
+            edit.setFixedWidth(24)
+            edit.setReadOnly(True)
+            edit.setStyleSheet("QLineEdit{background: #f4f3f4;}")
+            edit.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+
+            self.langCodeCombos.append(combo)
+            self.langCodeEdits.append(edit)
+
+            langGrid.addWidget(combo, i, 1)
+            langGrid.addWidget(edit, i, 2)
+
+        langCodesTab.setLayout(langGrid)
+        tabs.addTab(langCodesTab, "Language Codes")
+
+        # Tracks Tab
+        tracksTab = QWidget()
+        tracksGrid = QGridLayout()
+
+        track_labels = [
+            "Target Audio Track Number",
+            "Target Subtitle Track Number",
+            "Translation Audio Track Number",
+            "Translation Subtitle Track Number",
+        ]
+
+        self.trackSpinners = []
+
+        for i, label_text in enumerate(track_labels):
+            tracksGrid.addWidget(QLabel(label_text + ":"), i, 0)
+            spinner = QSpinBox()
+            spinner.setMinimum(0)
+            spinner.setMaximum(1000)
+            self.trackSpinners.append(spinner)
+            tracksGrid.addWidget(spinner, i, 1)
+
+        tracksTab.setLayout(tracksGrid)
+        tabs.addTab(tracksTab, "Tracks")
+
+        subsLayout.addWidget(tabs)
+        subsGroup.setLayout(subsLayout)
+        vbox.addWidget(subsGroup)
+
+        # Bottom buttons
+        hbox2 = QHBoxLayout()
+        hbox2.addStretch(1)
+        self.openURLButton = QPushButton("Open URL")
+        self.openURLButton.clicked.connect(lambda: None)
+        self.openFileButton = QPushButton("Open File")
+        self.openFileButton.setDefault(True)
+        self.openFileButton.clicked.connect(lambda: None)
+        hbox2.addWidget(self.openURLButton)
+        hbox2.addWidget(self.openFileButton)
+        vbox.addLayout(hbox2)
+
+        self.setLayout(vbox)
+        self.setWindowIcon(QIcon(":/icons/anki.png"))
+
+        self.on_audio_ext_changed(self.audioExtCombo.currentText())
+
+    def on_audio_ext_changed(self, text):
+        if text == "flac":
+            self.bitrateEdit.hide()
+            self.bitrateLabel.hide()
+        else:
+            self.bitrateEdit.show()
+            self.bitrateLabel.show()
+
+
+def open_audio_tools_dialog():
+    dlg = AudioToolsDialog()
+    dlg.exec()
+
+
+def add_audio_tools_menu():
+    menu_bar = mw.form.menubar
+    for action in menu_bar.actions():
+        if action.text() == "Audio Tools":
+            return
+    action = QAction("Audio Tools", mw)
+    action.triggered.connect(open_audio_tools_dialog)
+    menu_bar.addAction(action)
+
+add_audio_tools_menu()
+
+
+
+
+
 
 
 def set_auto_play_audio(editor: Editor, enabled: bool) -> None:

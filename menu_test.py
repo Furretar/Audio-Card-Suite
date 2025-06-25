@@ -8,7 +8,7 @@ from aqt.utils import showInfo
 import re
 
 try:
-    from . import audio_files
+    from . import manage_files
     from . import menu
 except ImportError:
     # Fallback for running as standalone script
@@ -17,7 +17,7 @@ except ImportError:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     if current_dir not in sys.path:
         sys.path.insert(0, current_dir)
-    import audio_files
+    import manage_files
     import menu
 
 
@@ -25,12 +25,12 @@ except ImportError:
 
 def detect_format_test():
     sound_line1 = "[sound:Sousou no Frieren - 01`ABCD`00h04m55s719ms-00h04m57s319ms`85-85.mp3]"
-    format = audio_files.detect_format(sound_line1)
+    format = manage_files.detect_format(sound_line1)
     # print(f"format: {format}")
     assert format == "backtick"
 
     sound_line2 = "[sound:Yuru_Camp_S2E07`ABCD`00h07m04s341ms-00h07m07s259ms`1-3`nm.mp3]"
-    format2 = audio_files.detect_format(sound_line2)
+    format2 = manage_files.detect_format(sound_line2)
     # print(f"format2: {format2}")
     assert format2 == "backtick"
 detect_format_test()
@@ -40,8 +40,8 @@ def extract_sound_line_data_test():
     sound_line1 = "[sound:Yuru_Camp_S2E07`ABCD`00h07m04s341ms-00h07m07s259ms`1-3`nm.mp3]"
     sound_line2 = "[sound:Yuru_Camp_S2E07_00.07.04.341-00.07.07.259.mp3]"
 
-    data = audio_files.extract_sound_line_data(sound_line1)
-    data2 = audio_files.extract_sound_line_data(sound_line2)
+    data = manage_files.extract_sound_line_data(sound_line1)
+    data2 = manage_files.extract_sound_line_data(sound_line2)
 
     timestamp_filename1 = data["timestamp_filename"]
     timestamp_filename2  = data2["timestamp_filename"]
@@ -59,10 +59,10 @@ def get_sound_line_from_block_and_path_test():
     correct_sound_line = "[sound:Sousou no Frieren - 01`ABCD`00h04m55s719ms-00h04m57s319ms`85-85.mp3]"
     sentence_text = "- 因為對國王陛下不敬\n- 我們…我們會再告誡他們的"
     block = [85, "00.04.55.719", "00.04.57.319", sentence_text]
-    _, subtitle_path = audio_files.get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text)
-    sound_line = audio_files.get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
+    _, subtitle_path = manage_files.get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text)
+    sound_line = manage_files.get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
 
-    altered_data = audio_files.get_altered_sound_data(sound_line, 0, 0, None)
+    altered_data = manage_files.get_altered_sound_data(sound_line, 0, 0, None)
     # print(altered_data)
 
     # print(f"{sound_line} == {correct_sound_line}")
@@ -71,8 +71,8 @@ def get_sound_line_from_block_and_path_test():
     correct_sound_line2 = "[sound:01 クビキリサイクル 青色サヴァンと戯言遣い`ABCD`10h50m14s026ms-10h50m17s546ms`13498-13498.mp3]"
     sentence_text2 = "服の裏地にスペクトラが縫いこんであるんです。"
     block2 = [13498, "10.50.14.026", "10.50.17.546", sentence_text]
-    _, subtitle_path2 = audio_files.get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text2)
-    sound_line2 = audio_files.get_sound_line_from_subtitle_block_and_path(block2, subtitle_path2)
+    _, subtitle_path2 = manage_files.get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text2)
+    sound_line2 = manage_files.get_sound_line_from_subtitle_block_and_path(block2, subtitle_path2)
     # print(f"{sound_line2} == {correct_sound_line2}")
     assert sound_line2 == correct_sound_line2
 get_sound_line_from_block_and_path_test()
@@ -81,15 +81,15 @@ def alter_sound_file_times_test():
     sound_line1 = "[sound:Sousou no Frieren - 01`ABCD`00h04m55s719ms-00h04m57s319ms`85-85.mp3]"
     start_delta = 0
     end_delta = 0
-    audio_files.alter_sound_file_times(sound_line1, start_delta, end_delta, None)
-    data1 = audio_files.extract_sound_line_data(sound_line1)
+    manage_files.alter_sound_file_times(sound_line1, start_delta, end_delta, None)
+    data1 = manage_files.extract_sound_line_data(sound_line1)
     collection_path1 = data1["collection_path"]
     assert True == os.path.exists(collection_path1)
 
     sound_line2 = "[sound:02_クビシメロマンチスト_人間失格・零崎人識`ABCD`08h44m13s868ms-08h44m16s734ms`10895-10895.mp3]"
     start_delta2 = 0
     end_delta2 = 101
-    data2 = audio_files.get_altered_sound_data(sound_line2, start_delta2, end_delta2, 1)
+    data2 = manage_files.get_altered_sound_data(sound_line2, start_delta2, end_delta2, 1)
     new_filename = data2["new_filename"],
     print(new_filename)
     # assert True == os.path.exists(collection_path2)
@@ -172,23 +172,23 @@ remove_edge_new_sentence_new_sound_file_test()
 def get_valid_backtick_sound_line_test():
     sound_line1 = "[sound:Sousou no Frieren - 01`ABCD`00h04m55s719ms-00h04m57s319ms`85-85.mp3]"
     sentence_text1 = "- 因為對國王陛下不敬\n- 我們…我們會再告誡他們的"
-    sound_line, block = audio_files.get_valid_backtick_sound_line_and_block(sound_line1, sentence_text1)
-    new_sound_line = audio_files.alter_sound_file_times(sound_line, 0, 0, None)
+    sound_line, block = manage_files.get_valid_backtick_sound_line_and_block(sound_line1, sentence_text1)
+    new_sound_line = manage_files.alter_sound_file_times(sound_line, 0, 0, None)
     # print(f"new_sound_line: {new_sound_line}")
     
     
     sound_line2 = "[sound:55_00.13.41.872-00.13.47.418.mp3]"
     sound_line_check2 = "[sound:55`ABCD`00h13m42s215ms-00h13m44s759ms`208-208.mp3]"
     sentence_text2 = "找到一息尚存的團長的時候 我本來想給他一個痛快"
-    new_sound_line2, block2 = audio_files.get_valid_backtick_sound_line_and_block(sound_line2, sentence_text2)
+    new_sound_line2, block2 = manage_files.get_valid_backtick_sound_line_and_block(sound_line2, sentence_text2)
     print(f"new_sound_line2: {new_sound_line2}")
     assert sound_line_check2 == new_sound_line2
     
     sound_line3 = "[sound:Sousou_no_Frieren_-_01`ABCD`00h04m55s719ms-00h04m58s921ms`85-86.mp3]"
     sentence_text3 = "- 因為對國王陛下不敬"
-    block, subtitle_path = audio_files.get_block_and_subtitle_file_from_sentence_text(sentence_text3)
+    block, subtitle_path = manage_files.get_block_and_subtitle_file_from_sentence_text(sentence_text3)
     print(f"block: {block}, subtitle_path: {subtitle_path}")
-    new_sound_line3, block3 = audio_files.get_valid_backtick_sound_line_and_block(sound_line3, sentence_text3)
+    new_sound_line3, block3 = manage_files.get_valid_backtick_sound_line_and_block(sound_line3, sentence_text3)
     print(f"new_sound_line3: {new_sound_line3}")
     print(f"block3: {block3}")
 get_valid_backtick_sound_line_test()

@@ -7,6 +7,9 @@ from send2trash import send2trash
 from aqt import mw
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 addon_source_folder = os.path.join(addon_dir, "Sources")
+temp_ffmpeg_folder = os.path.join(addon_dir, "ffmpeg")
+temp_ffmpeg_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffmpeg.exe")
+temp_ffprobe_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffprobe.exe")
 from aqt.editor import Editor
 import subprocess
 import re
@@ -164,16 +167,28 @@ def get_subtitle_block_from_index_and_path(subtitle_index, subtitle_path):
     print(f"Index {subtitle_index} out of range for subtitle file {subtitle_path}")
     return []
 
+def get_ffmpeg_exe_path():
+    exe_path = shutil.which("ffmpeg")
+    if exe_path:
+        return exe_path
+
+    if os.path.exists(temp_ffmpeg_exe):
+        print("Using bundled FFmpeg executable.")
+        return temp_ffmpeg_exe, temp_ffprobe_exe
+
+    print("FFmpeg executable not found in PATH or addon folder.")
+    showInfo("FFmpeg is not installed or could not be found.\n\n"
+             "Either install FFmpeg globally and add it to your system PATH,\n"
+             "or place ffmpeg.exe in the addon folder under: ffmpeg/bin/ffmpeg.exe")
+    return None
 def extract_first_subtitle_file(video_path, srt_output_path):
-    if shutil.which("ffmpeg") is None:
-        print("FFmpeg is not installed or not in PATH.")
-        showInfo("FFmpeg is not installed or not in PATH.")
-        return
+    exe_path = get_ffmpeg_exe_path()
+
     
     try:
         print(f"Extracting first subtitle for {video_path}")
         subprocess.run([
-            "ffmpeg",
+            f"{exe_path}",
             "-y",
             "-i", video_path,
             "-map", "0:s:0",
@@ -394,9 +409,10 @@ def get_source_file(filename_base) -> str:
     return ""
 
 def get_video_duration_seconds(path):
+    _, ffprobe_path = get_ffmpeg_exe_path()
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+            [f"{ffprobe_path}", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -457,6 +473,7 @@ def get_image_if_empty_helper(image_line, sound_line):
 
 def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collection_path, m4b_image_collection_path) -> str:
     out_dir = os.path.dirname(image_collection_path)
+    ffmpeg_path, _ = get_ffmpeg_exe_path()
     os.makedirs(out_dir, exist_ok=True)          # create it if needed
     if not os.access(out_dir, os.W_OK):
         raise RuntimeError(f"Cannot write to directory: {out_dir}")
@@ -466,7 +483,7 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
         print("m4b detected")
         output_path = m4b_image_collection_path
         cmd = [
-            "ffmpeg", "-y",
+            f"{ffmpeg_path}", "-y",
             "-i", source_path,
             "-map", "0:v",
             "-codec", "copy",
@@ -489,8 +506,9 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
 
     # For all other formats (e.g., mp4, mkv, webm, etc.)
     timestamp = convert_to_default_time_notation(image_timestamp)
+    ffmpeg_path, _ = get_ffmpeg_exe_path()
     cmd = [
-        "ffmpeg", "-y",
+        f"{ffmpeg_path}", "-y",
         "-ss", timestamp,
         "-i", source_path,
         "-frames:v", "1",
@@ -508,6 +526,8 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
 
 
 def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, kbps, collection_path) -> str:
+    ffmpeg_path, _ = get_ffmpeg_exe_path()
+    
     start = convert_to_default_time_notation(start_time)
     end = convert_to_default_time_notation(end_time)
     duration_sec = time_to_seconds(end) - time_to_seconds(start)
@@ -521,7 +541,7 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, kbps,
 
 
     cmd = [
-        "ffmpeg", "-y",
+        f"{ffmpeg_path}", "-y",
         "-ss", start,
         "-i", source_path,
         "-map", "0:a:0",
@@ -582,13 +602,15 @@ def milliseconds_to_anki_time_hmsms_format(ms: int) -> str:
     return f"{hours:02d}h{minutes:02d}m{seconds:02d}s{millis:03d}ms"
 
 def ffmpeg_extract_full_audio(source_file_path) -> str:
+    ffmpeg_path, _ = get_ffmpeg_exe_path()
+
     base, _ = os.path.splitext(source_file_path)
     output_path = base + ".mp3"
 
     delay_ms = get_audio_start_time_ms(source_file_path)
 
     cmd = [
-        "ffmpeg", "-y",
+        f"{ffmpeg_path}", "-y",
         "-i", source_file_path,
         "-map", "0:a:0" # first track
     ]
@@ -615,10 +637,11 @@ def ffmpeg_extract_full_audio(source_file_path) -> str:
         return ""
 
 def get_audio_start_time_ms(source_file_path: str) -> int:
+    _, ffprobe_path = get_ffmpeg_exe_path()
     try:
         result = subprocess.run(
             [
-                "ffprobe",
+                f"{ffprobe_path}",
                 "-v", "error",
                 "-select_streams", "a:0",
                 "-show_packets",
@@ -662,8 +685,8 @@ def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
         "192",
         altered_data["new_path"]
     )
-    # print("running command:", cmd)
     try:
+        print("Running subprocess command:", cmd)
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         # print("Audio extraction succeeded.")
     except subprocess.CalledProcessError:

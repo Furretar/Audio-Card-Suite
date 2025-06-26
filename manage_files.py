@@ -169,8 +169,9 @@ def get_subtitle_block_from_index_and_path(subtitle_index, subtitle_path):
 
 def get_ffmpeg_exe_path():
     exe_path = shutil.which("ffmpeg")
+    probe_path = shutil.which("ffprobe")
     if exe_path:
-        return exe_path
+        return exe_path, probe_path
 
     if os.path.exists(temp_ffmpeg_exe):
         print("Using bundled FFmpeg executable.")
@@ -180,7 +181,8 @@ def get_ffmpeg_exe_path():
     showInfo("FFmpeg is not installed or could not be found.\n\n"
              "Either install FFmpeg globally and add it to your system PATH,\n"
              "or place ffmpeg.exe in the addon folder under: ffmpeg/bin/ffmpeg.exe")
-    return None
+    return None, None
+
 def extract_first_subtitle_file(video_path, srt_output_path):
     exe_path = get_ffmpeg_exe_path()
 

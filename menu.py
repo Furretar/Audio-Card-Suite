@@ -9,6 +9,7 @@ from aqt.sound import av_player
 import os
 
 
+
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
 )
@@ -82,8 +83,7 @@ class AudioToolsDialog(QDialog):
         self.deckButton = QPushButton(self.settings["default_deck"])
         self.deckButton.clicked.connect(lambda: None)
 
-        icon_path = os.path.join(addon_dir, "icons", "gear.png")
-        self.modelFieldsButton.setIcon(QIcon(icon_path))
+        self.modelFieldsButton.setText("⚙️")
         self.modelFieldsButton.setFixedWidth(32)
 
         grid = QGridLayout()
@@ -221,7 +221,57 @@ class AudioToolsDialog(QDialog):
 
         subsLayout.addWidget(tabs)
         subsGroup.setLayout(subsLayout)
+
+        # Add subtitles group first (full width)
         vbox.addWidget(subsGroup)
+
+        # Set default source directory path
+        addon_source_folder = os.path.join(addon_dir, "Sources")
+
+        # Source group with horizontal row for sourceDirEdit + browseBtn
+        sourceGroup = QGroupBox("Source")
+        sourceLayout = QVBoxLayout()
+        sourceGroup.setLayout(sourceLayout)
+
+        sourceDirLayout = QHBoxLayout()
+        self.sourceDirEdit = QLineEdit()
+        self.sourceDirEdit.setPlaceholderText("Select source directory")
+        self.sourceDirEdit.setText(addon_source_folder)
+
+        policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.sourceDirEdit.setSizePolicy(policy)
+
+        browseBtn = QPushButton("Browse")
+        sourceDirLayout.addWidget(self.sourceDirEdit)
+        sourceDirLayout.addWidget(browseBtn)
+        sourceLayout.addLayout(sourceDirLayout)
+
+        # Convert button with confirmation dialog
+        convertBtn = QPushButton("Convert Source Videos to Audio")
+
+        def confirm_conversion():
+            msg_box = QMessageBox(mw)
+            msg_box.setWindowTitle("Confirm Conversion")
+            msg_box.setText(
+                "This will convert all video files in the source folder to the selected audio format to save space.\n\n"
+                "The original video files will be deleted after conversion.\n\n"
+                "After conversion, you will no longer be able to generate screenshots or switch audio tracks for existing cards.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg_box.setIcon(QMessageBox.Icon.Question)
+
+            if msg_box.exec() == QMessageBox.StandardButton.Yes:
+                print("User confirmed conversion.")
+                # insert actual conversion function here
+            else:
+                print("User cancelled conversion.")
+
+        convertBtn.clicked.connect(confirm_conversion)
+        sourceLayout.addWidget(convertBtn)
+
+
+
+        # Add source group below subtitles group
+        vbox.addWidget(sourceGroup)
 
         # Bottom buttons
         hbox2 = QHBoxLayout()

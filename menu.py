@@ -23,6 +23,8 @@ except ImportError:
     import manage_files
     import button_actions
 
+addon_dir = os.path.dirname(os.path.abspath(__file__))
+
 ms_amount = 50
 
 CONTAINER_MARGINS = (2, 2, 2, 2)
@@ -51,7 +53,7 @@ class AudioToolsDialog(QDialog):
             "default_model": "Basic",
             "default_deck": "Default",
             "audio_ext": "mp3",
-            "bitrate": "192k",
+            "bitrate": "192",
             "image_height": 1080,
             "pad_start": 0,
             "pad_end": 0,
@@ -80,8 +82,9 @@ class AudioToolsDialog(QDialog):
         self.deckButton = QPushButton(self.settings["default_deck"])
         self.deckButton.clicked.connect(lambda: None)
 
-        icon = QIcon.fromTheme("preferences-system")
-        self.modelFieldsButton.setIcon(icon)
+        icon_path = os.path.join(addon_dir, "icons", "gear.png")
+        self.modelFieldsButton.setIcon(QIcon(icon_path))
+        self.modelFieldsButton.setFixedWidth(32)
 
         grid = QGridLayout()
         grid.addWidget(QLabel("Type:"), 0, 0)
@@ -95,19 +98,18 @@ class AudioToolsDialog(QDialog):
         importGroup.setLayout(grid)
         vbox.addWidget(importGroup)
 
-        # Editable input groups: Screenshot, Pad Timings, Audio (new)
+        # Editable input groups: Image, Pad Timings, Audio (new)
         hbox = QHBoxLayout()
 
-        # Screenshot group (Height only)
-        screenshotGroup = QGroupBox("Screenshot")
-        screenshotLayout = QGridLayout()
-        screenshotLayout.addWidget(QLabel("Height:"), 0, 0)
+        # Image group (Height only)
+        imageGroup = QGroupBox("Image")
+        imageLayout = QGridLayout()
+        imageLayout.addWidget(QLabel("Height:"), 0, 0)
         self.imageHeightEdit = QLineEdit(str(self.settings["image_height"]))
-        self.imageHeightEdit.setFixedWidth(60)
-        screenshotLayout.addWidget(self.imageHeightEdit, 0, 1)
-        screenshotLayout.addWidget(QLabel("px"), 0, 2)
-        screenshotGroup.setLayout(screenshotLayout)
-        hbox.addWidget(screenshotGroup)
+        imageLayout.addWidget(self.imageHeightEdit, 0, 1)
+        imageLayout.addWidget(QLabel("px"), 0, 2)
+        imageGroup.setLayout(imageLayout)
+        hbox.addWidget(imageGroup)
 
         # Pad Timings group (Start and End)
         padGroup = QGroupBox("Pad Timings")
@@ -116,11 +118,10 @@ class AudioToolsDialog(QDialog):
         padLayout.addWidget(QLabel("End:"), 1, 0)
         self.padStartEdit = QLineEdit(str(self.settings["pad_start"]))
         self.padEndEdit = QLineEdit(str(self.settings["pad_end"]))
-        self.padStartEdit.setFixedWidth(60)
-        self.padEndEdit.setFixedWidth(60)
         padLayout.addWidget(self.padStartEdit, 0, 1)
-        padLayout.addWidget(self.padEndEdit, 1, 1)
         padLayout.addWidget(QLabel("ms"), 0, 2)
+        padLayout.addWidget(self.padEndEdit, 1, 1)
+        padLayout.addWidget(QLabel("ms"), 1, 2)
         padLayout.addWidget(QLabel(""), 1, 2)  # empty for alignment
         padGroup.setLayout(padLayout)
         hbox.addWidget(padGroup)
@@ -128,7 +129,7 @@ class AudioToolsDialog(QDialog):
         # Audio group (File ext and Bitrate)
         audioGroup = QGroupBox("Audio")
         audioLayout = QGridLayout()
-        audioLayout.addWidget(QLabel("File ext:"), 0, 0)
+        audioLayout.addWidget(QLabel("File Type:"), 0, 0)
         self.audioExtCombo = QComboBox()
         self.audioExtCombo.addItems(["opus", "mp3", "flac"])
         current_index = self.audioExtCombo.findText(self.settings["audio_ext"])
@@ -136,14 +137,18 @@ class AudioToolsDialog(QDialog):
             self.audioExtCombo.setCurrentIndex(current_index)
         self.audioExtCombo.currentTextChanged.connect(self.on_audio_ext_changed)
         audioLayout.addWidget(self.audioExtCombo, 0, 1)
-        audioLayout.addWidget(QLabel(""), 0, 2)
+        normalize_checkbox = QCheckBox("Normalize Audio")
+        normalize_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
 
+
+
+        audioLayout.addWidget(normalize_checkbox, 2, 0, 1, 2)
         self.bitrateLabel = QLabel("Bitrate:")
         audioLayout.addWidget(self.bitrateLabel, 1, 0)
         self.bitrateEdit = QLineEdit(self.settings["bitrate"])
-        self.bitrateEdit.setFixedWidth(60)
+        self.kbps_label = QLabel("kbps")
+        audioLayout.addWidget(self.kbps_label, 1, 2)
         audioLayout.addWidget(self.bitrateEdit, 1, 1)
-        audioLayout.addWidget(QLabel(""), 1, 2)
         audioGroup.setLayout(audioLayout)
         hbox.addWidget(audioGroup)
 
@@ -221,12 +226,9 @@ class AudioToolsDialog(QDialog):
         # Bottom buttons
         hbox2 = QHBoxLayout()
         hbox2.addStretch(1)
-        self.openURLButton = QPushButton("Open URL")
-        self.openURLButton.clicked.connect(lambda: None)
         self.openFileButton = QPushButton("Open File")
         self.openFileButton.setDefault(True)
         self.openFileButton.clicked.connect(lambda: None)
-        hbox2.addWidget(self.openURLButton)
         hbox2.addWidget(self.openFileButton)
         vbox.addLayout(hbox2)
 
@@ -239,9 +241,11 @@ class AudioToolsDialog(QDialog):
         if text == "flac":
             self.bitrateEdit.hide()
             self.bitrateLabel.hide()
+            self.kbps_label.hide()
         else:
             self.bitrateEdit.show()
             self.bitrateLabel.show()
+            self.kbps_label.show()
 
 
 def open_audio_tools_dialog():
@@ -434,6 +438,9 @@ def add_custom_controls(editor: Editor) -> None:
     autoplay_checkbox = QCheckBox("Autoplay")
     autoplay_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
 
+    show_track_menu_checkbox = QCheckBox("Show Track Menu")
+    show_track_menu_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
+
     autoplay_checkbox.blockSignals(True)
     autoplay_checkbox.setChecked(getattr(editor, "_auto_play_enabled", False))
     autoplay_checkbox.blockSignals(False)
@@ -441,6 +448,7 @@ def add_custom_controls(editor: Editor) -> None:
     autoplay_checkbox.clicked.connect(lambda _: handle_autoplay_checkbox_toggle(_, editor))
 
     row_other_layout.addWidget(autoplay_checkbox)
+    row_other_layout.addWidget(show_track_menu_checkbox)
     spinboxes_layout.addWidget(row_other)
 
     main_layout.addWidget(spinboxes_container)

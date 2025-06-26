@@ -17,6 +17,9 @@ edit already made cards
 - [ ] figure out a system to use language codes to always get the right audio track (box with order of priority?)
 - [ ] equalize all audio in current deck, auto equalize when adding
 
+remove text inside ()?
+
+
 Spin boxes:
 Target Audio Field | Target Sentence Field | Translation Audio Field | Translation Text Field |
 Start offset | End offset | Subtitle Offset | (Translation variants)

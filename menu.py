@@ -350,17 +350,18 @@ def handle_autoplay_checkbox_toggle(_, editor):
     editor._auto_play_enabled = new_state
     print(f"Autoplay {'enabled' if new_state else 'disabled'} for editor {id(editor)}")
 
-def add_custom_controls(editor: Editor) -> None:
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
+    QPushButton, QCheckBox
+)
 
+def add_custom_controls(editor: Editor) -> None:
     if not hasattr(editor, "widget") or editor.widget is None:
         return
 
     main_layout = editor.widget.layout()
-    if main_layout is None:
-        return
-
-    # prevent duplicate buttons
-    if hasattr(editor, "_custom_controls_container_buttons"):
+    if main_layout is None or hasattr(editor, "_custom_controls_container_buttons"):
         return
 
     ms_amount = 50
@@ -390,13 +391,12 @@ def add_custom_controls(editor: Editor) -> None:
         layout.addWidget(spin)
         return w, spin
 
-    # top buttons container
+    # === BUTTONS ===
     buttons_container = QWidget()
     buttons_layout = QVBoxLayout(buttons_container)
     buttons_layout.setContentsMargins(*CONTAINER_MARGINS)
     buttons_layout.setSpacing(CONTAINER_SPACING)
 
-    # timing buttons
     timing_btn_row = QWidget()
     timing_btn_layout = QHBoxLayout(timing_btn_row)
     timing_btn_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
@@ -407,7 +407,6 @@ def add_custom_controls(editor: Editor) -> None:
     timing_btn_layout.addWidget(make_button("End +50ms", lambda: button_actions.adjust_sound_tag(editor, 0, ms_amount)))
     buttons_layout.addWidget(timing_btn_row)
 
-    # add and remove line buttons
     add_remove_row = QWidget()
     add_remove_layout = QHBoxLayout(add_remove_row)
     add_remove_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
@@ -418,7 +417,6 @@ def add_custom_controls(editor: Editor) -> None:
     add_remove_layout.addWidget(make_button("Add Next Line", lambda: button_actions.add_context_line_helper(editor, 1)))
     buttons_layout.addWidget(add_remove_row)
 
-    # generate button
     generate_btn_row = QWidget()
     generate_btn_layout = QHBoxLayout(generate_btn_row)
     generate_btn_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
@@ -426,103 +424,88 @@ def add_custom_controls(editor: Editor) -> None:
     generate_btn_layout.addWidget(make_button("Generate Fields", lambda: button_actions.generate_fields_button(editor)))
     buttons_layout.addWidget(generate_btn_row)
 
-
-
-
     main_layout.insertWidget(0, buttons_container)
     editor._custom_controls_container_buttons = buttons_container
 
-    # spinboxes container
-
-    target_fields = [
-        # ("Target Audio Track", 1, 99, 1),
-        # ("Target Sentence Track", 1, 99, 1),
-    ]
-    translation_fields = [
-        # ("Translation Audio Track", 1, 99, 1),
-        # ("Translation Text Track", 1, 99, 1),
-    ]
-    other_fields = [
-        # ("Start offset", -999999, 999999, 0),
-        # ("End offset", -999999, 999999, 0),
-        # ("Subtitle Offset", -999999, 999999, 0),
-    ]
-
+    # === SPINBOXES + CHECKBOXES ===
     spinboxes_container = QWidget()
     spinboxes_layout = QVBoxLayout(spinboxes_container)
     spinboxes_layout.setContentsMargins(*CONTAINER_MARGINS)
     spinboxes_layout.setSpacing(CONTAINER_SPACING)
 
-    # target fields row
-    row_target = QWidget()
-    row_target_layout = QHBoxLayout(row_target)
-    row_target_layout.setContentsMargins(*ROW_MARGINS)
-    row_target_layout.setSpacing(ROW_SPACING)
-
-    for label, mn, mx, default in target_fields:
-        widget, spin = make_labeled_spinbox(label, mn, mx, default)
-        row_target_layout.addWidget(widget)
-
+    # Row 1: Target track spinboxes
+    track_row_1 = QWidget()
+    track_row_1_layout = QHBoxLayout(track_row_1)
+    track_row_1_layout.setContentsMargins(*ROW_MARGINS)
+    track_row_1_layout.setSpacing(ROW_SPACING)
+    for label in ["Target Audio Track Number", "Target Subtitle Track Number"]:
+        widget, spin = make_labeled_spinbox(label, 0, 1000, 0)
+        track_row_1_layout.addWidget(widget)
         if "Audio" in label:
-            editor._audio_field_index_spinbox = spin
-        elif "Sentence" in label:
-            editor._sentence_field_index_spinbox = spin
+            editor._target_audio_track_spinbox = spin
+        elif "Subtitle" in label:
+            editor._target_subtitle_track_spinbox = spin
 
-    spinboxes_layout.addWidget(row_target)
-
-    # translation fields row
-    row_trans = QWidget()
-    row_trans_layout = QHBoxLayout(row_trans)
-    row_trans_layout.setContentsMargins(*ROW_MARGINS)
-    row_trans_layout.setSpacing(ROW_SPACING)
-
-    for label, mn, mx, default in translation_fields:
-        widget, spin = make_labeled_spinbox(label, mn, mx, default)
-        row_trans_layout.addWidget(widget)
-
+    # Row 2: Translation track spinboxes
+    track_row_2 = QWidget()
+    track_row_2_layout = QHBoxLayout(track_row_2)
+    track_row_2_layout.setContentsMargins(*ROW_MARGINS)
+    track_row_2_layout.setSpacing(ROW_SPACING)
+    for label in ["Translation Audio Track Number", "Translation Subtitle Track Number"]:
+        widget, spin = make_labeled_spinbox(label, 0, 1000, 0)
+        track_row_2_layout.addWidget(widget)
         if "Audio" in label:
-            editor._translation_audio_index_spinbox = spin
-        elif "Text" in label:
-            editor._translation_text_index_spinbox = spin
+            editor._translation_audio_track_spinbox = spin
+        elif "Subtitle" in label:
+            editor._translation_subtitle_track_spinbox = spin
 
-    spinboxes_layout.addWidget(row_trans)
-
-    # offsets and autoplay
-    row_other = QWidget()
-    row_other_layout = QHBoxLayout(row_other)
-    row_other_layout.setContentsMargins(*ROW_MARGINS)
-    row_other_layout.setSpacing(ROW_SPACING)
-    for label, mn, mx, default in other_fields:
-        widget, _ = make_labeled_spinbox(label, mn, mx, default)
-        row_other_layout.addWidget(widget)
-
-        if "Start offset" in label:
+    # Row 3: Offset spinboxes
+    offset_spinboxes_row = QWidget()
+    offset_spinboxes_layout = QHBoxLayout(offset_spinboxes_row)
+    offset_spinboxes_layout.setContentsMargins(*ROW_MARGINS)
+    offset_spinboxes_layout.setSpacing(ROW_SPACING)
+    for label in ["Start offset", "End offset", "Subtitle Offset"]:
+        widget, spin = make_labeled_spinbox(label, -999999, 999999, 0)
+        offset_spinboxes_layout.addWidget(widget)
+        if "Start" in label:
             editor._start_offset_spinbox = spin
-        elif "End offset" in label:
+        elif "End" in label:
             editor._end_offset_spinbox = spin
-        elif "Subtitle Offset" in label:
+        elif "Subtitle" in label:
             editor._subtitle_offset_spinbox = spin
+
+    # Row 4: Checkboxes row (autoplay + show track menu)
+    checkboxes_row = QWidget()
+    checkboxes_layout = QHBoxLayout(checkboxes_row)
+    checkboxes_layout.setContentsMargins(*ROW_MARGINS)
+    checkboxes_layout.setSpacing(ROW_SPACING)
 
     autoplay_checkbox = QCheckBox("Autoplay")
     autoplay_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
+    autoplay_checkbox.setChecked(getattr(editor, "_auto_play_enabled", False))
+    autoplay_checkbox.clicked.connect(lambda _: handle_autoplay_checkbox_toggle(_, editor))
+    checkboxes_layout.addWidget(autoplay_checkbox)
 
     show_track_menu_checkbox = QCheckBox("Show Track Menu")
     show_track_menu_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
+    checkboxes_layout.addWidget(show_track_menu_checkbox)
 
-    autoplay_checkbox.blockSignals(True)
-    autoplay_checkbox.setChecked(getattr(editor, "_auto_play_enabled", False))
-    autoplay_checkbox.blockSignals(False)
+    def toggle_track_visibility(state):
+        visible = state == 2  # Qt.Checked == 2
+        track_row_1.setVisible(visible)
+        track_row_2.setVisible(visible)
+        offset_spinboxes_row.setVisible(visible)
 
-    autoplay_checkbox.clicked.connect(lambda _: handle_autoplay_checkbox_toggle(_, editor))
+    show_track_menu_checkbox.stateChanged.connect(toggle_track_visibility)
+    toggle_track_visibility(0)
 
-    row_other_layout.addWidget(autoplay_checkbox)
-    row_other_layout.addWidget(show_track_menu_checkbox)
-    spinboxes_layout.addWidget(row_other)
-
+    spinboxes_layout.addWidget(track_row_1)
+    spinboxes_layout.addWidget(track_row_2)
+    spinboxes_layout.addWidget(offset_spinboxes_row)
+    spinboxes_layout.addWidget(checkboxes_row)
     main_layout.addWidget(spinboxes_container)
     editor._custom_controls_container_spinboxes = spinboxes_container
 
-    print("Custom editor control buttons, spinboxes, and autoplay checkbox added.")
 
 gui_hooks.editor_did_init.append(add_custom_controls)
 

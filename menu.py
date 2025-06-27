@@ -172,7 +172,7 @@ class AudioToolsDialog(QDialog):
         vbox.addLayout(hbox)
 
         # Subtitles group with tabs
-        subsGroup = QGroupBox("Subtitles")
+        subsGroup = QGroupBox("Mpv Tracks")
         subsLayout = QVBoxLayout()
 
         info_label = QLabel("The currently selected tab will have its settings used.")

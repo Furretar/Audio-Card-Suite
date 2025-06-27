@@ -130,6 +130,7 @@ class AudioToolsDialog(QDialog):
         audioGroup = QGroupBox("Audio")
         audioLayout = QGridLayout()
         audioLayout.addWidget(QLabel("File Type:"), 0, 0)
+
         self.audioExtCombo = QComboBox()
         self.audioExtCombo.addItems(["opus", "mp3", "flac"])
         current_index = self.audioExtCombo.findText(self.settings["audio_ext"])
@@ -137,18 +138,34 @@ class AudioToolsDialog(QDialog):
             self.audioExtCombo.setCurrentIndex(current_index)
         self.audioExtCombo.currentTextChanged.connect(self.on_audio_ext_changed)
         audioLayout.addWidget(self.audioExtCombo, 0, 1)
-        normalize_checkbox = QCheckBox("Normalize Audio")
-        normalize_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
 
+        self.normalize_checkbox = QCheckBox("Normalize Audio")
+        self.normalize_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
+        self.normalize_checkbox.stateChanged.connect(lambda _: self.on_audio_ext_changed(self.audioExtCombo.currentText()))
 
-
-        audioLayout.addWidget(normalize_checkbox, 2, 0, 1, 2)
-        self.bitrateLabel = QLabel("Bitrate:")
-        audioLayout.addWidget(self.bitrateLabel, 1, 0)
-        self.bitrateEdit = QLineEdit(self.settings["bitrate"])
-        self.kbps_label = QLabel("kbps")
-        audioLayout.addWidget(self.kbps_label, 1, 2)
+        self.bitrateEdit = QSpinBox()
+        self.bitrateEdit.setRange(8, 512)  # example range
+        self.bitrateEdit.setValue(int(self.settings["bitrate"]))
+        self.kbps_label = QLabel("Quality:")
+        self.bitrateEdit.setSuffix(" kbps")
+        audioLayout.addWidget(self.kbps_label, 1, 0)
         audioLayout.addWidget(self.bitrateEdit, 1, 1)
+
+
+        # LUFS spinner (hidden by default)
+        self.lufsSpinner = QSpinBox()
+        self.lufsSpinner.setRange(-70, 0)
+        self.lufsSpinner.setValue(-14)
+        self.lufsSpinner.setSuffix(" LUFS")
+        self.lufsSpinner.setToolTip("Target loudness level")
+
+        audioLayout.addWidget(self.normalize_checkbox, 2, 0, 1, 2)
+        audioLayout.addWidget(self.lufsSpinner, 3, 0)
+
+        self.lufsSpinner.hide()
+
+
+
         audioGroup.setLayout(audioLayout)
         hbox.addWidget(audioGroup)
 
@@ -290,12 +307,13 @@ class AudioToolsDialog(QDialog):
     def on_audio_ext_changed(self, text):
         if text == "flac":
             self.bitrateEdit.hide()
-            self.bitrateLabel.hide()
             self.kbps_label.hide()
         else:
             self.bitrateEdit.show()
-            self.bitrateLabel.show()
             self.kbps_label.show()
+
+        show_lufs = self.normalize_checkbox.isChecked()
+        self.lufsSpinner.setVisible(show_lufs)
 
 
 def open_audio_tools_dialog():

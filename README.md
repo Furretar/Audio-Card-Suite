@@ -1,3 +1,9 @@
+button to open source folder
+read every sub folder in source folder, allow for setting download folder as source?
+
+
+
+
 - [ ] add generate button, add blocks for every matching string in text field
 - [ ] add a button to fetch next result for text if it matched something else
 - [ ] store start and end offset every time its pushed, when user moves the whole line forward or backward it automatically adjusts the offset amount
@@ -16,9 +22,6 @@ edit already made cards
 - [ ] move buttons to above audio field
 - [ ] figure out a system to use language codes to always get the right audio track (box with order of priority?)
 - [ ] equalize all audio in current deck, auto equalize when adding
-
-remove text inside ()?
-
 
 Spin boxes:
 Target Audio Field | Target Sentence Field | Translation Audio Field | Translation Text Field |

@@ -1,6 +1,6 @@
 button to open source folder
 read every sub folder in source folder, allow for setting download folder as source?
-
+tag cards with the name of the source file
 
 
 

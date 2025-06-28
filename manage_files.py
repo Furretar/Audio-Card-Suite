@@ -184,7 +184,8 @@ def get_ffmpeg_exe_path():
     return None, None
 
 def extract_first_subtitle_file(video_path, srt_output_path):
-    exe_path = get_ffmpeg_exe_path()
+    exe_path, _ = get_ffmpeg_exe_path()
+    print(f"ffmpeg exe path: {exe_path}")
 
     
     try:

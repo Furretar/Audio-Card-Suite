@@ -30,13 +30,13 @@ video_exts = [
 
 BACKTICK_PATTERN = re.compile(
     r'^\[sound:'
-    r'(?P<filename_base>[^`]+?)`'           # everything up to the first backtick
-    r'(?P<sha>[A-Za-z0-9]{4})`'             # exactly 4-char SHA
-    r'(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'  # e.g. 00h17m19s540ms-
-    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'     # e.g. 00h17m24s828ms`
-    r'(?P<subtitle_range>\d+-\d+)'          # e.g. 339-340
-    r'(?:`(?P<normalize_tag>[a-z]{2}))?'    # optional `xx
-    r'\.(?P<file_extension>\w+)\]$'         # .mp3]
+    r'(?P<filename_base>[^`]+?)`'                            # filename base
+    r'(?P<sha>[A-Za-z0-9]{4})`'                              # 4-char SHA
+    r'(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'            # start time
+    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'              # end time
+    r'(?P<subtitle_range>\d+-\d+)'                           # subtitle range
+    r'(?:`(?P<normalize_tag>[^`]+))?'                        # optional normalize tag
+    r'\.(?P<file_extension>\w+)\]$'                          # file extension
 )
 
 SUBS2SRS_PATTERN = re.compile(
@@ -255,6 +255,7 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str)
         return sound_line, block
 
     format = detect_format(sound_line)
+    print(f"detected format: {format}")
     if format != "backtick" and format!= "subs2srs":
         block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text)
         if block is None or subtitle_path is None:
@@ -527,8 +528,11 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
         print("FFmpeg failed:", e)
         return ""
 
-
+normalize_audio = True
+lufs = -16
 def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, kbps, collection_path) -> str:
+    
+    
     ffmpeg_path, _ = get_ffmpeg_exe_path()
     
     start = convert_to_default_time_notation(start_time)
@@ -551,9 +555,16 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, kbps,
         "-t", str(duration_sec),
     ]
 
+    filters = []
     if delay_ms > 0:
-        adelay = f"{delay_ms}|{delay_ms}"
-        cmd += ["-af", f"adelay={adelay}"]
+        filters.append(f"adelay={delay_ms}|{delay_ms}")
+
+    if normalize_audio:
+        filters.append(f"loudnorm=I={lufs}:TP=-1.5:LRA=11")
+
+    if filters:
+        filter_str = ",".join(filters)
+        cmd += ["-af", filter_str]
 
     cmd += [
         "-c:a", "libmp3lame",
@@ -673,6 +684,8 @@ def get_audio_start_time_ms(source_file_path: str) -> int:
         print(f"Could not get pts_time from packets: {e}")
         return 0
 
+kbps = 192
+
 def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
     altered_data = get_altered_sound_data(sound_line, start_ms, end_ms, relative_index)
     if not altered_data:
@@ -685,7 +698,7 @@ def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
         altered_data["source_path"],
         altered_data["new_start_time"],
         altered_data["new_end_time"],
-        "192",
+        f"{kbps}",
         altered_data["new_path"]
     )
     try:
@@ -742,15 +755,16 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     new_start_time = milliseconds_to_anki_time_hmsms_format(new_start_ms)
     new_end_time = milliseconds_to_anki_time_hmsms_format(new_end_ms)
 
-    normalize_tag = "nm" if data.get("normalize_tag") else ""
+    normalize_tag = "LUFS" if data.get("normalize_tag") else ""
     time_range = f"{new_start_time}-{new_end_time}"
     filename_parts = [data["filename_base"], "ABCD", time_range]
 
     subtitle_range = f"{start_index}-{end_index}" if start_index is not None and end_index is not None else ""
     if subtitle_range:
         filename_parts.append(subtitle_range)
-    if normalize_tag:
-        filename_parts.append(normalize_tag)
+
+    if normalize_audio:
+        filename_parts.append(f"{lufs}LUFS")
 
     new_filename = "`".join(filename_parts) + f".{data['file_extension']}"
     new_path = os.path.join(get_collection_dir(), new_filename)

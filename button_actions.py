@@ -61,7 +61,6 @@ def get_sound_and_sentence_from_editor(editor: Editor):
 
     return sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx
 
-
 def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index):
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
@@ -164,7 +163,6 @@ def remove_edge_lines_helper(editor, relative_index):
 
     print(f"Removed {'last' if relative_index==1 else 'first'} block, new text:\n{new_sentence_text}")
 
-
 def add_context_line_helper(editor: Editor, relative_index):
     generate_fields_helper(editor)
     sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx = get_sound_and_sentence_from_editor(editor)
@@ -200,7 +198,6 @@ def add_context_line_helper(editor: Editor, relative_index):
                 print("Image generation failed or result was not a string.")
 
         print(f"new line {new_sentence_text}")
-
 
 def get_context_line_data(sound_line, sentence_text, relative_index):
 
@@ -254,10 +251,13 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         start_delta *= 5
         end_delta *= 5
 
+    print(f"current sound line: {sound_line}")
     fixed_sound_line, block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_text)
+    print(f"fixed sound line: {fixed_sound_line}")
 
 
     new_sound_line = manage_files.alter_sound_file_times(fixed_sound_line, -start_delta, end_delta, None)
+    print(f"new sound line: {new_sound_line}")
 
     if new_sound_line:
         editor.note.fields[sound_idx] = new_sound_line
@@ -278,9 +278,9 @@ def generate_fields_button(editor):
         print(f"Playing sound filename: {sound_filename}")
         QTimer.singleShot(100, lambda: play(sound_filename))
 
-
 def generate_fields_helper(editor):
     sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx = get_sound_and_sentence_from_editor(editor)
+    print(f"current sound line: {sound_line}")
 
     updated = False
 
@@ -293,6 +293,7 @@ def generate_fields_helper(editor):
         return None
     
     new_sound_line, new_sentence_text = new_result
+    print(f"new sound line: {new_sound_line}")
 
     generated_img = None
     if not editor.note.fields[image_idx].strip():
@@ -317,7 +318,6 @@ def generate_fields_helper(editor):
     current_sound_line = editor.note.fields[sound_idx]
     match = re.search(r"\[sound:(.*?)\]", current_sound_line)
     return match.group(1) if match else None
-
 
 def generate_fields_sound_sentence_image(sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx):
     sentence_blocks = [line for line in sentence_text.splitlines() if line.strip()]
@@ -351,7 +351,6 @@ def generate_fields_sound_sentence_image(sound_line, sound_idx, sentence_text, s
 
     first_sound_line = manage_files.alter_sound_file_times(first_sound_line, 0, 0, 0)
     return first_sound_line, sentence_text
-
 
 def on_note_loaded(editor: Editor):
     editor.web.eval("window.getSelection().removeAllRanges();")

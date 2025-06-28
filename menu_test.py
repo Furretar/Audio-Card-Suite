@@ -1,24 +1,38 @@
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QApplication
-from aqt.gui_hooks import editor_did_load_note
-from aqt import gui_hooks
-from aqt.editor import Editor
-from aqt.sound import play
-from aqt.utils import showInfo
-import re
+import os
+import sys
 
 try:
-    from . import manage_files
-    from . import menu
+    from aqt import mw
+    from aqt.qt import *
+    from aqt.utils import showInfo
+    inside_anki = True
 except ImportError:
-    # Fallback for running as standalone script
-    import sys
-    import os
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    if current_dir not in sys.path:
-        sys.path.insert(0, current_dir)
-    import manage_files
-    import menu
+    inside_anki = False
+    print("Running outside Anki – using mock `mw`")
+
+    from PyQt6.QtWidgets import (
+        QDialog, QVBoxLayout, QGroupBox, QPushButton, QLabel, QLineEdit, QComboBox,
+        QSpinBox, QCheckBox, QTabWidget, QWidget, QHBoxLayout, QGridLayout, QSizePolicy, QMessageBox
+    )
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QIcon
+
+    class MockMW:
+        class MockCol:
+            class MockModels:
+                def by_name(self, name): return True
+                def current(self): return {'name': 'Basic'}
+            def __init__(self): self.models = self.MockModels()
+        def __init__(self): self.col = self.MockCol()
+    mw = MockMW()
+
+    def showInfo(msg):
+        print("INFO:", msg)
+
+import manage_files
+
+if not inside_anki:
+    manage_files.showInfo = showInfo
 
 
 

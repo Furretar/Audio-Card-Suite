@@ -7,7 +7,11 @@ import re
 from aqt.editor import Editor
 from aqt.sound import av_player
 import os
-
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
+    QPushButton, QCheckBox
+)
 
 
 from PyQt6.QtWidgets import (
@@ -66,7 +70,7 @@ class AudioToolsDialog(QDialog):
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle('mpv2anki')
+        self.setWindowTitle('Audio Card Suite')
 
         vbox = QVBoxLayout()
 
@@ -318,7 +322,7 @@ class AudioToolsDialog(QDialog):
 
 def open_audio_tools_dialog():
     dlg = AudioToolsDialog()
-    dlg.exec()
+    dlg.show()
 
 
 def add_audio_tools_menu():
@@ -350,11 +354,7 @@ def handle_autoplay_checkbox_toggle(_, editor):
     editor._auto_play_enabled = new_state
     print(f"Autoplay {'enabled' if new_state else 'disabled'} for editor {id(editor)}")
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
-    QPushButton, QCheckBox
-)
+
 
 def add_custom_controls(editor: Editor) -> None:
     if not hasattr(editor, "widget") or editor.widget is None:

@@ -7,6 +7,9 @@ import re
 from aqt.editor import Editor
 from aqt.sound import av_player
 import os
+from aqt import mw
+import subprocess
+from send2trash import send2trash
 
 
 from PyQt6.QtWidgets import (
@@ -24,13 +27,14 @@ except ImportError:
 
 ms_amount = 50
 
+sound_idx = 2
+sentence_idx = 0
+image_idx = 3
+
 def strip_html_tags(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text)
 
 def get_sound_and_sentence_from_editor(editor: Editor):
-    sound_idx = 2
-    sentence_idx = 0
-    image_idx = 3
 
     sound_line = ""
     if sound_idx < len(editor.note.fields):
@@ -71,7 +75,10 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
     end_time = data["end_time"]
     start_index = data["start_index"]
     end_index   = data["end_index"]
-    subtitle_path = data["subtitle_path"]
+
+    filename_base = data["filename_base"]
+    source_path = manage_files.get_source_file(filename_base)
+    subtitle_path = os.path.splitext(source_path)[0] + ".srt"
 
     sentence_blocks = [b.strip() for b in sentence_text.split("\n\n") if b.strip()]
     if len(sentence_blocks) <= 1:
@@ -207,7 +214,10 @@ def get_context_line_data(sound_line, sentence_text, relative_index):
 
 
     edge_index = data["end_index"] if relative_index == 1 else data["start_index"]
-    subtitle_path = data["subtitle_path"]
+
+    filename_base = data["filename_base"]
+    source_path = manage_files.get_source_file(filename_base)
+    subtitle_path = os.path.splitext(source_path)[0] + ".srt"
 
     target_block = manage_files.get_subtitle_block_from_relative_index(relative_index, edge_index, subtitle_path)
     if not target_block or len(target_block) < 4:
@@ -263,10 +273,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         editor.note.fields[sound_idx] = new_sound_line
         editor.loadNote()
 
-        sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_line)
-        if sound_filename:
-            sound_filename = sound_filename.group(1)
-            QTimer.singleShot(150, lambda: play(sound_filename))
+
 
     else:
         print("No new sound tag returned, field not updated.")
@@ -365,3 +372,100 @@ def on_note_loaded(editor: Editor):
                 filename = match.group(1)
                 print(f"Playing sound from field {sound_idx}: {filename}")
                 QTimer.singleShot(0, lambda fn=filename: play(fn))
+
+
+# bulk generation
+def is_normalized(sound_line):
+    return bool(re.search(r'`\-\d+LUFS\.\w+$', sound_line))
+
+def bulk_generate(deck, note_type, overwrite, normalize, lufs, kbps):
+    current_deck_name = deck["name"]
+
+    print("Running bulk_generate...")
+    print("Deck:", current_deck_name)
+    print("Overwrite Fields:", overwrite)
+    print("Normalize Audio:", normalize)
+
+    deck_id = mw.col.decks.id(current_deck_name)
+    note_ids = mw.col.find_notes(f'deck:"{current_deck_name}"')
+
+    if not note_ids:
+        all_decks = [d["name"] for d in mw.col.decks.all()]
+        print("Available decks:", all_decks)
+
+        print("Available decks:")
+        for deck in mw.col.decks.all():
+            print(f"  ID: {deck['id']}, Name: {deck['name']}")
+
+        # Print all note types
+        print("\nAvailable note types:")
+        for model in mw.col.models.all():
+            print(f"  Name: {model['name']}, ID: {model['id']}")
+
+    print(f"note ids: {note_ids}")
+    for note_id in note_ids:
+        note = mw.col.get_note(note_id)
+        if note.note_type()['name'] != note_type:
+            continue
+
+        print("Processing note:", note.id, note.note_type()['name'])
+
+        sound_line = note.fields[sound_idx]
+        print("Sound line:", sound_line)
+
+        if normalize:
+            m = re.search(r'`(-\d+)LUFS', sound_line)
+            if m:
+                print(f"m: {m.group(1)}")
+                if int(m.group(1)) == lufs:
+                    print(f"Skipping normalization for note {note.id}, LUFS already matches {m.group(1)}")
+                    continue
+            else:
+                print("No LUFS tag found in sound line")
+
+        format = manage_files.detect_format(sound_line)
+        if "[sound:" in sound_line:
+            if overwrite:
+                data = manage_files.extract_sound_line_data(sound_line)
+                if not data:
+                    continue
+                collection_path = data["collection_path"]
+                print(f"Collection path: {collection_path}")
+
+                if normalize and not is_normalized(sound_line):
+                    base, file_extension = os.path.splitext(collection_path)
+                    print(f"base name: {base}, extension: {file_extension}, og soiund line: {sound_line}, collection path: {collection_path}")
+                    if format == "backtick":
+                        timestamp_filename_no_normalize = data["timestamp_filename_no_normalize"]
+                        print(f"timestamp_filename_no_normalize: {timestamp_filename_no_normalize}")
+                        filename = f"{timestamp_filename_no_normalize}`{lufs}LUFS{file_extension}"
+                    else:
+                        print(f"not backtick, {sound_line}")
+                        base_name = os.path.splitext(os.path.basename(collection_path))[0]
+                        filename = f"{base_name}`{lufs}LUFS{file_extension}"
+
+                    print(f"filename: {filename}")
+
+                    folder = os.path.dirname(collection_path)
+                    new_collection_path = os.path.join(folder, filename)
+
+                    cmd = manage_files.create_just_normalize_audio_command(collection_path, lufs, kbps)
+
+                    try:
+                        subprocess.run(cmd, check=True)
+                        print(f"running command: {cmd}")
+                    except subprocess.CalledProcessError as e:
+                        print(f"ffmpeg command failed: {e}")
+                        continue
+
+                    if os.path.exists(collection_path) and os.path.exists(new_collection_path):
+                        print(f"trashing: {collection_path}")
+                        send2trash(collection_path)
+
+                    new_filename = os.path.basename(new_collection_path)
+                    note.fields[sound_idx] = f"[sound:{new_filename}]"
+                    mw.col.update_note(note)
+
+
+
+

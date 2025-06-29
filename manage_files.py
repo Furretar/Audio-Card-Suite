@@ -64,8 +64,11 @@ def detect_format(sound_line: str) -> str:
 
 
 def extract_sound_line_data(sound_line):
+    print(f"extracting data from {sound_line}")
     format_type = detect_format(sound_line)
+    print(f"format_type: {format_type}")
     if format_type == "backtick":
+
         match = BACKTICK_PATTERN.match(sound_line)
         if not match:
             print(f"no match for backtick")
@@ -91,6 +94,13 @@ def extract_sound_line_data(sound_line):
             normalize_tag
         ])) + f".{file_extension}"
 
+        timestamp_filename_no_normalize = "`".join(filter(None, [
+            filename_base,
+            sha,
+            f"{start_time_raw}-{end_time_raw}",
+            subtitle_range
+        ]))
+
     elif format_type == "subs2srs":
         match = SUBS2SRS_PATTERN.match(sound_line)
         if not match:
@@ -106,8 +116,32 @@ def extract_sound_line_data(sound_line):
         timestamp_filename = (
             f"{filename_base}_{start_time_raw}-{end_time_raw}.{file_extension}"
         )
+
+        timestamp_filename_no_normalize = (
+            f"{filename_base}_{start_time_raw}-{end_time_raw}"
+        )
     else:
-        return None
+        if sound_line.startswith("[sound:") and sound_line.endswith("]"):
+            filename = sound_line[len("[sound:"):-1]
+            filename = filename.replace(" ", "_")  # replace spaces if any
+            collection_path = os.path.join(get_collection_dir(), filename)
+
+            filename_base = filename.split("`")[0]  # for metadata only, keep full filename for path
+            _, file_extension = os.path.splitext(filename)
+
+            print(f"filename: {filename}")
+            print(f"filename_base: {filename_base}")
+            print(f"file_extension: {file_extension}")
+            print(f"collection_path: {collection_path}")
+
+            return {
+                "filename_base": filename_base,
+                "file_extension": file_extension,
+                "collection_path": collection_path
+            }
+
+        else:
+            return None
 
     def convert(ts):
         return re.sub(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms", r"\1.\2.\3.\4", ts)
@@ -116,7 +150,7 @@ def extract_sound_line_data(sound_line):
     end_time = convert(end_time_raw)
     audio_collection_path = os.path.join(get_collection_dir(), timestamp_filename)
 
-    source_path = get_source_file(filename_base)
+    # source_path = get_source_file(filename_base)
 
     m4b_image_filename = f"{filename_base}.jpg"
     image_filename = f"{filename_base}`{start_time}.jpg"
@@ -124,7 +158,7 @@ def extract_sound_line_data(sound_line):
     image_collection_path = os.path.join(get_collection_dir(), image_filename)
     m4b_image_collection_path = os.path.join(get_collection_dir(), m4b_image_filename)
 
-    subtitle_path = os.path.splitext(source_path)[0] + ".srt"
+    # subtitle_path = os.path.splitext(source_path)[0] + ".srt"
 
     return {
         "filename_base": filename_base,
@@ -142,8 +176,7 @@ def extract_sound_line_data(sound_line):
         "m4b_image_filename": m4b_image_filename,
         "image_collection_path": image_collection_path,
         "m4b_image_collection_path": m4b_image_collection_path,
-        "source_path": source_path,
-        "subtitle_path": subtitle_path,
+        "timestamp_filename_no_normalize": timestamp_filename_no_normalize,
     }
 
 
@@ -263,7 +296,11 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str)
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
 
     data = extract_sound_line_data(sound_line)
-    subtitle_path = data["subtitle_path"]
+
+
+    filename_base = data["filename_base"]
+    source_path = get_source_file(filename_base)
+    subtitle_path = os.path.splitext(source_path)[0] + ".srt"
 
 
     if format == "backtick":
@@ -293,7 +330,10 @@ def get_subtitle_block_from_sound_line_and_sentence_text(sound_line: str, senten
 
     start_index = data["start_index"]
     end_index   = data["end_index"]
-    subtitle_path = data["subtitle_path"]
+
+    filename_base = data["filename_base"]
+    source_path = get_source_file(filename_base)
+    subtitle_path = os.path.splitext(source_path)[0] + ".srt"
 
     if not os.path.exists(subtitle_path):
         print(f"Subtitle file not found: {subtitle_path}")
@@ -389,24 +429,16 @@ def get_source_file(filename_base) -> str:
 
     alt_names = [filename_base, filename_base.replace("_", " ")]
 
-    print("Mp3 Source file not found, attempting extraction:", mp3_path)
     for name in alt_names:
         video_source_path = check_for_video_source(name)
         if video_source_path:
-
-            # temp
             return video_source_path
-
-
-            mp3_path = ffmpeg_extract_full_audio(video_source_path)
-            return mp3_path
 
         for ext in set(audio_exts):
             path = os.path.join(addon_source_folder, name + ext)
             print("now checking: ", path)
             if os.path.exists(path):
-                mp3_path = ffmpeg_extract_full_audio(path)
-                return mp3_path
+                return path
 
     print(f"No source file found for base name: {filename_base}")
     showInfo(f"No source file found for base name: {filename_base}")
@@ -530,25 +562,41 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
 
 normalize_audio = True
 lufs = -16
-def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, kbps, collection_path) -> str:
-    
-    
+temp_file_extension = "mp3"
+
+
+def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, lufs, kbps, collection_path) -> list:
     ffmpeg_path, _ = get_ffmpeg_exe_path()
-    
+
     start = convert_to_default_time_notation(start_time)
     end = convert_to_default_time_notation(end_time)
     duration_sec = time_to_seconds(end) - time_to_seconds(start)
     if duration_sec <= 0:
         print(f"End time must be after start time, {start}, {end}")
-        return ""
+        return []
 
     delay_ms = get_audio_start_time_ms(source_path)
-    base, _ = os.path.splitext(collection_path)
-    collection_path = f"{base}.mp3"
+    base, file_extension = os.path.splitext(collection_path)
+    ext_no_dot = file_extension[1:].lower()
 
+    # Determine output extension and codec
+    if ext_no_dot == "mp3":
+        codec = "libmp3lame"
+        output_ext = ".mp3"
+    elif ext_no_dot == "opus":
+        codec = "libopus"
+        output_ext = ".opus"
+    elif ext_no_dot == "flac":
+        codec = "flac"
+        output_ext = ".flac"
+    else:
+        codec = "copy"
+        output_ext = file_extension
+
+    new_collection_path = f"{base}{output_ext}"
 
     cmd = [
-        f"{ffmpeg_path}", "-y",
+        ffmpeg_path, "-y",
         "-ss", start,
         "-i", source_path,
         "-map", "0:a:0",
@@ -559,20 +607,59 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, kbps,
     if delay_ms > 0:
         filters.append(f"adelay={delay_ms}|{delay_ms}")
 
-    if normalize_audio:
+    if normalize_audio and int(lufs) > 0:
         filters.append(f"loudnorm=I={lufs}:TP=-1.5:LRA=11")
 
     if filters:
         filter_str = ",".join(filters)
         cmd += ["-af", filter_str]
 
-    cmd += [
-        "-c:a", "libmp3lame",
-        "-b:a", f"{kbps}k",
-        collection_path
-    ]
+    cmd += ["-c:a", codec]
+
+    if codec in ("libmp3lame", "libopus") and kbps:
+        # For opus, bitrate can be specified in bps (e.g., 64000 for 64 kbps)
+        bitrate = f"{kbps}k" if codec == "libmp3lame" else str(kbps * 1000)
+        cmd += ["-b:a", bitrate]
+
+    cmd.append(new_collection_path)
 
     return cmd
+
+
+def create_just_normalize_audio_command(source_path, lufs, kbps) -> str:
+    print(f"source path test: {source_path}")
+    ffmpeg_path, _ = get_ffmpeg_exe_path()
+
+    base, file_extension = os.path.splitext(source_path)
+    ext_no_dot = file_extension[1:].lower()
+
+    if lufs != -1:
+        new_collection_path = f"{base}`{lufs}LUFS{file_extension}"
+        filter_args = ["-af", f"loudnorm=I={lufs}:TP=-1.5:LRA=11"]
+    else:
+        new_collection_path = f"{base}.{file_extension}"
+        filter_args = []
+
+    cmd = [ffmpeg_path, "-y", "-i", source_path] + filter_args
+
+    if ext_no_dot == "mp3":
+        cmd += ["-c:a", "libmp3lame"]
+        if kbps:
+            cmd += ["-b:a", f"{kbps}k"]
+    elif ext_no_dot == "opus":
+        cmd += ["-c:a", "libopus"]
+        if kbps:
+            cmd += ["-b:a", str(kbps * 1000)]
+    elif ext_no_dot == "flac":
+        cmd += ["-c:a", "flac"]
+    else:
+        print(f"Unsupported audio format: {ext_no_dot}")
+        return ""
+
+    cmd.append(new_collection_path)
+    return cmd
+
+
 
 def convert_to_default_time_notation(t: str) -> str:
     hmsms_match = re.match(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms", t)
@@ -685,19 +772,24 @@ def get_audio_start_time_ms(source_file_path: str) -> int:
         return 0
 
 kbps = 192
-
+lufs = -16
 def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
     altered_data = get_altered_sound_data(sound_line, start_ms, end_ms, relative_index)
+    data = extract_sound_line_data(sound_line)
     if not altered_data:
         return ""
 
     if os.path.exists(altered_data["old_path"]):
         send2trash(altered_data["old_path"])
 
+    filename_base = data["filename_base"]
+    source_path = get_source_file(filename_base)
+
     cmd = create_ffmpeg_extract_audio_command(
-        altered_data["source_path"],
+        source_path,
         altered_data["new_start_time"],
         altered_data["new_end_time"],
+        f"{lufs}",
         f"{kbps}",
         altered_data["new_path"]
     )
@@ -755,7 +847,6 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     new_start_time = milliseconds_to_anki_time_hmsms_format(new_start_ms)
     new_end_time = milliseconds_to_anki_time_hmsms_format(new_end_ms)
 
-    normalize_tag = "LUFS" if data.get("normalize_tag") else ""
     time_range = f"{new_start_time}-{new_end_time}"
     filename_parts = [data["filename_base"], "ABCD", time_range]
 
@@ -774,6 +865,6 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
         "new_end_time": new_end_time,
         "new_filename": new_filename,
         "new_path": new_path,
-        "source_path": data["source_path"],
         "old_path": data["collection_path"]
     }
+

@@ -294,19 +294,86 @@ class AudioToolsDialog(QDialog):
         # Add source group below subtitles group
         vbox.addWidget(sourceGroup)
 
-        # Bottom buttons
+        # bulk generate button
         hbox2 = QHBoxLayout()
+
+        self.bulkGenerateButton = QPushButton("Bulk Generate")
+        self.bulkGenerateButton.setDefault(True)
+
+        def confirm_bulk_generate():
+            lufs = -16
+            kbps = 192
+            deck_id = mw.col.decks.get_current_id()
+            deck = mw.col.decks.get(deck_id)
+            all_note_types = mw.col.models.all()
+            note_type = all_note_types[0]['name'] if all_note_types else ""
+
+            dialog = QDialog(mw)
+            dialog.setWindowTitle("Bulk Generate")
+
+            layout = QVBoxLayout(dialog)
+
+            message = QLabel(
+                f"All cards of note type '{note_type}' in the deck '{deck['name']}' will have fields generated."
+            )
+            layout.addWidget(message)
+
+            # Checkboxes
+            overwrite_fields_checkbox = QCheckBox("Overwrite Fields")
+            normalize_audio_checkbox = QCheckBox("Normalize Audio")
+            layout.addWidget(overwrite_fields_checkbox)
+            layout.addWidget(normalize_audio_checkbox)
+
+            # Buttons
+            button_box = QDialogButtonBox(
+                QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
+            )
+            layout.addWidget(button_box)
+
+            def on_accept():
+
+
+                print("User confirmed conversion.")
+                print("Overwrite:", overwrite_fields_checkbox.isChecked())
+                print("Normalize Audio:", normalize_audio_checkbox.isChecked())
+                dialog.accept()
+                button_actions.bulk_generate(
+                    deck,
+                    note_type,
+                    overwrite=overwrite_fields_checkbox.isChecked(),
+                    normalize=normalize_audio_checkbox.isChecked(),
+                    lufs=lufs,
+                    kbps=kbps
+                )
+
+            def on_reject():
+                print("User cancelled conversion.")
+                dialog.reject()
+
+            button_box.accepted.connect(on_accept)
+            button_box.rejected.connect(on_reject)
+
+            dialog.setLayout(layout)
+            dialog.exec()
+
+        self.bulkGenerateButton.clicked.connect(confirm_bulk_generate)
+        hbox2.addWidget(self.bulkGenerateButton)
         hbox2.addStretch(1)
+
+        # open file button
         self.openFileButton = QPushButton("Open File")
         self.openFileButton.setDefault(True)
         self.openFileButton.clicked.connect(lambda: None)
         hbox2.addWidget(self.openFileButton)
+
         vbox.addLayout(hbox2)
 
         self.setLayout(vbox)
         self.setWindowIcon(QIcon(":/icons/anki.png"))
 
         self.on_audio_ext_changed(self.audioExtCombo.currentText())
+
+
 
     def on_audio_ext_changed(self, text):
         if text == "flac":

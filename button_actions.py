@@ -16,6 +16,9 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
 )
 import json
+
+from manage_files import get_subtitle_path_from_filename
+
 try:
     from . import manage_files
 except ImportError:
@@ -33,12 +36,7 @@ config_dir = os.path.join(addon_dir, "config.json")
 def strip_html_tags(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text)
 
-def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> str:
-    mapped_fields = config.get("mapped_fields", {}).get(note_type_name, {})
-    for field_key, mapped_label in mapped_fields.items():
-        if mapped_label == label:
-            return field_key
-    return ""
+
 
 def index_of_field(field_name, fields):
     for i, fld in enumerate(fields):
@@ -60,10 +58,10 @@ def get_sound_and_sentence_from_editor(editor: Editor):
 
     fields = note_type["flds"]
 
-    sentence_field = get_field_key_from_label(note_type_name, "Target Sub Line", config)
-    sound_field = get_field_key_from_label(note_type_name, "Target Audio", config)
-    translation_field = get_field_key_from_label(note_type_name, "Translation Sub Line", config)
-    image_field = get_field_key_from_label(note_type_name, "Image", config)
+    sentence_field = manage_files.get_field_key_from_label(note_type_name, "Target Sub Line", config)
+    sound_field = manage_files.get_field_key_from_label(note_type_name, "Target Audio", config)
+    translation_field = manage_files.get_field_key_from_label(note_type_name, "Translation Sub Line", config)
+    image_field = manage_files.get_field_key_from_label(note_type_name, "Image", config)
 
     sentence_idx = index_of_field(sentence_field, fields) if sentence_field else -1
     sound_idx = index_of_field(sound_field, fields) if sound_field else -1
@@ -113,8 +111,7 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
     end_index   = data["end_index"]
 
     filename_base = data["filename_base"]
-    source_path = manage_files.get_source_file(filename_base)
-    subtitle_path = os.path.splitext(source_path)[0] + ".srt"
+    subtitle_path = manage_files.get_subtitle_path_from_filename(filename_base)
 
     sentence_blocks = [b.strip() for b in sentence_text.split("\n\n") if b.strip()]
     if len(sentence_blocks) <= 1:
@@ -252,8 +249,7 @@ def get_context_line_data(sound_line, sentence_text, relative_index):
     edge_index = data["end_index"] if relative_index == 1 else data["start_index"]
 
     filename_base = data["filename_base"]
-    source_path = manage_files.get_source_file(filename_base)
-    subtitle_path = os.path.splitext(source_path)[0] + ".srt"
+    subtitle_path = manage_files.get_subtitle_path_from_filename(filename_base)
 
     target_block = manage_files.get_subtitle_block_from_relative_index(relative_index, edge_index, subtitle_path)
     if not target_block or len(target_block) < 4:

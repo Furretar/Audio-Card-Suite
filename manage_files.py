@@ -4,17 +4,14 @@ import shutil
 
 from aqt.utils import showInfo
 from send2trash import send2trash
-from aqt import mw
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 addon_source_folder = os.path.join(addon_dir, "Sources")
 temp_ffmpeg_folder = os.path.join(addon_dir, "ffmpeg")
 temp_ffmpeg_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffmpeg.exe")
 temp_ffprobe_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffprobe.exe")
-from aqt.editor import Editor
 import subprocess
 import re
 import json
-from .button_actions import get_field_key_from_label
 
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 config_dir = os.path.join(addon_dir, "config.json")
@@ -226,6 +223,13 @@ def get_ffmpeg_exe_path():
     return None, None
 
 
+def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> str:
+    mapped_fields = config.get("mapped_fields", {}).get(note_type_name, {})
+    for field_key, mapped_label in mapped_fields.items():
+        if mapped_label == label:
+            return field_key
+    return ""
+
 def extract_subtitle_files(video_path, srt_output_path):
     config = get_config_data()
     print(f"config: {config}")
@@ -368,7 +372,6 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str)
 
 
     filename_base = data["filename_base"]
-    filename = data["filename"]
     source_path = get_source_file(filename_base)
     subtitle_path = get_subtitle_path_from_filename(filename_base)
 
@@ -403,11 +406,10 @@ def get_subtitle_block_from_sound_line_and_sentence_text(sound_line: str, senten
 
     filename_base = data["filename_base"]
     source_path = get_source_file(filename_base)
-    subtitle_path = os.path.splitext(source_path)[0] + ".srt"
+    subtitle_path = get_subtitle_path_from_filename(filename_base)
 
     if not os.path.exists(subtitle_path):
         source_path = get_source_file(filename_base)
-        subtitle_path = os.path.join(addon_source_folder, filename_base + ".srt")
         extract_subtitle_files(source_path, subtitle_path)
 
         if not os.path.exists(subtitle_path):

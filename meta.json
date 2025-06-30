@@ -1,1 +1,0 @@
-{"config": {"default_model": "1Chinese", "default_deck": "Default", "audio_ext": "mp3", "bitrate": 192, "image_height": 1080, "pad_start": 0, "pad_end": 0, "normalize_audio": true, "lufs_target": -16, "target_audio_track_num": 1, "target_subtitle_track_num": 1, "translation_audio_track_num": 2, "translation_subtitle_track_num": 2, "lang_code_0": "None", "lang_code_1": "None"}}

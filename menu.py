@@ -107,18 +107,16 @@ class AudioToolsDialog(QDialog):
             "image_height": 1080,
             "pad_start": 0,
             "pad_end": 0,
-            "subs_target_language": "",
-            "subs_native_language": "",
-            "subs_target_language_code": "",
-            "subs_native_language_code": "",
+            "target_language": "",
+            "translation_language": "",
+            "target_language_code": "",
+            "translation_language_code": "",
             "normalize_audio": False,
             "lufs_target": -14,
-            "target_audio_track_num": 0,
-            "target_subtitle_track_num": 0,
-            "translation_audio_track_num": 0,
-            "translation_subtitle_track_num": 0,
-            "lang_target_code": "",
-            "lang_translation_code": "",
+            "target_audio_track": 1,
+            "target_subtitle_track": 1,
+            "translation_audio_track": 2,
+            "translation_subtitle_track": 2,
         }
 
         if os.path.exists(config_file_path):
@@ -152,14 +150,10 @@ class AudioToolsDialog(QDialog):
         self.settings["lufs_target"] = self.lufsSpinner.value()
 
         # Save track numbers
-        self.settings["target_audio_track_num"] = self.trackSpinners[0].value()
-        self.settings["target_subtitle_track_num"] = self.trackSpinners[1].value()
-        self.settings["translation_audio_track_num"] = self.trackSpinners[2].value()
-        self.settings["translation_subtitle_track_num"] = self.trackSpinners[3].value()
-
-        # Language codes (read from QLineEdit, which are read-only but store selected codes)
-        self.settings["lang_target_code"] = self.langCodeEdits[0].text()
-        self.settings["lang_translation_code"] = self.langCodeEdits[1].text()
+        self.settings["target_audio_track"] = self.trackSpinners[0].value()
+        self.settings["target_subtitle_track"] = self.trackSpinners[1].value()
+        self.settings["translation_audio_track"] = self.trackSpinners[2].value()
+        self.settings["translation_subtitle_track"] = self.trackSpinners[3].value()
 
         config_path = os.path.join(addon_dir, "config.json")
         with open(config_path, "w", encoding="utf-8") as f:
@@ -188,7 +182,8 @@ class AudioToolsDialog(QDialog):
         # For example, set the modelFieldsButton text to show selection (optional)
         self.modelFieldsButton.setText(field_name)
 
-    def language_to_code(language, *args):
+    def language_to_code(self, language):
+        print(f"recieved language: {language}")
         mapping = {
             "None": "",
             "Chinese": "chi",
@@ -200,8 +195,16 @@ class AudioToolsDialog(QDialog):
 
     def on_lang_code_changed(self, idx, language):
         code = self.language_to_code(language)
+        print(f"code: {code}, language: {language}")
         self.langCodeEdits[idx].setText(code)
-        self.settings[f"lang_code_{idx}"] = language
+        if idx == 1:
+            self.settings[f"target_language"] = language
+            target_language_code = self.language_to_code(language)
+            print(f"code: {target_language_code}")
+            self.settings[f"target_language_code"] = target_language_code
+        else:
+            self.settings[f"translation_language"] = language
+            self.settings[f"translation_language_code"] = self.language_to_code(language)
         self.save_settings()
 
     def initUI(self):
@@ -345,27 +348,31 @@ class AudioToolsDialog(QDialog):
         for i, label_text in enumerate(lang_labels):
             langGrid.addWidget(QLabel(label_text + ":"), i, 0)
             combo = QComboBox()
-            edit = QLineEdit("")
-            edit.setFixedWidth(24)
+            edit = QLineEdit()
+            edit.setFixedWidth(30)
             edit.setStyleSheet("QLineEdit{background: #f4f3f4;}")
             edit.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
 
-            combo.addItem("None")
-            combo.addItem("Chinese")
-            combo.addItem("Japanese")
-            combo.addItem("English")
-            combo.addItem("Cantonese")
+            combo.addItems(["None", "Chinese", "Japanese", "English", "Cantonese"])
 
-            # Load from config
-            saved_language = self.settings.get(f"lang_code_{i}", "None")
+            if i == 1:
+                saved_language = self.settings.get("target_language", "None")
+                saved_code = self.settings.get("target_language_code", "")
+            else:
+                saved_language = self.settings.get("translation_language", "None")
+                saved_code = self.settings.get("translation_language_code", "")
+
             idx = combo.findText(saved_language)
             if idx >= 0:
                 combo.setCurrentIndex(idx)
-                edit.setText(self.language_to_code(saved_language))
 
-            combo.currentTextChanged.connect(lambda text, idx=i: self.on_lang_code_changed(idx, text))
+            edit.setText(saved_code)
+            print(f"saved_language: {saved_language}")
+            print(f"saved_code: {saved_code}")
 
-
+            combo.currentTextChanged.connect(
+                lambda text, idx=i: self.on_lang_code_changed(idx, str(text))
+            )
 
             self.langCodeCombos.append(combo)
             self.langCodeEdits.append(edit)
@@ -400,10 +407,10 @@ class AudioToolsDialog(QDialog):
         tracksTab.setLayout(tracksGrid)
         self.tabs.addTab(tracksTab, "Tracks")
 
-        self.trackSpinners[0].setValue(self.settings.get("target_audio_track_num", 0))
-        self.trackSpinners[1].setValue(self.settings.get("target_subtitle_track_num", 0))
-        self.trackSpinners[2].setValue(self.settings.get("translation_audio_track_num", 0))
-        self.trackSpinners[3].setValue(self.settings.get("translation_subtitle_track_num", 0))
+        self.trackSpinners[0].setValue(self.settings.get("target_audio_track", 0))
+        self.trackSpinners[1].setValue(self.settings.get("target_subtitle_track", 0))
+        self.trackSpinners[2].setValue(self.settings.get("translation_audio_track", 0))
+        self.trackSpinners[3].setValue(self.settings.get("translation_subtitle_track", 0))
 
         subsLayout.addWidget(self.tabs)
         subsGroup.setLayout(subsLayout)
@@ -571,10 +578,10 @@ class AudioToolsDialog(QDialog):
         self.normalize_checkbox.setChecked(self.settings.get("normalize_audio", False))
         self.lufsSpinner.setValue(self.settings.get("lufs_target", -14))
 
-        self.trackSpinners[0].setValue(self.settings.get("target_audio_track_num", 0))
-        self.trackSpinners[1].setValue(self.settings.get("target_subtitle_track_num", 0))
-        self.trackSpinners[2].setValue(self.settings.get("translation_audio_track_num", 0))
-        self.trackSpinners[3].setValue(self.settings.get("translation_subtitle_track_num", 0))
+        self.trackSpinners[0].setValue(self.settings.get("target_audio_track", 0))
+        self.trackSpinners[1].setValue(self.settings.get("target_subtitle_track", 0))
+        self.trackSpinners[2].setValue(self.settings.get("translation_audio_track", 0))
+        self.trackSpinners[3].setValue(self.settings.get("translation_subtitle_track", 0))
 
         code_keys = [
             "lang_target_code",
@@ -638,8 +645,13 @@ class FieldMapping(QDialog):
             grid.addWidget(comboBox, index, 1)
 
             self.fields.append((field, comboBox))
+
         groupBox.setLayout(grid)
         vbox.addWidget(groupBox)
+
+        infoLabel = QLabel("Field mappings will work on any note type with fields of the same name.")
+        infoLabel.setWordWrap(True)
+        vbox.addWidget(infoLabel)
 
         self.buttonBox = QDialogButtonBox(self)
         self.buttonBox.setStandardButtons(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)

@@ -27,12 +27,8 @@ except ImportError:
 
 ms_amount = 50
 
-sound_idx = 2
-sentence_idx = 0
-image_idx = 3
-
 addon_dir = os.path.dirname(os.path.abspath(__file__))
-config_path = os.path.join(addon_dir, "config.json")
+config_dir = os.path.join(addon_dir, "config.json")
 
 def strip_html_tags(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text)
@@ -44,29 +40,35 @@ def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> s
             return field_key
     return ""
 
+def index_of_field(field_name, fields):
+    for i, fld in enumerate(fields):
+        if fld["name"] == field_name:
+            return i
+    return -1
+
 def get_sound_and_sentence_from_editor(editor: Editor):
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_dir, "r", encoding="utf-8") as f:
         config = json.load(f)
 
-    note_type = editor.note.note_type()
-    note_type_name = note_type["name"]
-    fields = note_type["flds"]
+    mapped_fields = config.get("mapped_fields", {})
+    if not mapped_fields:
+        showInfo("fields not mapped")
+        return
 
-    def index_of_field(field_name):
-        for i, fld in enumerate(fields):
-            if fld["name"] == field_name:
-                return i
-        return -1
+    note_type_name = list(config.get("mapped_fields", {}).keys())[0]
+    note_type = editor.note.note_type()
+
+    fields = note_type["flds"]
 
     sentence_field = get_field_key_from_label(note_type_name, "Target Sub Line", config)
     sound_field = get_field_key_from_label(note_type_name, "Target Audio", config)
     translation_field = get_field_key_from_label(note_type_name, "Translation Sub Line", config)
     image_field = get_field_key_from_label(note_type_name, "Image", config)
 
-    sentence_idx = index_of_field(sentence_field) if sentence_field else 0
-    sound_idx = index_of_field(sound_field) if sound_field else 2
-    translation_idx = index_of_field(translation_field) if translation_field else 4
-    image_idx = index_of_field(image_field) if image_field else 3
+    sentence_idx = index_of_field(sentence_field, fields) if sentence_field else -1
+    sound_idx = index_of_field(sound_field, fields) if sound_field else -1
+    translation_idx = index_of_field(translation_field, fields) if translation_field else -1
+    image_idx = index_of_field(image_field, fields) if image_field else -1
 
     print(f"sentence_idx: {sentence_idx}")
     print(f"sound_idx: {sound_idx}")
@@ -378,7 +380,12 @@ def generate_fields_sound_sentence_image(sound_line, sound_idx, sentence_text, s
 
     sentence_lines = [line for line in sentence_text.split(" ") if line.strip()]
     print(f"sentence lines: {sentence_lines}")
-    first_line = sentence_lines[0]
+    if sentence_lines:
+        first_line = sentence_lines[0]
+    else:
+        showInfo("sentence field empty")
+        return
+
     if first_line == "-":
         first_line += sentence_lines[1]
 

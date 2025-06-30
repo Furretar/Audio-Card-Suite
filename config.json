@@ -6,23 +6,16 @@
   "image_height": 1080,
   "pad_start": 0,
   "pad_end": 0,
-  "subs_target_language": "",
-  "subs_native_language": "",
-  "subs_target_language_code": "",
-  "subs_native_language_code": "",
-  "normalize_audio": true,
-  "lufs_target": -16,
-  "target_audio_track_num": 1,
-  "target_subtitle_track_num": 1,
-  "translation_audio_track_num": 2,
-  "translation_subtitle_track_num": 2,
-  "lang_target_code": "",
-  "lang_translation_code": "",
-  "lang_target_audio_code": "",
-  "lang_target_subtitle_code": "",
-  "lang_translation_audio_code": "",
-  "lang_translation_subtitle_code": "",
-  "selected_tab_index": 0,
+  "target_language": "Japanese",
+  "translation_language": "Chinese",
+  "target_language_code": "jpn",
+  "translation_language_code": "chi",
+  "normalize_audio": false,
+  "lufs_target": -14,
+  "target_audio_track": 1,
+  "target_subtitle_track": 1,
+  "translation_audio_track": 2,
+  "translation_subtitle_track": 2,
   "mapped_fields": {
     "1Chinese": {
       "Expression": "Target Sub Line",
@@ -30,6 +23,5 @@
       "Translation": "Translation Sub Line"
     }
   },
-  "lang_code_0": "Chinese",
-  "lang_code_1": "Japanese"
+  "selected_tab_index": 1
 }

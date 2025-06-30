@@ -13,6 +13,18 @@ temp_ffprobe_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffprobe.exe")
 from aqt.editor import Editor
 import subprocess
 import re
+import json
+from .button_actions import get_field_key_from_label
+
+addon_dir = os.path.dirname(os.path.abspath(__file__))
+config_dir = os.path.join(addon_dir, "config.json")
+
+def get_config_data():
+    if os.path.exists(config_dir):
+        with open(config_dir, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
 
 def get_collection_dir():
     from aqt import mw
@@ -81,7 +93,6 @@ def extract_sound_line_data(sound_line):
 
         subtitle_range = groups["subtitle_range"]
         file_extension = groups["file_extension"]
-        normalize_tag = groups.get("normalize_tag")
 
         start_index, end_index = map(int, subtitle_range.split("-"))
         normalize_tag = groups.get("normalize_tag")
@@ -158,8 +169,6 @@ def extract_sound_line_data(sound_line):
     image_collection_path = os.path.join(get_collection_dir(), image_filename)
     m4b_image_collection_path = os.path.join(get_collection_dir(), m4b_image_filename)
 
-    # subtitle_path = os.path.splitext(source_path)[0] + ".srt"
-
     return {
         "filename_base": filename_base,
         "sha": sha,
@@ -216,22 +225,79 @@ def get_ffmpeg_exe_path():
              "or place ffmpeg.exe in the addon folder under: ffmpeg/bin/ffmpeg.exe")
     return None, None
 
-def extract_first_subtitle_file(video_path, srt_output_path):
-    exe_path, _ = get_ffmpeg_exe_path()
-    print(f"ffmpeg exe path: {exe_path}")
 
-    
-    try:
-        print(f"Extracting first subtitle for {video_path}")
-        subprocess.run([
-            f"{exe_path}",
-            "-y",
-            "-i", video_path,
-            "-map", "0:s:0",
-            srt_output_path
-        ])
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to extract subtitles from {video_path}: {e}")
+def extract_subtitle_files(video_path, srt_output_path):
+    config = get_config_data()
+    print(f"config: {config}")
+    target_subtitle_track_num = config.get("target_subtitle_track_num")
+    translation_subtitle_track_num = config.get("translation_subtitle_track_num")
+
+    exe_path, probe_path = get_ffmpeg_exe_path()
+
+    def get_lang_code(track_num):
+        if not track_num:
+            showInfo("tracks not set")
+            return
+        cmd = [
+            probe_path,
+            "-v", "error",
+            "-select_streams", f"s:{track_num-1}",
+            "-show_entries", "stream=index:stream_tags=language",
+            "-of", "json",
+            video_path
+        ]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            data = json.loads(result.stdout)
+            return data['streams'][0]['tags'].get('language', '')
+        except Exception:
+            return ''
+
+    target_lang_code = get_lang_code(target_subtitle_track_num)
+    if not target_lang_code:
+        showInfo("tracks not set")
+        return
+    translation_lang_code = get_lang_code(translation_subtitle_track_num)
+    if not translation_lang_code:
+        showInfo("tracks not set")
+        return
+    srt_output_path_no_ext = os.path.splitext(srt_output_path)[0]
+    note_type_name = list(config.get("mapped_fields", {}).keys())[0]
+    translation_field = get_field_key_from_label(note_type_name, "Translation Sub Line", config)
+
+    # target line
+    tagged_target_subtitle = f"{srt_output_path_no_ext}`track_{target_subtitle_track_num}`{target_lang_code}.srt"
+    target_path = os.path.join(addon_source_folder, os.path.basename(tagged_target_subtitle))
+    if target_subtitle_track_num > 0 and not os.path.exists(target_path):
+        try:
+            print(f"Extracting target_subtitle_track subtitle for {video_path}")
+            subprocess.run([
+                exe_path,
+                "-y",
+                "-i", video_path,
+                "-map", f"0:s:{target_subtitle_track_num - 1}",
+                f"{tagged_target_subtitle}"
+            ], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to extract target subtitles from {video_path}: {e}")
+
+    # translation line
+    tagged_translation_subtitle = f"{srt_output_path_no_ext}`track_{translation_subtitle_track_num}`{translation_lang_code}.srt"
+    translation_path = os.path.join(addon_source_folder, os.path.basename(tagged_translation_subtitle))
+    if translation_subtitle_track_num > 0 and translation_field and not os.path.exists(translation_path):
+        try:
+            print(f"Extracting translation_subtitle_track_num subtitle for {video_path}")
+            subprocess.run([
+                exe_path,
+                "-y",
+                "-i", video_path,
+                "-map", f"0:s:{translation_subtitle_track_num - 1}",
+                f"{tagged_translation_subtitle}"
+            ], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to extract translation subtitles from {video_path}: {e}")
+            showInfo(f"Failed to extract translation subtitles from {video_path}: {e}")
+
 
 def format_subtitle_block(subtitle_block):
     if not subtitle_block:
@@ -336,8 +402,14 @@ def get_subtitle_block_from_sound_line_and_sentence_text(sound_line: str, senten
     subtitle_path = os.path.splitext(source_path)[0] + ".srt"
 
     if not os.path.exists(subtitle_path):
-        print(f"Subtitle file not found: {subtitle_path}")
-        return None
+        source_path = get_source_file(filename_base)
+        subtitle_path = os.path.join(addon_source_folder, filename_base + ".srt")
+        extract_subtitle_files(source_path, subtitle_path)
+
+        if not os.path.exists(subtitle_path):
+            print(f"Failed to extract subtitles from {source_path}")
+            return None
+
 
     with open(subtitle_path, 'r', encoding='utf-8') as f:
         blocks = f.read().strip().split('\n\n')
@@ -350,6 +422,11 @@ def get_subtitle_block_from_sound_line_and_sentence_text(sound_line: str, senten
                 return formatted_block
 
     return None
+def get_subtitle_path_from_filename(filename):
+    filename_base, file_extension = os.path.splitext(filename)
+    config = get_config_data()
+    target_language_code = config.get("subs_target_language_code")
+    target_subtitle_track_num = config.get("target_subtitle_track_num")
 
 def get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text: str):
     for filename in os.listdir(addon_source_folder):
@@ -361,7 +438,7 @@ def get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text: str):
 
             # extract subtitles if .srt doesnt exist
             if not os.path.exists(subtitle_path):
-                extract_first_subtitle_file(video_path, subtitle_path)
+                extract_subtitle_files(video_path, subtitle_path)
                 if not os.path.exists(subtitle_path):
                     print(f"Failed to extract subtitles from {video_path}")
                     continue

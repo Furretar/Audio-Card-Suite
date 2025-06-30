@@ -376,6 +376,7 @@ def generate_fields_helper(editor):
     return match.group(1) if match else None
 
 def generate_fields_sound_sentence_image(sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx):
+    print(f"gen fields sound line: {sound_line}")
     sentence_blocks = [line for line in sentence_text.splitlines() if line.strip()]
 
     sentence_lines = [line for line in sentence_text.split(" ") if line.strip()]
@@ -403,6 +404,7 @@ def generate_fields_sound_sentence_image(sound_line, sound_idx, sentence_text, s
 
 
     first_sound_line, first_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
+    print(f"first_sound_line: {first_sound_line}")
 
     if not first_block or len(first_block) < 4:
         print(f"Invalid or incomplete block: {first_block}")

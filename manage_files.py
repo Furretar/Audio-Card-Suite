@@ -229,14 +229,14 @@ def get_ffmpeg_exe_path():
 def extract_subtitle_files(video_path, srt_output_path):
     config = get_config_data()
     print(f"config: {config}")
-    target_subtitle_track_num = config.get("target_subtitle_track_num")
-    translation_subtitle_track_num = config.get("translation_subtitle_track_num")
+    target_subtitle_track = config.get("target_subtitle_track")
+    translation_subtitle_track = config.get("translation_subtitle_track")
 
     exe_path, probe_path = get_ffmpeg_exe_path()
 
     def get_lang_code(track_num):
         if not track_num:
-            showInfo("tracks not set")
+            showInfo("track not set")
             return
         cmd = [
             probe_path,
@@ -253,45 +253,46 @@ def extract_subtitle_files(video_path, srt_output_path):
         except Exception:
             return ''
 
-    target_lang_code = get_lang_code(target_subtitle_track_num)
-    if not target_lang_code:
-        showInfo("tracks not set")
+    if not target_subtitle_track:
+        showInfo("target_lang_code track not set")
         return
-    translation_lang_code = get_lang_code(translation_subtitle_track_num)
-    if not translation_lang_code:
-        showInfo("tracks not set")
+    target_lang_code = get_lang_code(target_subtitle_track)
+    if not translation_subtitle_track:
+        showInfo("translation_lang_code track not set")
         return
-    srt_output_path_no_ext = os.path.splitext(srt_output_path)[0]
+    translation_lang_code = get_lang_code(translation_subtitle_track)
+
+    srt_output_path_before_backtick = srt_output_path.split('`')[0]
     note_type_name = list(config.get("mapped_fields", {}).keys())[0]
     translation_field = get_field_key_from_label(note_type_name, "Translation Sub Line", config)
 
     # target line
-    tagged_target_subtitle = f"{srt_output_path_no_ext}`track_{target_subtitle_track_num}`{target_lang_code}.srt"
+    tagged_target_subtitle = f"{srt_output_path_before_backtick}`track_{target_subtitle_track}`{target_lang_code}.srt"
     target_path = os.path.join(addon_source_folder, os.path.basename(tagged_target_subtitle))
-    if target_subtitle_track_num > 0 and not os.path.exists(target_path):
+    if target_subtitle_track > 0 and not os.path.exists(target_path):
         try:
             print(f"Extracting target_subtitle_track subtitle for {video_path}")
             subprocess.run([
                 exe_path,
                 "-y",
                 "-i", video_path,
-                "-map", f"0:s:{target_subtitle_track_num - 1}",
+                "-map", f"0:s:{target_subtitle_track - 1}",
                 f"{tagged_target_subtitle}"
             ], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Failed to extract target subtitles from {video_path}: {e}")
 
     # translation line
-    tagged_translation_subtitle = f"{srt_output_path_no_ext}`track_{translation_subtitle_track_num}`{translation_lang_code}.srt"
+    tagged_translation_subtitle = f"{srt_output_path_before_backtick}`track_{translation_subtitle_track}`{translation_lang_code}.srt"
     translation_path = os.path.join(addon_source_folder, os.path.basename(tagged_translation_subtitle))
-    if translation_subtitle_track_num > 0 and translation_field and not os.path.exists(translation_path):
+    if translation_subtitle_track > 0 and translation_field and not os.path.exists(translation_path):
         try:
-            print(f"Extracting translation_subtitle_track_num subtitle for {video_path}")
+            print(f"Extracting translation_subtitle_track subtitle for {video_path}")
             subprocess.run([
                 exe_path,
                 "-y",
                 "-i", video_path,
-                "-map", f"0:s:{translation_subtitle_track_num - 1}",
+                "-map", f"0:s:{translation_subtitle_track - 1}",
                 f"{tagged_translation_subtitle}"
             ], check=True)
         except subprocess.CalledProcessError as e:
@@ -347,10 +348,12 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str)
 
     if not sound_line:
         block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text)
+        print(f"valid bactick subtitle path: {subtitle_path}")
         print(f"\nblock from text {sentence_text}: {block}\n")
         if not block or not subtitle_path:
             return None, None
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
+        print(f"valid backtick sound line: {sound_line}")
         return sound_line, block
 
     format = detect_format(sound_line)
@@ -365,8 +368,9 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str)
 
 
     filename_base = data["filename_base"]
+    filename = data["filename"]
     source_path = get_source_file(filename_base)
-    subtitle_path = os.path.splitext(source_path)[0] + ".srt"
+    subtitle_path = get_subtitle_path_from_filename(filename_base)
 
 
     if format == "backtick":
@@ -422,28 +426,41 @@ def get_subtitle_block_from_sound_line_and_sentence_text(sound_line: str, senten
                 return formatted_block
 
     return None
+
+
 def get_subtitle_path_from_filename(filename):
-    filename_base, file_extension = os.path.splitext(filename)
+    filename_base, _ = os.path.splitext(filename)
     config = get_config_data()
-    target_language_code = config.get("subs_target_language_code")
-    target_subtitle_track_num = config.get("target_subtitle_track_num")
+
+    target_language_code = config.get("target_language_code") or "und"
+    target_subtitle_track = config.get("target_subtitle_track")
+
+    if target_subtitle_track is None:
+        raise ValueError("target_subtitle_track is missing from config")
+
+    tagged_subtitle_file = f"{filename_base}`track_{target_subtitle_track}`{target_language_code}.srt"
+    tagged_subtitle_path = os.path.join(addon_source_folder, tagged_subtitle_file)
+
+    return tagged_subtitle_path
+
 
 def get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text: str):
     for filename in os.listdir(addon_source_folder):
         print(f"checking filename: {filename}")
         filename_base, file_extension = os.path.splitext(filename)
         if file_extension.lower() in video_exts or file_extension.lower() in audio_exts:
-            video_path = os.path.join(addon_source_folder, filename)
-            subtitle_path = os.path.join(addon_source_folder, filename_base + ".srt")
+            source_path = os.path.join(addon_source_folder, filename)
+            tagged_subtitle_path = get_subtitle_path_from_filename(filename)
 
             # extract subtitles if .srt doesnt exist
-            if not os.path.exists(subtitle_path):
-                extract_subtitle_files(video_path, subtitle_path)
-                if not os.path.exists(subtitle_path):
-                    print(f"Failed to extract subtitles from {video_path}")
+            if not os.path.exists(tagged_subtitle_path):
+                print(f"subtitle path does not exist: {tagged_subtitle_path}")
+                extract_subtitle_files(source_path, tagged_subtitle_path)
+                if not os.path.exists(tagged_subtitle_path):
+                    print(f"Failed to extract subtitles from {tagged_subtitle_path}")
                     continue
 
-            with open(subtitle_path, 'r', encoding='utf-8') as f:
+            with open(tagged_subtitle_path, 'r', encoding='utf-8') as f:
                 blocks = f.read().strip().split('\n\n')
 
             for block in blocks:
@@ -452,7 +469,7 @@ def get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text: str):
                     subtitle_text = formatted_block[3]
 
                     if normalize_text(sentence_text) in normalize_text(subtitle_text):
-                        return formatted_block, subtitle_path
+                        return formatted_block, tagged_subtitle_path
 
     return None, None
 
@@ -473,7 +490,7 @@ def get_sound_line_from_subtitle_block_and_path(block, subtitle_path) -> str:
         print("Error: subtitle_path is None")
         return ""
 
-    filename_base, _ = os.path.splitext(os.path.basename(subtitle_path))
+    filename_base = os.path.splitext(os.path.basename(subtitle_path))[0].split('`')[0]
 
     try:
         start_index = block[0]
@@ -851,7 +868,9 @@ def get_audio_start_time_ms(source_file_path: str) -> int:
 kbps = 192
 lufs = -16
 def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
+
     altered_data = get_altered_sound_data(sound_line, start_ms, end_ms, relative_index)
+    print("altered_data new_filename: " + altered_data['new_filename'])
     data = extract_sound_line_data(sound_line)
     if not altered_data:
         return ""

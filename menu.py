@@ -197,7 +197,7 @@ class AudioToolsDialog(QDialog):
         code = self.language_to_code(language)
         print(f"code: {code}, language: {language}")
         self.langCodeEdits[idx].setText(code)
-        if idx == 1:
+        if idx == 0:
             self.settings[f"target_language"] = language
             target_language_code = self.language_to_code(language)
             print(f"code: {target_language_code}")

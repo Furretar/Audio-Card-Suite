@@ -198,15 +198,11 @@ class AudioToolsDialog(QDialog):
         }
         return mapping.get(language, "")
 
-    def on_lang_code_changed(self, index, text):
-        code = self.language_to_code(text)
-        self.langCodeEdits[index].setText(code)
-
-        # Save to settings/config
-        key = f"lang_code_{index}"
-        self.settings[key] = text  # or save code if you prefer
-
-        self.save_settings()  # call your save method to persist changes
+    def on_lang_code_changed(self, idx, language):
+        code = self.language_to_code(language)
+        self.langCodeEdits[idx].setText(code)
+        self.settings[f"lang_code_{idx}"] = language
+        self.save_settings()
 
     def initUI(self):
         self.setWindowTitle('Audio Card Suite')

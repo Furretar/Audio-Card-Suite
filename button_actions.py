@@ -15,7 +15,7 @@ from send2trash import send2trash
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
 )
-
+import json
 try:
     from . import manage_files
 except ImportError:
@@ -31,39 +31,73 @@ sound_idx = 2
 sentence_idx = 0
 image_idx = 3
 
+addon_dir = os.path.dirname(os.path.abspath(__file__))
+config_path = os.path.join(addon_dir, "config.json")
+
 def strip_html_tags(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text)
 
+def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> str:
+    mapped_fields = config.get("mapped_fields", {}).get(note_type_name, {})
+    for field_key, mapped_label in mapped_fields.items():
+        if mapped_label == label:
+            return field_key
+    return ""
+
 def get_sound_and_sentence_from_editor(editor: Editor):
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
 
-    sound_line = ""
-    if sound_idx < len(editor.note.fields):
-        field_text_at_sound_idx = editor.note.fields[sound_idx]
-        if "[sound:" in field_text_at_sound_idx:
-            sound_line = field_text_at_sound_idx
+    note_type = editor.note.note_type()
+    note_type_name = note_type["name"]
+    fields = note_type["flds"]
 
-    image_line = ""
-    if image_idx < len(editor.note.fields):
-        field_text_at_image_idx = editor.note.fields[image_idx]
-        if "<img src=" in field_text_at_image_idx:
-            image_line = field_text_at_image_idx
+    def index_of_field(field_name):
+        for i, fld in enumerate(fields):
+            if fld["name"] == field_name:
+                return i
+        return -1
 
-    # only use selected text if sentence_text has no blocks
-    sentence_text = editor.note.fields[sentence_idx]
+    sentence_field = get_field_key_from_label(note_type_name, "Target Sub Line", config)
+    sound_field = get_field_key_from_label(note_type_name, "Target Audio", config)
+    translation_field = get_field_key_from_label(note_type_name, "Translation Sub Line", config)
+    image_field = get_field_key_from_label(note_type_name, "Image", config)
+
+    sentence_idx = index_of_field(sentence_field) if sentence_field else 0
+    sound_idx = index_of_field(sound_field) if sound_field else 2
+    translation_idx = index_of_field(translation_field) if translation_field else 4
+    image_idx = index_of_field(image_field) if image_field else 3
+
+    print(f"sentence_idx: {sentence_idx}")
+    print(f"sound_idx: {sound_idx}")
+    print(f"translation_idx: {translation_idx}")
+    print(f"image_idx: {image_idx}")
+
+    sound_line = editor.note.fields[sound_idx] if 0 <= sound_idx < len(editor.note.fields) else ""
+    if "[sound:" not in sound_line:
+        sound_line = ""
+
+    image_line = editor.note.fields[image_idx] if 0 <= image_idx < len(editor.note.fields) else ""
+    if "<img src=" not in image_line:
+        image_line = ""
+
+    sentence_text = editor.note.fields[sentence_idx] if 0 <= sentence_idx < len(editor.note.fields) else ""
     format = manage_files.detect_format(sound_line)
     if format != "backtick":
         selected_text = editor.web.selectedText().strip()
         if selected_text:
             sentence_text = selected_text
             print(f"using selected text: {sentence_text}")
-    else:
-        print("format is backtick, using normal field")
 
-    sound_line = strip_html_tags(sound_line)
-    sentence_text = strip_html_tags(sentence_text)
-    image_line = strip_html_tags(image_line)
+    return (
+        strip_html_tags(sound_line),
+        sound_idx,
+        strip_html_tags(sentence_text),
+        sentence_idx,
+        strip_html_tags(image_line),
+        image_idx,
+    )
 
-    return sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx
 
 def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index):
     data = manage_files.extract_sound_line_data(sound_line)
@@ -392,6 +426,8 @@ def is_normalized(sound_line):
     return bool(re.search(r'`\-\d+LUFS\.\w+$', sound_line))
 
 def bulk_generate(deck, note_type, overwrite, normalize, lufs, kbps):
+
+
     current_deck_name = deck["name"]
 
     print("Running bulk_generate...")

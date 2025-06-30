@@ -25,17 +25,9 @@
   "selected_tab_index": 0,
   "mapped_fields": {
     "1Chinese": {
-      "Expression": "Target Audio",
-      "Definitions": "None",
-      "SentenceAudio": "None",
-      "Image": "None",
-      "Translation": "None",
-      "Ruby (Bopomofo)": "None",
-      "Simplified": "None",
-      "Traditional": "None",
-      "Pinyin": "None",
-      "Bopomofo": "None",
-      "Ruby": "None"
+      "Expression": "Target Sub Line",
+      "SentenceAudio": "Target Audio",
+      "Translation": "Translation Sub Line"
     }
   },
   "lang_code_0": "Chinese",

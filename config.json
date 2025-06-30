@@ -10,14 +10,15 @@
   "subs_native_language": "",
   "subs_target_language_code": "",
   "subs_native_language_code": "",
-  "normalize_audio": false,
-  "lufs_target": -14,
-  "target_audio_track_num": 0,
-  "target_subtitle_track_num": 0,
-  "translation_audio_track_num": 0,
-  "translation_subtitle_track_num": 0,
+  "normalize_audio": true,
+  "lufs_target": -16,
+  "target_audio_track_num": 1,
+  "target_subtitle_track_num": 1,
+  "translation_audio_track_num": 2,
+  "translation_subtitle_track_num": 2,
   "lang_target_audio_code": "",
   "lang_target_subtitle_code": "",
   "lang_translation_audio_code": "",
-  "lang_translation_subtitle_code": ""
+  "lang_translation_subtitle_code": "",
+  "selected_tab_index": 1
 }

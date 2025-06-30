@@ -12,8 +12,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
     QPushButton, QCheckBox
 )
-import json
-
+import os, json
 
 
 from PyQt6.QtWidgets import (
@@ -56,11 +55,12 @@ from aqt.qt import *
 class AudioToolsDialog(QDialog):
     def __init__(self):
         super().__init__()
-        self.addon_id = "1234567890"
+        self.addon_id = "Audio-Card-Suite"
         self.load_settings() # Load settings when dialog initializes
         self.initUI()
+        self.tabs.currentChanged.connect(self.on_tab_changed)
 
-    import os, json
+
 
     def load_settings(self):
         config_file_path = os.path.join(addon_dir, "config.json")
@@ -239,6 +239,7 @@ class AudioToolsDialog(QDialog):
         self.lufsSpinner.setValue(-14)
         self.lufsSpinner.setSuffix(" LUFS")
         self.lufsSpinner.setToolTip("Target loudness level")
+        self.lufsSpinner.setValue(self.settings.get("lufs_target", -14))
 
         audioLayout.addWidget(self.normalize_checkbox, 2, 0, 1, 2)
         audioLayout.addWidget(self.lufsSpinner, 3, 0)
@@ -259,7 +260,7 @@ class AudioToolsDialog(QDialog):
         info_label = QLabel("The currently selected tab will have its settings used.")
         subsLayout.addWidget(info_label)
 
-        tabs = QTabWidget()
+        self.tabs = QTabWidget()
 
         # Language Codes Tab
         langCodesTab = QWidget()
@@ -291,7 +292,7 @@ class AudioToolsDialog(QDialog):
             langGrid.addWidget(edit, i, 2)
 
         langCodesTab.setLayout(langGrid)
-        tabs.addTab(langCodesTab, "Language Codes")
+        self.tabs.addTab(langCodesTab, "Language Codes")
 
         # Tracks Tab
         tracksTab = QWidget()
@@ -315,9 +316,14 @@ class AudioToolsDialog(QDialog):
             tracksGrid.addWidget(spinner, i, 1)
 
         tracksTab.setLayout(tracksGrid)
-        tabs.addTab(tracksTab, "Tracks")
+        self.tabs.addTab(tracksTab, "Tracks")
 
-        subsLayout.addWidget(tabs)
+        self.trackSpinners[0].setValue(self.settings.get("target_audio_track_num", 0))
+        self.trackSpinners[1].setValue(self.settings.get("target_subtitle_track_num", 0))
+        self.trackSpinners[2].setValue(self.settings.get("translation_audio_track_num", 0))
+        self.trackSpinners[3].setValue(self.settings.get("translation_subtitle_track_num", 0))
+
+        subsLayout.addWidget(self.tabs)
         subsGroup.setLayout(subsLayout)
 
         # Add subtitles group first (full width)
@@ -460,6 +466,14 @@ class AudioToolsDialog(QDialog):
 
         self.apply_settings_to_ui()
 
+    # In your dialog class, after creating the tabs widget (assuming self.tabs):
+
+
+
+    def on_tab_changed(self, index):
+        self.settings["selected_tab_index"] = index
+        self.save_settings()
+
     def apply_settings_to_ui(self):
         self.imageHeightEdit.setValue(int(self.settings["image_height"]))
         self.padStartEdit.setValue(int(self.settings["pad_start"]))
@@ -487,10 +501,12 @@ class AudioToolsDialog(QDialog):
         for i, edit in enumerate(self.langCodeEdits):
             edit.setText(self.settings.get(code_keys[i], ""))
 
-        # Trigger UI update if needed for bitrate/lufs visibility
-        self.on_audio_ext_changed(self.audioExtCombo.currentText())
+        # Restore the selected tab index
+        selected_index = self.settings.get("selected_tab_index", 0)
+        if 0 <= selected_index < self.tabs.count():
+            self.tabs.setCurrentIndex(selected_index)
 
-        
+        self.on_audio_ext_changed(self.audioExtCombo.currentText())
 
     def on_audio_ext_changed(self, text):
         if text == "flac":

@@ -274,6 +274,19 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         editor.loadNote()
 
 
+        if new_sound_line.startswith("[sound:") and new_sound_line.endswith("]"):
+            filename = new_sound_line[len("[sound:"):-1]
+            media_path = os.path.join(mw.col.media.dir(), filename)
+
+            def wait_and_play():
+                if os.path.exists(media_path) and os.path.getsize(media_path) > 0:
+                    print(f"Playing sound from field {sound_idx}: {filename}")
+                    play(filename)
+                else:
+                    print("File not ready, retrying...")
+                    QTimer.singleShot(50, wait_and_play)
+
+            QTimer.singleShot(50, wait_and_play)
 
     else:
         print("No new sound tag returned, field not updated.")
@@ -458,9 +471,12 @@ def bulk_generate(deck, note_type, overwrite, normalize, lufs, kbps):
                         print(f"ffmpeg command failed: {e}")
                         continue
 
-                    if os.path.exists(collection_path) and os.path.exists(new_collection_path):
+                    if os.path.exists(new_collection_path):
                         print(f"trashing: {collection_path}")
                         send2trash(collection_path)
+                    else:
+                        print(f"Error: new file not found after ffmpeg: {new_collection_path}")
+                        continue
 
                     new_filename = os.path.basename(new_collection_path)
                     note.fields[sound_idx] = f"[sound:{new_filename}]"

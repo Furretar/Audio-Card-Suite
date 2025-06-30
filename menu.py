@@ -52,15 +52,48 @@ SHIFT_BUTTON_BG_COLOR = "#f0d0d0"
 from aqt import mw
 from aqt.qt import *
 
+class ConfigManager:
+    def __init__(self, config_path):
+        self.config_path = config_path
+        self.data = {"fields": [], "mapped_fields": {}}
+        self.load()
+
+    def load(self):
+        if os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    self.data = json.load(f)
+            except Exception:
+                self.data = {"fields": [], "mapped_fields": {}}
+        else:
+            self.data = {"fields": [], "mapped_fields": {}}
+
+    def save(self):
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            json.dump(self.data, f, indent=2)
+
+
+
+    def getMappedFields(self, model_name):
+        return self.data.get("mapped_fields", {}).get(model_name, {})
+
+    def updateMapping(self, model_name, mapping):
+        if "mapped_fields" not in self.data:
+            self.data["mapped_fields"] = {}
+        self.data["mapped_fields"][model_name] = mapping
+        self.save()
+
+
 class AudioToolsDialog(QDialog):
     def __init__(self):
         super().__init__()
         self.addon_id = "Audio-Card-Suite"
         self.load_settings() # Load settings when dialog initializes
+        config_file_path = os.path.join(addon_dir, "config.json")
+        self.configManager = ConfigManager(config_file_path)
+
         self.initUI()
         self.tabs.currentChanged.connect(self.on_tab_changed)
-
-
 
     def load_settings(self):
         config_file_path = os.path.join(addon_dir, "config.json")
@@ -84,10 +117,8 @@ class AudioToolsDialog(QDialog):
             "target_subtitle_track_num": 0,
             "translation_audio_track_num": 0,
             "translation_subtitle_track_num": 0,
-            "lang_target_audio_code": "",
-            "lang_target_subtitle_code": "",
-            "lang_translation_audio_code": "",
-            "lang_translation_subtitle_code": "",
+            "lang_target_code": "",
+            "lang_translation_code": "",
         }
 
         if os.path.exists(config_file_path):
@@ -127,10 +158,8 @@ class AudioToolsDialog(QDialog):
         self.settings["translation_subtitle_track_num"] = self.trackSpinners[3].value()
 
         # Language codes (read from QLineEdit, which are read-only but store selected codes)
-        self.settings["lang_target_audio_code"] = self.langCodeEdits[0].text()
-        self.settings["lang_target_subtitle_code"] = self.langCodeEdits[1].text()
-        self.settings["lang_translation_audio_code"] = self.langCodeEdits[2].text()
-        self.settings["lang_translation_subtitle_code"] = self.langCodeEdits[3].text()
+        self.settings["lang_target_code"] = self.langCodeEdits[0].text()
+        self.settings["lang_translation_code"] = self.langCodeEdits[1].text()
 
         config_path = os.path.join(addon_dir, "config.json")
         with open(config_path, "w", encoding="utf-8") as f:
@@ -138,10 +167,52 @@ class AudioToolsDialog(QDialog):
 
         print("Settings saved:", self.settings) # Debug print
 
+    def show_fields_menu(self):
+        current_model_name = self.modelButton.text()
+        model = mw.col.models.by_name(current_model_name)
+        if not model:
+            showInfo(f"Note type '{current_model_name}' not found.")
+            return
+
+        menu = QMenu(self.modelFieldsButton)
+        for field in model['flds']:
+            action = QAction(field['name'], menu)
+            # Connect the action to some slot if needed, for example, print or store the field
+            action.triggered.connect(lambda checked, f=field['name']: self.on_field_selected(f))
+            menu.addAction(action)
+        menu.exec(self.modelFieldsButton.mapToGlobal(self.modelFieldsButton.rect().bottomLeft()))
+
+    def on_field_selected(self, field_name):
+        # You can update your UI or settings with the selected field here
+        print(f"Selected field: {field_name}")
+        # For example, set the modelFieldsButton text to show selection (optional)
+        self.modelFieldsButton.setText(field_name)
+
+    def language_to_code(language, *args):
+        mapping = {
+            "None": "",
+            "Chinese": "chi",
+            "Japanese": "jpn",
+            "English": "eng",
+            "Cantonese": "yue"
+        }
+        return mapping.get(language, "")
+
+    def on_lang_code_changed(self, index, text):
+        code = self.language_to_code(text)
+        self.langCodeEdits[index].setText(code)
+
+        # Save to settings/config
+        key = f"lang_code_{index}"
+        self.settings[key] = text  # or save code if you prefer
+
+        self.save_settings()  # call your save method to persist changes
+
     def initUI(self):
         self.setWindowTitle('Audio Card Suite')
 
         vbox = QVBoxLayout()
+
 
         importGroup = QGroupBox("Import Options")
         self.modelButton = QPushButton()
@@ -151,16 +222,17 @@ class AudioToolsDialog(QDialog):
             self.modelButton.setText(mw.col.models.current()['name'])
         self.modelButton.setAutoDefault(False)
         self.modelButton.clicked.connect(lambda: None)
-        self.modelFieldsButton = QPushButton()
-        self.modelFieldsButton.clicked.connect(lambda: None)
         self.deckButton = QPushButton(self.settings["default_deck"])
         self.deckButton.clicked.connect(lambda: None)
 
+        self.modelFieldsButton = QPushButton()
         self.modelFieldsButton.setText("⚙️")
         self.modelFieldsButton.setFixedWidth(32)
+        self.modelFieldsButton.clicked.connect(lambda: self.mapFields(self.modelButton.text()))
+
 
         grid = QGridLayout()
-        grid.addWidget(QLabel("Type:"), 0, 0)
+        grid.addWidget(QLabel("Note Type:"), 0, 0)
         grid.addWidget(self.modelButton, 0, 1)
         grid.setColumnStretch(1, 1)
         grid.addWidget(self.modelFieldsButton, 0, 2)
@@ -267,10 +339,8 @@ class AudioToolsDialog(QDialog):
         langGrid = QGridLayout()
 
         lang_labels = [
-            "Target Audio Code",
-            "Target subtitle code",
-            "Translation Audio Code",
-            "Translation subtitle code",
+            "Target Language Code",
+            "Translation Language Code",
         ]
 
         self.langCodeCombos = []
@@ -281,9 +351,25 @@ class AudioToolsDialog(QDialog):
             combo = QComboBox()
             edit = QLineEdit("")
             edit.setFixedWidth(24)
-            edit.setReadOnly(True)
             edit.setStyleSheet("QLineEdit{background: #f4f3f4;}")
             edit.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+
+            combo.addItem("None")
+            combo.addItem("Chinese")
+            combo.addItem("Japanese")
+            combo.addItem("English")
+            combo.addItem("Cantonese")
+
+            # Load from config
+            saved_language = self.settings.get(f"lang_code_{i}", "None")
+            idx = combo.findText(saved_language)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+                edit.setText(self.language_to_code(saved_language))
+
+            combo.currentTextChanged.connect(lambda text, idx=i: self.on_lang_code_changed(idx, text))
+
+
 
             self.langCodeCombos.append(combo)
             self.langCodeEdits.append(edit)
@@ -466,9 +552,11 @@ class AudioToolsDialog(QDialog):
 
         self.apply_settings_to_ui()
 
-    # In your dialog class, after creating the tabs widget (assuming self.tabs):
 
 
+    def mapFields(self, model_name):
+        fm = FieldMapping(model_name, self.configManager, parent=self)
+        fm.exec()
 
     def on_tab_changed(self, index):
         self.settings["selected_tab_index"] = index
@@ -493,10 +581,8 @@ class AudioToolsDialog(QDialog):
         self.trackSpinners[3].setValue(self.settings.get("translation_subtitle_track_num", 0))
 
         code_keys = [
-            "lang_target_audio_code",
-            "lang_target_subtitle_code",
-            "lang_translation_audio_code",
-            "lang_translation_subtitle_code",
+            "lang_target_code",
+            "lang_translation_code",
         ]
         for i, edit in enumerate(self.langCodeEdits):
             edit.setText(self.settings.get(code_keys[i], ""))
@@ -519,7 +605,63 @@ class AudioToolsDialog(QDialog):
         show_lufs = self.normalize_checkbox.isChecked()
         self.lufsSpinner.setVisible(show_lufs)
 
-    
+
+class FieldMapping(QDialog):
+    def __init__(self, name, configManager, parent=None):
+        QDialog.__init__(self, parent)
+        self.configManager = configManager
+        self.mappedFields = self.configManager.getMappedFields(name)
+        self.name = name
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle(self.name)
+        vbox = QVBoxLayout()
+        self.fields = []
+
+        groupBox = QGroupBox("Map Fields")
+        m = mw.col.models.by_name(self.name)
+        fields = mw.col.models.field_names(m)
+        grid = QGridLayout()
+
+        for index, field in enumerate(fields):
+            line = QLineEdit(field)
+            line.setReadOnly(True)
+            grid.addWidget(line, index, 0)
+
+            comboBox = QComboBox()
+            comboBox.addItem("None")
+            comboBox.addItem("Target Audio")
+            comboBox.addItem("Target Sub Line")
+            comboBox.addItem("Translation Audio")
+            comboBox.addItem("Translation Sub Line")
+            if field in self.mappedFields:
+                comboBox.setCurrentIndex(comboBox.findText(self.mappedFields[field]))
+            else:
+                comboBox.setCurrentIndex(0)
+            grid.addWidget(comboBox, index, 1)
+
+            self.fields.append((field, comboBox))
+        groupBox.setLayout(grid)
+        vbox.addWidget(groupBox)
+
+        self.buttonBox = QDialogButtonBox(self)
+        self.buttonBox.setStandardButtons(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        self.buttonBox.setOrientation(Qt.Orientation.Horizontal)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        vbox.addWidget(self.buttonBox)
+
+        self.setLayout(vbox)
+
+    def accept(self):
+        m = {}
+        for field, box in self.fields:
+            if box.currentText() != "None":
+                m[field] = box.currentText()
+        self.configManager.updateMapping(self.name, m)
+        self.close()
+
 
 
 

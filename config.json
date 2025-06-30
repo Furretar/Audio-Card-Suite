@@ -16,9 +16,28 @@
   "target_subtitle_track_num": 1,
   "translation_audio_track_num": 2,
   "translation_subtitle_track_num": 2,
+  "lang_target_code": "",
+  "lang_translation_code": "",
   "lang_target_audio_code": "",
   "lang_target_subtitle_code": "",
   "lang_translation_audio_code": "",
   "lang_translation_subtitle_code": "",
-  "selected_tab_index": 1
+  "selected_tab_index": 0,
+  "mapped_fields": {
+    "1Chinese": {
+      "Expression": "Target Audio",
+      "Definitions": "None",
+      "SentenceAudio": "None",
+      "Image": "None",
+      "Translation": "None",
+      "Ruby (Bopomofo)": "None",
+      "Simplified": "None",
+      "Traditional": "None",
+      "Pinyin": "None",
+      "Bopomofo": "None",
+      "Ruby": "None"
+    }
+  },
+  "lang_code_0": "Chinese",
+  "lang_code_1": "Japanese"
 }

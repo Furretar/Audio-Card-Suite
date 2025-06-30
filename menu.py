@@ -12,6 +12,8 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
     QPushButton, QCheckBox
 )
+import json
+
 
 
 from PyQt6.QtWidgets import (
@@ -54,11 +56,21 @@ from aqt.qt import *
 class AudioToolsDialog(QDialog):
     def __init__(self):
         super().__init__()
-        self.settings = {
+        self.addon_id = "1234567890"
+        self.load_settings() # Load settings when dialog initializes
+        self.initUI()
+
+    import os, json
+
+    def load_settings(self):
+        config_file_path = os.path.join(addon_dir, "config.json")
+        print(f"Loading config for {self.addon_id} from: {config_file_path}")
+
+        default_settings = {
             "default_model": "Basic",
             "default_deck": "Default",
             "audio_ext": "mp3",
-            "bitrate": "192",
+            "bitrate": 192,
             "image_height": 1080,
             "pad_start": 0,
             "pad_end": 0,
@@ -66,8 +78,65 @@ class AudioToolsDialog(QDialog):
             "subs_native_language": "",
             "subs_target_language_code": "",
             "subs_native_language_code": "",
+            "normalize_audio": False,
+            "lufs_target": -14,
+            "target_audio_track_num": 0,
+            "target_subtitle_track_num": 0,
+            "translation_audio_track_num": 0,
+            "translation_subtitle_track_num": 0,
+            "lang_target_audio_code": "",
+            "lang_target_subtitle_code": "",
+            "lang_translation_audio_code": "",
+            "lang_translation_subtitle_code": "",
         }
-        self.initUI()
+
+        if os.path.exists(config_file_path):
+            try:
+                with open(config_file_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                    print(f"Loaded config from file: {config}")
+            except Exception as e:
+                print(f"Invalid config.json, resetting to defaults. Error: {e}")
+                config = default_settings.copy()
+                with open(config_file_path, "w", encoding="utf-8") as f:
+                    json.dump(config, f, indent=2)
+        else:
+            print("No config.json found, creating default config.")
+            config = default_settings.copy()
+            with open(config_file_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2)
+
+        self.settings = default_settings.copy()
+        self.settings.update(config)
+
+    def save_settings(self):
+        """Saves current UI settings to Anki's add-on configuration."""
+        # Update self.settings from UI elements before saving
+        self.settings["image_height"] = int(self.imageHeightEdit.text())
+        self.settings["pad_start"] = int(self.padStartEdit.text())
+        self.settings["pad_end"] = int(self.padEndEdit.text())
+        self.settings["audio_ext"] = self.audioExtCombo.currentText()
+        self.settings["bitrate"] = self.bitrateEdit.value()
+        self.settings["normalize_audio"] = self.normalize_checkbox.isChecked()
+        self.settings["lufs_target"] = self.lufsSpinner.value()
+
+        # Save track numbers
+        self.settings["target_audio_track_num"] = self.trackSpinners[0].value()
+        self.settings["target_subtitle_track_num"] = self.trackSpinners[1].value()
+        self.settings["translation_audio_track_num"] = self.trackSpinners[2].value()
+        self.settings["translation_subtitle_track_num"] = self.trackSpinners[3].value()
+
+        # Language codes (read from QLineEdit, which are read-only but store selected codes)
+        self.settings["lang_target_audio_code"] = self.langCodeEdits[0].text()
+        self.settings["lang_target_subtitle_code"] = self.langCodeEdits[1].text()
+        self.settings["lang_translation_audio_code"] = self.langCodeEdits[2].text()
+        self.settings["lang_translation_subtitle_code"] = self.langCodeEdits[3].text()
+
+        config_path = os.path.join(addon_dir, "config.json")
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(self.settings, f, indent=2)
+
+        print("Settings saved:", self.settings) # Debug print
 
     def initUI(self):
         self.setWindowTitle('Audio Card Suite')
@@ -105,11 +174,13 @@ class AudioToolsDialog(QDialog):
         # Editable input groups: Image, Pad Timings, Audio (new)
         hbox = QHBoxLayout()
 
-        # Image group (Height only)
         imageGroup = QGroupBox("Image")
         imageLayout = QGridLayout()
         imageLayout.addWidget(QLabel("Height:"), 0, 0)
-        self.imageHeightEdit = QLineEdit(str(self.settings["image_height"]))
+        self.imageHeightEdit = QSpinBox()
+        self.imageHeightEdit.setRange(1, 9999)
+        self.imageHeightEdit.setValue(self.settings["image_height"])
+        self.imageHeightEdit.valueChanged.connect(self.save_settings)
         imageLayout.addWidget(self.imageHeightEdit, 0, 1)
         imageLayout.addWidget(QLabel("px"), 0, 2)
         imageGroup.setLayout(imageLayout)
@@ -120,13 +191,19 @@ class AudioToolsDialog(QDialog):
         padLayout = QGridLayout()
         padLayout.addWidget(QLabel("Start:"), 0, 0)
         padLayout.addWidget(QLabel("End:"), 1, 0)
-        self.padStartEdit = QLineEdit(str(self.settings["pad_start"]))
-        self.padEndEdit = QLineEdit(str(self.settings["pad_end"]))
+
+        self.padStartEdit = QSpinBox()
+        self.padStartEdit.setRange(-10000000, 10000000)  # Adjust max as needed
+        self.padStartEdit.setValue(self.settings["pad_start"])
+
+        self.padEndEdit = QSpinBox()
+        self.padEndEdit.setRange(-10000000, 10000000)  # Adjust max as needed
+        self.padEndEdit.setValue(self.settings["pad_end"])
+
         padLayout.addWidget(self.padStartEdit, 0, 1)
         padLayout.addWidget(QLabel("ms"), 0, 2)
         padLayout.addWidget(self.padEndEdit, 1, 1)
         padLayout.addWidget(QLabel("ms"), 1, 2)
-        padLayout.addWidget(QLabel(""), 1, 2)  # empty for alignment
         padGroup.setLayout(padLayout)
         hbox.addWidget(padGroup)
 
@@ -289,8 +366,6 @@ class AudioToolsDialog(QDialog):
         convertBtn.clicked.connect(confirm_conversion)
         sourceLayout.addWidget(convertBtn)
 
-
-
         # Add source group below subtitles group
         vbox.addWidget(sourceGroup)
 
@@ -373,7 +448,49 @@ class AudioToolsDialog(QDialog):
 
         self.on_audio_ext_changed(self.audioExtCombo.currentText())
 
+        self.bitrateEdit.valueChanged.connect(self.save_settings)
+        self.lufsSpinner.valueChanged.connect(self.save_settings)
+        for spinner in self.trackSpinners:
+            spinner.valueChanged.connect(self.save_settings)
+        self.imageHeightEdit.editingFinished.connect(self.save_settings)
+        self.padStartEdit.editingFinished.connect(self.save_settings)
+        self.padEndEdit.editingFinished.connect(self.save_settings)
+        self.normalize_checkbox.stateChanged.connect(self.save_settings)
+        self.audioExtCombo.currentTextChanged.connect(self.save_settings)
 
+        self.apply_settings_to_ui()
+
+    def apply_settings_to_ui(self):
+        self.imageHeightEdit.setValue(int(self.settings["image_height"]))
+        self.padStartEdit.setValue(int(self.settings["pad_start"]))
+        self.padEndEdit.setValue(int(self.settings["pad_end"]))
+
+        idx = self.audioExtCombo.findText(self.settings["audio_ext"])
+        if idx >= 0:
+            self.audioExtCombo.setCurrentIndex(idx)
+
+        self.bitrateEdit.setValue(int(self.settings["bitrate"]))
+        self.normalize_checkbox.setChecked(self.settings.get("normalize_audio", False))
+        self.lufsSpinner.setValue(self.settings.get("lufs_target", -14))
+
+        self.trackSpinners[0].setValue(self.settings.get("target_audio_track_num", 0))
+        self.trackSpinners[1].setValue(self.settings.get("target_subtitle_track_num", 0))
+        self.trackSpinners[2].setValue(self.settings.get("translation_audio_track_num", 0))
+        self.trackSpinners[3].setValue(self.settings.get("translation_subtitle_track_num", 0))
+
+        code_keys = [
+            "lang_target_audio_code",
+            "lang_target_subtitle_code",
+            "lang_translation_audio_code",
+            "lang_translation_subtitle_code",
+        ]
+        for i, edit in enumerate(self.langCodeEdits):
+            edit.setText(self.settings.get(code_keys[i], ""))
+
+        # Trigger UI update if needed for bitrate/lufs visibility
+        self.on_audio_ext_changed(self.audioExtCombo.currentText())
+
+        
 
     def on_audio_ext_changed(self, text):
         if text == "flac":
@@ -385,6 +502,9 @@ class AudioToolsDialog(QDialog):
 
         show_lufs = self.normalize_checkbox.isChecked()
         self.lufsSpinner.setVisible(show_lufs)
+
+    
+
 
 
 def open_audio_tools_dialog():

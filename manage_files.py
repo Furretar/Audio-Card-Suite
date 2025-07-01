@@ -16,12 +16,6 @@ import json
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 config_dir = os.path.join(addon_dir, "config.json")
 
-def get_config_data():
-    if os.path.exists(config_dir):
-        with open(config_dir, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
-
 
 def get_collection_dir():
     from aqt import mw
@@ -224,14 +218,14 @@ def get_ffmpeg_exe_path():
 
 
 def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> str:
-    mapped_fields = config.get("mapped_fields", {}).get(note_type_name, {})
+    mapped_fields = config["mapped_fields"][note_type_name]
     for field_key, mapped_label in mapped_fields.items():
         if mapped_label == label:
             return field_key
     return ""
 
 def extract_subtitle_files(video_path, srt_output_path):
-    config = get_config_data()
+    config = extract_config_data()
     print(f"config: {config}")
     target_subtitle_track = config.get("target_subtitle_track")
     translation_subtitle_track = config.get("translation_subtitle_track")
@@ -432,7 +426,7 @@ def get_subtitle_block_from_sound_line_and_sentence_text(sound_line: str, senten
 
 def get_subtitle_path_from_filename(filename):
     filename_base, _ = os.path.splitext(filename)
-    config = get_config_data()
+    config = extract_config_data()
 
     target_language_code = config.get("target_language_code") or "und"
     target_subtitle_track = config.get("target_subtitle_track")
@@ -637,7 +631,7 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
             return ""
 
     # For all other formats (e.g., mp4, mkv, webm, etc.)
-    timestamp = convert_to_default_time_notation(image_timestamp)
+    timestamp = convert_hmsms_to_ffmpeg_time_notation(image_timestamp)
     ffmpeg_path, _ = get_ffmpeg_exe_path()
     cmd = [
         f"{ffmpeg_path}", "-y",
@@ -656,17 +650,19 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
         print("FFmpeg failed:", e)
         return ""
 
-normalize_audio = True
-lufs = -16
-temp_file_extension = "mp3"
+
+def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, collection_path) -> list:
+    config = extract_config_data()
+    lufs = config["lufs"]
+    bitrate = config["bitrate"]
+    normalize_audio = config["normalize_audio"]
 
 
-def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, lufs, kbps, collection_path) -> list:
     ffmpeg_path, _ = get_ffmpeg_exe_path()
 
-    start = convert_to_default_time_notation(start_time)
-    end = convert_to_default_time_notation(end_time)
-    duration_sec = time_to_seconds(end) - time_to_seconds(start)
+    start = convert_hmsms_to_ffmpeg_time_notation(start_time)
+    end = convert_hmsms_to_ffmpeg_time_notation(end_time)
+    duration_sec = time_hmsms_to_seconds(end) - time_hmsms_to_seconds(start)
     if duration_sec <= 0:
         print(f"End time must be after start time, {start}, {end}")
         return []
@@ -712,9 +708,9 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, lufs,
 
     cmd += ["-c:a", codec]
 
-    if codec in ("libmp3lame", "libopus") and kbps:
+    if codec in ("libmp3lame", "libopus") and bitrate:
         # For opus, bitrate can be specified in bps (e.g., 64000 for 64 kbps)
-        bitrate = f"{kbps}k" if codec == "libmp3lame" else str(kbps * 1000)
+        bitrate = f"{bitrate}k" if codec == "libmp3lame" else str(bitrate * 1000)
         cmd += ["-b:a", bitrate]
 
     cmd.append(new_collection_path)
@@ -722,7 +718,11 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, lufs,
     return cmd
 
 
-def create_just_normalize_audio_command(source_path, lufs, kbps) -> str:
+def create_just_normalize_audio_command(source_path) -> str:
+    config = extract_config_data()
+    lufs = config["lufs"]
+    bitrate = config["bitrate"]
+
     print(f"source path test: {source_path}")
     ffmpeg_path, _ = get_ffmpeg_exe_path()
 
@@ -740,12 +740,12 @@ def create_just_normalize_audio_command(source_path, lufs, kbps) -> str:
 
     if ext_no_dot == "mp3":
         cmd += ["-c:a", "libmp3lame"]
-        if kbps:
-            cmd += ["-b:a", f"{kbps}k"]
+        if bitrate:
+            cmd += ["-b:a", f"{bitrate}k"]
     elif ext_no_dot == "opus":
         cmd += ["-c:a", "libopus"]
-        if kbps:
-            cmd += ["-b:a", str(kbps * 1000)]
+        if bitrate:
+            cmd += ["-b:a", str(bitrate * 1000)]
     elif ext_no_dot == "flac":
         cmd += ["-c:a", "flac"]
     else:
@@ -757,7 +757,7 @@ def create_just_normalize_audio_command(source_path, lufs, kbps) -> str:
 
 
 
-def convert_to_default_time_notation(t: str) -> str:
+def convert_hmsms_to_ffmpeg_time_notation(t: str) -> str:
     hmsms_match = re.match(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms", t)
     if hmsms_match:
         h, m, s, ms = hmsms_match.groups()
@@ -769,12 +769,13 @@ def convert_to_default_time_notation(t: str) -> str:
 
     raise ValueError(f"Unrecognized timestamp format: {t}")
 
-def time_to_seconds(t):
+
+def time_hmsms_to_seconds(t):
     h, m, s = t.split(':')
     s, ms = (s.split(',') if ',' in s else s.split('.'))
     return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000
 
-def time_to_milliseconds(ts: str) -> int:
+def time_hmsms_to_milliseconds(ts: str) -> int:
     pattern_hmsms = re.compile(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms")
 
     if pattern_hmsms.match(ts):
@@ -789,7 +790,7 @@ def time_to_milliseconds(ts: str) -> int:
     total_ms = (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
     return total_ms
 
-def milliseconds_to_anki_time_hmsms_format(ms: int) -> str:
+def milliseconds_to_hmsms_format(ms: int) -> str:
     hours = ms // (3600 * 1000)
     ms %= (3600 * 1000)
     minutes = ms // (60 * 1000)
@@ -867,9 +868,10 @@ def get_audio_start_time_ms(source_file_path: str) -> int:
         print(f"Could not get pts_time from packets: {e}")
         return 0
 
-kbps = 192
-lufs = -16
 def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
+    config = extract_config_data()
+    lufs = config["lufs"]
+    bitrate = config["bitrate"]
 
     altered_data = get_altered_sound_data(sound_line, start_ms, end_ms, relative_index)
     print("altered_data new_filename: " + altered_data['new_filename'])
@@ -888,7 +890,7 @@ def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
         altered_data["new_start_time"],
         altered_data["new_end_time"],
         f"{lufs}",
-        f"{kbps}",
+        f"{bitrate}",
         altered_data["new_path"]
     )
     try:
@@ -912,13 +914,17 @@ def convert_timestamp_dot_to_hmsms(ts: str) -> str:
 
 
 def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relative_index) -> dict:
+    config = extract_config_data()
+    normalize_audio = config["normalize_audio"]
+    lufs = config["lufs"]
+
     data = extract_sound_line_data(sound_line)
     if not data:
         return {}
 
     # convert timestamps to ms
-    orig_start_ms = time_to_milliseconds(data["start_time"])
-    orig_end_ms = time_to_milliseconds(data["end_time"])
+    orig_start_ms = time_hmsms_to_milliseconds(data["start_time"])
+    orig_end_ms = time_hmsms_to_milliseconds(data["end_time"])
 
     start_index = data["start_index"]
     end_index = data["end_index"]
@@ -942,8 +948,8 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
         print(f"Invalid time range for {sound_line}: {new_start_ms}-{new_end_ms}")
         return {}
 
-    new_start_time = milliseconds_to_anki_time_hmsms_format(new_start_ms)
-    new_end_time = milliseconds_to_anki_time_hmsms_format(new_end_ms)
+    new_start_time = milliseconds_to_hmsms_format(new_start_ms)
+    new_end_time = milliseconds_to_hmsms_format(new_end_ms)
 
     time_range = f"{new_start_time}-{new_end_time}"
     filename_parts = [data["filename_base"], "ABCD", time_range]
@@ -965,4 +971,80 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
         "new_path": new_path,
         "old_path": data["collection_path"]
     }
+
+# todo make it prefer track numbers if multiple translation language sub files exist or 0 exist
+def get_translation_line_from_sound_line(sound_line):
+    config = extract_config_data()
+    target_language_code = config["target_language_code"]
+    translation_language_code = config["translation_language_code"]
+    data = extract_sound_line_data(sound_line)
+    start_time = data["start_time"]
+    end_time = data["end_time"]
+    start_ms = time_hmsms_to_milliseconds(start_time)
+    end_ms = time_hmsms_to_milliseconds(end_time)
+    
+
+def extract_config_data():
+    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Config file not found at {config_path}")
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    default_model = config.get("default_model")
+    default_deck = config.get("default_deck")
+    audio_ext = config.get("audio_ext")
+    bitrate = config.get("bitrate")
+    image_height = config.get("image_height")
+    pad_start = config.get("pad_start")
+    pad_end = config.get("pad_end")
+    target_language = config.get("target_language")
+    translation_language = config.get("translation_language")
+    target_language_code = config.get("target_language_code")
+    translation_language_code = config.get("translation_language_code")
+    normalize_audio = config.get("normalize_audio")
+    lufs_target = config.get("lufs_target")
+    target_audio_track = config.get("target_audio_track")
+    target_subtitle_track = config.get("target_subtitle_track")
+    translation_audio_track = config.get("translation_audio_track")
+    translation_subtitle_track = config.get("translation_subtitle_track")
+    mapped_fields = config.get("mapped_fields")
+    selected_tab_index = config.get("selected_tab_index")
+
+    variables = [
+        default_model, default_deck, audio_ext, bitrate, image_height,
+        pad_start, pad_end, target_language, translation_language,
+        target_language_code, translation_language_code, normalize_audio,
+        lufs_target, target_audio_track, target_subtitle_track,
+        translation_audio_track, translation_subtitle_track,
+        mapped_fields, selected_tab_index
+    ]
+
+    if any(v is None for v in variables):
+        showInfo(f"missing field: {variables}")
+        raise ValueError("Missing required config field(s)")
+
+    return {
+        "default_model": default_model,
+        "default_deck": default_deck,
+        "audio_ext": audio_ext,
+        "bitrate": bitrate,
+        "image_height": image_height,
+        "pad_start": pad_start,
+        "pad_end": pad_end,
+        "target_language": target_language,
+        "translation_language": translation_language,
+        "target_language_code": target_language_code,
+        "translation_language_code": translation_language_code,
+        "normalize_audio": normalize_audio,
+        "lufs_target": lufs_target,
+        "target_audio_track": target_audio_track,
+        "target_subtitle_track": target_subtitle_track,
+        "translation_audio_track": translation_audio_track,
+        "translation_subtitle_track": translation_subtitle_track,
+        "mapped_fields": mapped_fields,
+        "selected_tab_index": selected_tab_index
+    }
+
 

@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 import json
 
-from manage_files import get_subtitle_path_from_filename
+from manage_files import get_subtitle_path_from_filename, get_field_key_from_label
 
 try:
     from . import manage_files
@@ -45,15 +45,14 @@ def index_of_field(field_name, fields):
     return -1
 
 def get_sound_and_sentence_from_editor(editor: Editor):
-    with open(config_dir, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    config = manage_files.extract_config_data()
 
-    mapped_fields = config.get("mapped_fields", {})
+    mapped_fields = config["mapped_fields"]
     if not mapped_fields:
         showInfo("fields not mapped")
         return
 
-    note_type_name = list(config.get("mapped_fields", {}).keys())[0]
+    note_type_name = list(config["mapped_fields"].keys())[0]
     note_type = editor.note.note_type()
 
     fields = note_type["flds"]
@@ -97,7 +96,6 @@ def get_sound_and_sentence_from_editor(editor: Editor):
         strip_html_tags(image_line),
         image_idx,
     )
-
 
 def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index):
     data = manage_files.extract_sound_line_data(sound_line)
@@ -145,10 +143,10 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
     else:
         new_start_time = new_edge_block[1]
     print(new_edge_block[3])
-    orig_start_ms = manage_files.time_to_milliseconds(data["start_time"])
-    orig_end_ms = manage_files.time_to_milliseconds(data["end_time"])
-    new_start_ms = manage_files.time_to_milliseconds(new_start_time)
-    new_end_ms = manage_files.time_to_milliseconds(new_end_time)
+    orig_start_ms = manage_files.time_hmsms_to_milliseconds(data["start_time"])
+    orig_end_ms = manage_files.time_hmsms_to_milliseconds(data["end_time"])
+    new_start_ms = manage_files.time_hmsms_to_milliseconds(new_start_time)
+    new_end_ms = manage_files.time_hmsms_to_milliseconds(new_end_time)
 
     lengthen_start = orig_start_ms - new_start_ms
     print(f"lengthen_start: {lengthen_start}")
@@ -171,7 +169,6 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
     return new_sentence_text, new_sound_line
 
 def remove_edge_lines_helper(editor, relative_index):
-    print(f"got here")
     generate_fields_helper(editor)
     sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx = get_sound_and_sentence_from_editor(editor)
 
@@ -194,12 +191,6 @@ def remove_edge_lines_helper(editor, relative_index):
     editor.loadNote()
     QTimer.singleShot(50, play_after_reload)
 
-    if not image_line.strip():
-        generated_img = manage_files.get_image_if_empty_helper(image_line, sound_line)
-        if generated_img and isinstance(generated_img, str):
-            editor.note.fields[image_idx] = generated_img
-        else:
-            print("Image generation failed or result was not a string.")
 
     print(f"Removed {'last' if relative_index==1 else 'first'} block, new text:\n{new_sentence_text}")
 
@@ -230,13 +221,6 @@ def add_context_line_helper(editor: Editor, relative_index):
         QTimer.singleShot(0, play_after_reload)
         editor.loadNote()
 
-        if not image_line.strip():
-            generated_img = manage_files.get_image_if_empty_helper(image_line, sound_line)
-            if generated_img and isinstance(generated_img, str):
-                editor.note.fields[image_idx] = generated_img
-            else:
-                print("Image generation failed or result was not a string.")
-
         print(f"new line {new_sentence_text}")
 
 def get_context_line_data(sound_line, sentence_text, relative_index):
@@ -262,10 +246,10 @@ def get_context_line_data(sound_line, sentence_text, relative_index):
     if not target_data:
         return "", ""
 
-    start_ms = manage_files.time_to_milliseconds(data["start_time"])
-    end_ms = manage_files.time_to_milliseconds(data["end_time"])
-    target_start_ms = manage_files.time_to_milliseconds(target_data["start_time"])
-    target_end_ms = manage_files.time_to_milliseconds(target_data["end_time"])
+    start_ms = manage_files.time_hmsms_to_milliseconds(data["start_time"])
+    end_ms = manage_files.time_hmsms_to_milliseconds(data["end_time"])
+    target_start_ms = manage_files.time_hmsms_to_milliseconds(target_data["start_time"])
+    target_end_ms = manage_files.time_hmsms_to_milliseconds(target_data["end_time"])
 
     if relative_index == 1:
         delta = target_end_ms - end_ms
@@ -331,15 +315,17 @@ def generate_fields_button(editor):
         QTimer.singleShot(100, lambda: play(sound_filename))
 
 def generate_fields_helper(editor):
-    sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx = get_sound_and_sentence_from_editor(editor)
+    sound_line, sound_idx, sentence_line, sentence_idx, image_line, image_idx = get_sound_and_sentence_from_editor(editor)
+
+
     print(f"current sound line: {sound_line}")
 
     updated = False
 
-    new_result = generate_fields_sound_sentence_image(
-        sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx
+    new_result = generate_fields_sound_sentence_image_translation(
+        sound_line, sound_idx, sentence_line, sentence_idx, image_line, image_idx
     )
-    
+    # translation_line = manage_files.get_translation_line_from_block
     if not new_result or not all(new_result):
         print("generate_fields_sound_sentence_image failed to return valid values.")
         return None
@@ -371,45 +357,49 @@ def generate_fields_helper(editor):
     match = re.search(r"\[sound:(.*?)\]", current_sound_line)
     return match.group(1) if match else None
 
-def generate_fields_sound_sentence_image(sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx):
+# checks each field, generating and updating if needed. Returns each field, empty if not needed
+def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx):
     print(f"gen fields sound line: {sound_line}")
     sentence_blocks = [line for line in sentence_text.splitlines() if line.strip()]
-
     sentence_lines = [line for line in sentence_text.split(" ") if line.strip()]
     print(f"sentence lines: {sentence_lines}")
-    if sentence_lines:
-        first_line = sentence_lines[0]
-    else:
+    if not sentence_lines:
         showInfo("sentence field empty")
         return
-
+    first_line = sentence_lines[0]
     if first_line == "-":
-        first_line += sentence_lines[1]
+        first_line += sentence_lines[1] if len(sentence_lines) > 1 else ""
 
+    # If more than 1 block, reformat if needed
     if len(sentence_blocks) > 1:
         format = manage_files.detect_format(sound_line)
         if format != "backtick":
-            print(f'formatting sound line')
-            first_sound_line, first_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
-            return first_sound_line, sentence_text
+            print("formatting sound line")
+            sound_line, target_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
         else:
-            print(f"already formatted")
-            return sound_line, sentence_text
+            print("already formatted")
+            target_block = manage_files.get_subtitle_block_from_sound_line_and_sentence_text(sound_line, first_line)
+    else:
+        sound_line, target_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
+    print(f"first_sound_line: {sound_line}")
 
-    print(f"not formatted, formatting")
-
-
-    first_sound_line, first_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
-    print(f"first_sound_line: {first_sound_line}")
-
-    if not first_block or len(first_block) < 4:
-        print(f"Invalid or incomplete block: {first_block}")
+    if not target_block or len(target_block) < 4:
+        print(f"Invalid or incomplete block: {target_block}")
         return None
+    sentence_text = target_block[3]
 
-    sentence_text = first_block[3]
+    generate_image = get_field_key_from_label("Image")
+    print(f"genreate image: {generate_image}")
+    if not image_line.strip() and generate_image:
+        new_image_line = manage_files.get_image_if_empty_helper(image_line, sound_line)
+    else:
+        new_image_line = image_line
 
-    first_sound_line = manage_files.alter_sound_file_times(first_sound_line, 0, 0, 0)
-    return first_sound_line, sentence_text
+    sound_line = manage_files.alter_sound_file_times(sound_line, 0, 0, 0)
+
+    translation_line = manage_files.get_translation_line_from_sound_line_and_target_block(sound_line, target_block)
+
+    return sound_line, sentence_text, new_image_line
 
 def on_note_loaded(editor: Editor):
     editor.web.eval("window.getSelection().removeAllRanges();")
@@ -430,7 +420,7 @@ def on_note_loaded(editor: Editor):
 def is_normalized(sound_line):
     return bool(re.search(r'`\-\d+LUFS\.\w+$', sound_line))
 
-def bulk_generate(deck, note_type, overwrite, normalize, lufs, kbps):
+def bulk_generate(deck, note_type, overwrite):
 
 
     current_deck_name = deck["name"]
@@ -503,7 +493,7 @@ def bulk_generate(deck, note_type, overwrite, normalize, lufs, kbps):
                     folder = os.path.dirname(collection_path)
                     new_collection_path = os.path.join(folder, filename)
 
-                    cmd = manage_files.create_just_normalize_audio_command(collection_path, lufs, kbps)
+                    cmd = manage_files.create_just_normalize_audio_command(collection_path)
 
                     try:
                         subprocess.run(cmd, check=True)

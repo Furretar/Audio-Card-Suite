@@ -471,8 +471,10 @@ class AudioToolsDialog(QDialog):
         self.bulkGenerateButton.setDefault(True)
 
         def confirm_bulk_generate():
-            lufs = -16
-            kbps = 192
+            config = manage_files.extract_config_data()
+            lufs = config["lufs"]
+            bitrate = config["bitrate"]
+
             deck_id = mw.col.decks.get_current_id()
             deck = mw.col.decks.get(deck_id)
             all_note_types = mw.col.models.all()
@@ -511,9 +513,6 @@ class AudioToolsDialog(QDialog):
                     deck,
                     note_type,
                     overwrite=overwrite_fields_checkbox.isChecked(),
-                    normalize=normalize_audio_checkbox.isChecked(),
-                    lufs=lufs,
-                    kbps=kbps
                 )
 
             def on_reject():

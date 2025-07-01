@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 import json
 
-from manage_files import get_subtitle_path_from_filename, get_field_key_from_label
+from manage_files import get_subtitle_path_from_filename_track_code, get_field_key_from_label
 
 try:
     from . import manage_files
@@ -109,7 +109,7 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
     end_index   = data["end_index"]
 
     filename_base = data["filename_base"]
-    subtitle_path = manage_files.get_subtitle_path_from_filename(filename_base)
+    subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base)
 
     sentence_blocks = [b.strip() for b in sentence_text.split("\n\n") if b.strip()]
     if len(sentence_blocks) <= 1:
@@ -233,7 +233,7 @@ def get_context_line_data(sound_line, sentence_text, relative_index):
     edge_index = data["end_index"] if relative_index == 1 else data["start_index"]
 
     filename_base = data["filename_base"]
-    subtitle_path = manage_files.get_subtitle_path_from_filename(filename_base)
+    subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base)
 
     target_block = manage_files.get_subtitle_block_from_relative_index(relative_index, edge_index, subtitle_path)
     if not target_block or len(target_block) < 4:

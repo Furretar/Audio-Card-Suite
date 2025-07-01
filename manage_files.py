@@ -69,7 +69,6 @@ def detect_format(sound_line: str) -> str:
 def extract_sound_line_data(sound_line):
     print(f"extracting data from {sound_line}")
     format_type = detect_format(sound_line)
-    print(f"format_type: {format_type}")
     if format_type == "backtick":
 
         match = BACKTICK_PATTERN.match(sound_line)
@@ -77,7 +76,7 @@ def extract_sound_line_data(sound_line):
             print(f"no match for backtick")
             return None
         groups = match.groupdict()
-        filename_base = groups["filename_base"].replace(" ", "_")
+        filename_base = groups["filename_base"]
         sha = groups["sha"]
         start_time_raw = groups["start_time"]
         end_time_raw = groups["end_time"]
@@ -108,7 +107,7 @@ def extract_sound_line_data(sound_line):
         if not match:
             return None
         groups = match.groupdict()
-        filename_base = groups["filename_base"].replace(" ", "_")
+        filename_base = groups["filename_base"]
         sha = ""
         start_time_raw = groups["start_time"]
         end_time_raw = groups["end_time"]
@@ -125,7 +124,6 @@ def extract_sound_line_data(sound_line):
     else:
         if sound_line.startswith("[sound:") and sound_line.endswith("]"):
             filename = sound_line[len("[sound:"):-1]
-            filename = filename.replace(" ", "_")  # replace spaces if any
             collection_path = os.path.join(get_collection_dir(), filename)
 
             filename_base = filename.split("`")[0]  # for metadata only, keep full filename for path
@@ -272,11 +270,12 @@ def is_backtick_format(sound_line: str) -> bool:
 def is_subs2srs_format(sound_line: str) -> bool:
     return '_' in sound_line and '-' in sound_line and ']' in sound_line
 
-def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str) -> str:
+def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str):
+    block = None
 
     if not sound_line:
         block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
-        print(f"valid bactick subtitle path: {subtitle_path}")
+        print(f"valid backtick subtitle path: {subtitle_path}")
         print(f"\nblock from text {sentence_line}: {block}\n")
         if not block or not subtitle_path:
             return None, None
@@ -286,36 +285,33 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
 
     format = detect_format(sound_line)
     print(f"detected format: {format}")
-    if format != "backtick" and format!= "subs2srs":
+
+    if format not in ["backtick", "subs2srs"]:
         block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
-        if block is None or subtitle_path is None:
+        if not block or not subtitle_path:
             return None, None
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
 
     data = extract_sound_line_data(sound_line)
-
-
     filename_base = data["filename_base"]
     config = extract_config_data()
-    track = config["target_subtitle_track"]
-    code = config["target_language_code"]
+    track = config.get("target_subtitle_track")
+    code = config.get("target_language_code")
     subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
-
 
     if format == "backtick":
         start_index = data["start_index"]
         end_index = data["end_index"]
-        single_block = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
-        return sound_line, single_block
+        block, _ = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
+        return sound_line, block
+
     elif format == "subs2srs":
         first_sentence = sentence_line.strip().split()[0]
         print(f"first_sentence: {first_sentence}")
-        # returns first matching sentence so subs2srs card can be reformatted
-        block = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_sentence)
+        block, _ = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_sentence)
         if block is None:
             return None, None
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
-
 
     return sound_line, block
 
@@ -328,22 +324,23 @@ def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, senten
         return None, None
 
     start_index = data["start_index"]
-    end_index   = data["end_index"]
-
+    end_index = data["end_index"]
     filename_base = data["filename_base"]
+
     config = extract_config_data()
     track = config["target_subtitle_track"]
     code = config["target_language_code"]
+
     subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
-
-    if not os.path.exists(subtitle_path):
+    if not subtitle_path or not os.path.exists(subtitle_path):
+        print(f"Subtitle path not found or invalid: {subtitle_path}")
         source_path = get_source_file(filename_base)
-        extract_subtitle_files(source_path, subtitle_path)
+        extract_subtitle_files(source_path, track, code)
+        subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
 
-        if not os.path.exists(subtitle_path):
-            print(f"Failed to extract subtitles from {source_path}")
-            return None
-
+        if not subtitle_path or not os.path.exists(subtitle_path):
+            print("Subtitle path still not found after extraction.")
+            return None, None
 
     with open(subtitle_path, 'r', encoding='utf-8') as f:
         blocks = f.read().strip().split('\n\n')
@@ -353,9 +350,9 @@ def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, senten
         if formatted_block and len(formatted_block) == 4:
             subtitle_text = formatted_block[3]
             if normalize_text(sentence_line) in normalize_text(subtitle_text):
-                return formatted_block
+                return formatted_block, subtitle_path
 
-    return None
+    return None, subtitle_path
 
 # 1-based indexing
 def get_subtitle_track_number_by_code(source_path, code):
@@ -493,6 +490,7 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
     return None, None
 
 def get_translation_line_from_sound_line(sound_line):
+
     config = extract_config_data()
     translation_audio_track = config["translation_audio_track"]
     translation_language_code = config["translation_language_code"]
@@ -503,18 +501,17 @@ def get_translation_line_from_sound_line(sound_line):
 
 
     translation_subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, translation_audio_track, translation_language_code)
-    print(f"\ntranslation subtitle path: {translation_subtitle_path}\n")
+    print(f"translation subtitle path: {translation_subtitle_path}")
     print(f"translation code: {translation_language_code}")
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
 
-    translation_line = ""
-    for block in overlapping_translation_blocks:
-        translation_line += block[3] + "\n\n"
-
-    return translation_line
+    translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
+    return translation_line.strip()
 
 
 def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, start_time, end_time):
+    print(f"start time: {start_time}, end time: {end_time}")
+
     start_ms = time_hmsms_to_milliseconds(start_time)
     end_ms = time_hmsms_to_milliseconds(end_time)
 
@@ -586,33 +583,22 @@ def get_sound_line_from_subtitle_block_and_path(block, subtitle_path) -> str:
         return ""
 
 def check_for_video_source(filename_base) -> str:
-    alt_names = [filename_base, filename_base.replace("_", " ")]
-    for name in alt_names:
-        for ext in set(video_exts):
-            path = os.path.join(addon_source_folder, name + ext)
-            if os.path.exists(path):
-                return path
+    for ext in set(video_exts):
+        path = os.path.join(addon_source_folder, filename_base + ext)
+        if os.path.exists(path):
+            return path
     return ""
 
 def get_source_file(filename_base) -> str:
-    mp3_path = os.path.join(addon_source_folder, filename_base + ".mp3")
-    # if os.path.exists(mp3_path):
-    #     return mp3_path
-    # elif os.path.exists(mp3_path.replace("_", " ")):
-    #     return mp3_path.replace("_", " ")
+    video_source_path = check_for_video_source(filename_base)
+    if video_source_path:
+        return video_source_path
 
-    alt_names = [filename_base, filename_base.replace("_", " ")]
-
-    for name in alt_names:
-        video_source_path = check_for_video_source(name)
-        if video_source_path:
-            return video_source_path
-
-        for ext in set(audio_exts):
-            path = os.path.join(addon_source_folder, name + ext)
-            print("now checking: ", path)
-            if os.path.exists(path):
-                return path
+    for ext in set(audio_exts):
+        path = os.path.join(addon_source_folder, filename_base + ext)
+        print("now checking: ", path)
+        if os.path.exists(path):
+            return path
 
     print(f"No source file found for base name: {filename_base}")
     showInfo(f"No source file found for base name: {filename_base}")
@@ -638,7 +624,7 @@ def get_image_if_empty_helper(image_line, sound_line):
     if image_line:
         return image_line
 
-    print("No image found, extracting from source.")
+    print(f"No image found, extracting from source. image line: {image_line}, sound line: {sound_line}")
 
     data = extract_sound_line_data(sound_line)
     if not data:
@@ -979,7 +965,7 @@ def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
         altered_data["new_path"]
     )
     try:
-        print("Running subprocess command:", cmd)
+        print("Running subprocess command1:", cmd)
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         # print("Audio extraction succeeded.")
     except subprocess.CalledProcessError:

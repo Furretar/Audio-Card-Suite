@@ -769,7 +769,7 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
     if delay_ms > 0:
         filters.append(f"adelay={delay_ms}|{delay_ms}")
 
-    if normalize_audio and int(lufs) > 0:
+    if normalize_audio and int(lufs) < 1:
         filters.append(f"loudnorm=I={lufs}:TP=-1.5:LRA=11")
 
     if filters:

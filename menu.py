@@ -112,7 +112,7 @@ class AudioToolsDialog(QDialog):
             "target_language_code": "",
             "translation_language_code": "",
             "normalize_audio": False,
-            "lufs_target": -14,
+            "lufs": -16,
             "target_audio_track": 1,
             "target_subtitle_track": 1,
             "translation_audio_track": 2,
@@ -147,7 +147,7 @@ class AudioToolsDialog(QDialog):
         self.settings["audio_ext"] = self.audioExtCombo.currentText()
         self.settings["bitrate"] = self.bitrateEdit.value()
         self.settings["normalize_audio"] = self.normalize_checkbox.isChecked()
-        self.settings["lufs_target"] = self.lufsSpinner.value()
+        self.settings["lufs"] = self.lufsSpinner.value()
 
         # Save track numbers
         self.settings["target_audio_track"] = self.trackSpinners[0].value()
@@ -307,10 +307,10 @@ class AudioToolsDialog(QDialog):
         # LUFS spinner (hidden by default)
         self.lufsSpinner = QSpinBox()
         self.lufsSpinner.setRange(-70, 0)
-        self.lufsSpinner.setValue(-14)
+        self.lufsSpinner.setValue(-16)
         self.lufsSpinner.setSuffix(" LUFS")
         self.lufsSpinner.setToolTip("Target loudness level")
-        self.lufsSpinner.setValue(self.settings.get("lufs_target", -14))
+        self.lufsSpinner.setValue(self.settings.get("lufs", -16))
 
         audioLayout.addWidget(self.normalize_checkbox, 2, 0, 1, 2)
         audioLayout.addWidget(self.lufsSpinner, 3, 0)
@@ -355,7 +355,7 @@ class AudioToolsDialog(QDialog):
 
             combo.addItems(["None", "Chinese", "Japanese", "English", "Cantonese"])
 
-            if i == 1:
+            if i == 0:
                 saved_language = self.settings.get("target_language", "None")
                 saved_code = self.settings.get("target_language_code", "")
             else:
@@ -575,7 +575,7 @@ class AudioToolsDialog(QDialog):
 
         self.bitrateEdit.setValue(int(self.settings["bitrate"]))
         self.normalize_checkbox.setChecked(self.settings.get("normalize_audio", False))
-        self.lufsSpinner.setValue(self.settings.get("lufs_target", -14))
+        self.lufsSpinner.setValue(self.settings.get("lufs", -16))
 
         self.trackSpinners[0].setValue(self.settings.get("target_audio_track", 0))
         self.trackSpinners[1].setValue(self.settings.get("target_subtitle_track", 0))
@@ -637,6 +637,7 @@ class FieldMapping(QDialog):
             comboBox.addItem("Target Sub Line")
             comboBox.addItem("Translation Audio")
             comboBox.addItem("Translation Sub Line")
+            comboBox.addItem("Image")
             if field in self.mappedFields:
                 comboBox.setCurrentIndex(comboBox.findText(self.mappedFields[field]))
             else:

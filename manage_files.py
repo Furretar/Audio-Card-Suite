@@ -272,12 +272,12 @@ def is_backtick_format(sound_line: str) -> bool:
 def is_subs2srs_format(sound_line: str) -> bool:
     return '_' in sound_line and '-' in sound_line and ']' in sound_line
 
-def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str) -> str:
+def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str) -> str:
 
     if not sound_line:
-        block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text)
+        block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
         print(f"valid bactick subtitle path: {subtitle_path}")
-        print(f"\nblock from text {sentence_text}: {block}\n")
+        print(f"\nblock from text {sentence_line}: {block}\n")
         if not block or not subtitle_path:
             return None, None
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
@@ -287,7 +287,7 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str)
     format = detect_format(sound_line)
     print(f"detected format: {format}")
     if format != "backtick" and format!= "subs2srs":
-        block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text)
+        block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
         if block is None or subtitle_path is None:
             return None, None
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
@@ -297,7 +297,7 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str)
 
     filename_base = data["filename_base"]
     config = extract_config_data()
-    track = config["target_language_track"]
+    track = config["target_subtitle_track"]
     code = config["target_language_code"]
     subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
 
@@ -305,13 +305,13 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str)
     if format == "backtick":
         start_index = data["start_index"]
         end_index = data["end_index"]
-        single_block = get_subtitle_block_from_sound_line_and_sentence_text(sound_line, sentence_text)
+        single_block = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
         return sound_line, single_block
     elif format == "subs2srs":
-        first_sentence = sentence_text.strip().split()[0]
+        first_sentence = sentence_line.strip().split()[0]
         print(f"first_sentence: {first_sentence}")
         # returns first matching sentence so subs2srs card can be reformatted
-        block = get_subtitle_block_from_sound_line_and_sentence_text(sound_line, first_sentence)
+        block = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_sentence)
         if block is None:
             return None, None
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
@@ -321,7 +321,7 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_text: str)
 
 
 
-def get_subtitle_block_from_sound_line_and_sentence_text(sound_line: str, sentence_text: str):
+def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, sentence_line: str):
     data = extract_sound_line_data(sound_line)
     if not data:
         print(f"no data extracted from {sound_line}")
@@ -332,7 +332,7 @@ def get_subtitle_block_from_sound_line_and_sentence_text(sound_line: str, senten
 
     filename_base = data["filename_base"]
     config = extract_config_data()
-    track = config["target_language_track"]
+    track = config["target_subtitle_track"]
     code = config["target_language_code"]
     subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
 
@@ -352,7 +352,7 @@ def get_subtitle_block_from_sound_line_and_sentence_text(sound_line: str, senten
         formatted_block = format_subtitle_block(block)
         if formatted_block and len(formatted_block) == 4:
             subtitle_text = formatted_block[3]
-            if normalize_text(sentence_text) in normalize_text(subtitle_text):
+            if normalize_text(sentence_line) in normalize_text(subtitle_text):
                 return formatted_block
 
     return None
@@ -468,14 +468,14 @@ def get_subtitle_path_from_filename_track_code(filename, track, code):
     return None
 
 
-def get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text: str):
+def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
     for filename in os.listdir(addon_source_folder):
         print(f"checking filename: {filename}")
         filename_base, file_extension = os.path.splitext(filename)
         if file_extension.lower() in video_exts or file_extension.lower() in audio_exts:
             source_path = os.path.join(addon_source_folder, filename)
             config = extract_config_data()
-            track = config["target_language_track"]
+            track = config["target_subtitle_track"]
             code = config["target_language_code"]
             tagged_subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
 
@@ -487,14 +487,14 @@ def get_subtitle_block_and_subtitle_path_from_sentence_text(sentence_text: str):
                 if formatted_block and len(formatted_block) == 4:
                     subtitle_text = formatted_block[3]
 
-                    if normalize_text(sentence_text) in normalize_text(subtitle_text):
+                    if normalize_text(sentence_line) in normalize_text(subtitle_text):
                         return formatted_block, tagged_subtitle_path
 
     return None, None
 
 def get_translation_line_from_sound_line(sound_line):
     config = extract_config_data()
-    translation_language_track = config["translation_language_track"]
+    translation_audio_track = config["translation_audio_track"]
     translation_language_code = config["translation_language_code"]
     data = extract_sound_line_data(sound_line)
     start_time = data["start_time"]
@@ -502,7 +502,9 @@ def get_translation_line_from_sound_line(sound_line):
     filename_base = data["filename_base"]
 
 
-    translation_subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, translation_language_track, translation_language_code)
+    translation_subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, translation_audio_track, translation_language_code)
+    print(f"\ntranslation subtitle path: {translation_subtitle_path}\n")
+    print(f"translation code: {translation_language_code}")
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
 
     translation_line = ""
@@ -523,18 +525,22 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
     with open(subtitle_path, "r", encoding="utf-8") as f:
         raw_blocks = f.read().strip().split("\n\n")
 
-    overlapping_blocks = []
-
-    for raw_block in raw_blocks:
-        lines = raw_block.strip().splitlines()
+    formatted_blocks = []
+    for block in raw_blocks:
+        if not block.strip():
+            continue
+        lines = block.strip().splitlines()
         if len(lines) < 3:
             continue
+        formatted = format_subtitle_block(block)
+        if formatted:
+            formatted_blocks.append(formatted)
 
-        timing_line = lines[1]
+    overlapping_blocks = []
+    for block in formatted_blocks:
         try:
-            start_str, end_str = timing_line.split(" --> ")
-            sub_start_ms = time_srt_to_milliseconds(start_str)
-            sub_end_ms = time_srt_to_milliseconds(end_str)
+            sub_start_ms = time_hmsms_to_milliseconds(block[1])
+            sub_end_ms = time_hmsms_to_milliseconds(block[2])
         except:
             continue
 
@@ -542,7 +548,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
             break
 
         if sub_start_ms <= end_ms and sub_end_ms >= start_ms:
-            overlapping_blocks.append(lines)
+            overlapping_blocks.append(block)
 
     return overlapping_blocks
 
@@ -1067,7 +1073,7 @@ def extract_config_data():
     target_language_code = config.get("target_language_code")
     translation_language_code = config.get("translation_language_code")
     normalize_audio = config.get("normalize_audio")
-    lufs_target = config.get("lufs_target")
+    lufs = config.get("lufs")
     target_audio_track = config.get("target_audio_track")
     target_subtitle_track = config.get("target_subtitle_track")
     translation_audio_track = config.get("translation_audio_track")
@@ -1075,18 +1081,28 @@ def extract_config_data():
     mapped_fields = config.get("mapped_fields")
     selected_tab_index = config.get("selected_tab_index")
 
+    variable_names = [
+        "default_model", "default_deck", "audio_ext", "bitrate", "image_height",
+        "pad_start", "pad_end", "target_language", "translation_language",
+        "target_language_code", "translation_language_code", "normalize_audio",
+        "lufs", "target_audio_track", "target_subtitle_track",
+        "translation_audio_track", "translation_subtitle_track",
+        "mapped_fields", "selected_tab_index"
+    ]
+
     variables = [
         default_model, default_deck, audio_ext, bitrate, image_height,
         pad_start, pad_end, target_language, translation_language,
         target_language_code, translation_language_code, normalize_audio,
-        lufs_target, target_audio_track, target_subtitle_track,
+        lufs, target_audio_track, target_subtitle_track,
         translation_audio_track, translation_subtitle_track,
         mapped_fields, selected_tab_index
     ]
 
-    if any(v is None for v in variables):
-        showInfo(f"missing field: {variables}")
-        raise ValueError("Missing required config field(s)")
+    missing_fields = [name for name, val in zip(variable_names, variables) if val is None]
+    if missing_fields:
+        showInfo(f"Missing fields: {', '.join(missing_fields)}")
+        raise ValueError(f"Missing required config field(s): {missing_fields}")
 
     return {
         "default_model": default_model,
@@ -1101,7 +1117,7 @@ def extract_config_data():
         "target_language_code": target_language_code,
         "translation_language_code": translation_language_code,
         "normalize_audio": normalize_audio,
-        "lufs_target": lufs_target,
+        "lufs": lufs,
         "target_audio_track": target_audio_track,
         "target_subtitle_track": target_subtitle_track,
         "translation_audio_track": translation_audio_track,

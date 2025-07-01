@@ -97,7 +97,7 @@ def get_fields_from_editor(editor: Editor):
     }
 
 
-def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index):
+def remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_index):
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
         print(f"no data extracted from {sound_line}")
@@ -109,11 +109,14 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
     end_index   = data["end_index"]
 
     filename_base = data["filename_base"]
-    subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base)
+    config = manage_files.extract_config_data()
+    track = config["target_subtitle_track"]
+    code = config["target_language_code"]
+    subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base, track, code)
 
-    sentence_blocks = [b.strip() for b in sentence_text.split("\n\n") if b.strip()]
+    sentence_blocks = [b.strip() for b in sentence_line.split("\n\n") if b.strip()]
     if len(sentence_blocks) <= 1:
-        print(f"no sentence blocks extracted from {sentence_text}")
+        print(f"no sentence blocks extracted from {sentence_line}")
         return None, None
 
     if relative_index == 1:
@@ -164,9 +167,9 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
         print("No new sound tag returned, field not updated.")
         return None, None
 
-    new_sentence_text = "\n\n".join(new_blocks).strip()
+    new_sentence_line = "\n\n".join(new_blocks).strip()
 
-    return new_sentence_text, new_sound_line
+    return new_sentence_line, new_sound_line
 
 def remove_edge_lines_helper(editor, relative_index):
     generate_fields_helper(editor)
@@ -174,18 +177,18 @@ def remove_edge_lines_helper(editor, relative_index):
     fields = get_fields_from_editor(editor)
     sound_line = fields["sound_line"]
     sound_idx = fields["sound_idx"]
-    sentence_text = fields["sentence_text"]
+    sentence_line = fields["sentence_line"]
     sentence_idx = fields["sentence_idx"]
 
-    new_sentence_text, new_sound_line = remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index)
+    new_sentence_line, new_sound_line = remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_index)
 
-    if not new_sound_line or not new_sentence_text:
+    if not new_sound_line or not new_sentence_line:
         print("No new sound line or sentence text returned.")
         return
 
     new_field = re.sub(r"\[sound:.*?\]", new_sound_line, sound_line)
     editor.note.fields[sound_idx] = new_field
-    editor.note.fields[sentence_idx] = new_sentence_text
+    editor.note.fields[sentence_idx] = new_sentence_line
 
     def play_after_reload():
         sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_line)
@@ -196,7 +199,7 @@ def remove_edge_lines_helper(editor, relative_index):
     QTimer.singleShot(50, play_after_reload)
 
 
-    print(f"Removed {'last' if relative_index==1 else 'first'} block, new text:\n{new_sentence_text}")
+    print(f"Removed {'last' if relative_index==1 else 'first'} block, new text:\n{new_sentence_line}")
 
 def add_context_line_helper(editor: Editor, relative_index):
     generate_fields_helper(editor)
@@ -204,21 +207,21 @@ def add_context_line_helper(editor: Editor, relative_index):
     fields = get_fields_from_editor(editor)
     sound_line = fields["sound_line"]
     sound_idx = fields["sound_idx"]
-    sentence_text = fields["sentence_text"]
+    sentence_line = fields["sentence_line"]
     sentence_idx = fields["sentence_idx"]
 
 
     print(f"sound_line from editor: {sound_line}")
-    new_sound_tag, context_sentence_text = get_context_line_data(sound_line, sentence_text, relative_index)
+    new_sound_tag, context_sentence_line = get_context_line_data(sound_line, sentence_line, relative_index)
 
     if relative_index == 1:
-        new_sentence_text = f"{sentence_text}\n\n{context_sentence_text}"
+        new_sentence_line = f"{sentence_line}\n\n{context_sentence_line}"
     else:
-        new_sentence_text = f"{context_sentence_text}\n\n{sentence_text}"
+        new_sentence_line = f"{context_sentence_line}\n\n{sentence_line}"
 
-    if new_sound_tag and new_sentence_text:
+    if new_sound_tag and new_sentence_line:
         editor.note.fields[sound_idx] = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
-        editor.note.fields[sentence_idx] = new_sentence_text
+        editor.note.fields[sentence_idx] = new_sentence_line
 
         match = re.search(r"\[sound:(.*?)\]", new_sound_tag)
         sound_filename = match.group(1) if match else None
@@ -230,9 +233,9 @@ def add_context_line_helper(editor: Editor, relative_index):
         QTimer.singleShot(0, play_after_reload)
         editor.loadNote()
 
-        print(f"new line {new_sentence_text}")
+        print(f"new line {new_sentence_line}")
 
-def get_context_line_data(sound_line, sentence_text, relative_index):
+def get_context_line_data(sound_line, sentence_line, relative_index):
 
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
@@ -242,7 +245,10 @@ def get_context_line_data(sound_line, sentence_text, relative_index):
     edge_index = data["end_index"] if relative_index == 1 else data["start_index"]
 
     filename_base = data["filename_base"]
-    subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base)
+    config = manage_files.extract_config_data()
+    track = config["target_subtitle_track"]
+    code = config["target_language_code"]
+    subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base, track, code)
 
     target_block = manage_files.get_subtitle_block_from_relative_index(relative_index, edge_index, subtitle_path)
     if not target_block or len(target_block) < 4:
@@ -263,22 +269,22 @@ def get_context_line_data(sound_line, sentence_text, relative_index):
     if relative_index == 1:
         delta = target_end_ms - end_ms
         new_sound_line = manage_files.alter_sound_file_times(sound_line, 0, delta, relative_index)
-        new_sentence_text = f"{target_line}"
+        new_sentence_line = f"{target_line}"
     else:
         delta = start_ms - target_start_ms
         new_sound_line = manage_files.alter_sound_file_times(sound_line, delta, 0, relative_index)
-        new_sentence_text = f"{target_line}"
+        new_sentence_line = f"{target_line}"
 
     if not new_sound_line:
         return "", ""
 
-    return new_sound_line.strip(), new_sentence_text.strip()
+    return new_sound_line.strip(), new_sentence_line.strip()
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     fields = get_fields_from_editor(editor)
     sound_line = fields["sound_line"]
     sound_idx = fields["sound_idx"]
-    sentence_text = fields["sentence_text"]
+    sentence_line = fields["sentence_line"]
 
     # check for modifier keys
     modifiers = QApplication.keyboardModifiers()
@@ -290,7 +296,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         end_delta *= 5
 
     print(f"current sound line: {sound_line}")
-    fixed_sound_line, block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_text)
+    fixed_sound_line, block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_line)
     print(f"fixed sound line: {fixed_sound_line}")
 
 
@@ -347,11 +353,13 @@ def generate_fields_helper(editor):
     )
     # translation_line = manage_files.get_translation_line_from_block
     if not new_result or not all(new_result):
-        print("generate_fields_sound_sentence_image failed to return valid values.")
+        print(f"generate_fields_sound_sentence_image failed to return valid values.\nnew result: {new_result}")
         return None
     
-    new_sound_line, new_sentence_text, new_image_line, new_translation_line = new_result
+    new_sound_line, new_sentence_line, new_image_line, new_translation_line = new_result
     print(f"new sound line: {new_sound_line}")
+    print(f"new_sentence_line: {new_sentence_line}")
+    print(f"new_translation_line: {new_translation_line}")
 
     if not editor.note.fields[image_idx].strip():
         generated_img = manage_files.get_image_if_empty_helper("", new_sound_line)
@@ -365,12 +373,12 @@ def generate_fields_helper(editor):
         editor.note.fields[sound_idx] = new_sound_line
         updated = True
 
-    if new_sentence_text and editor.note.fields[sentence_idx] != new_sentence_text:
-        editor.note.fields[sentence_idx] = new_sentence_text
+    if new_sentence_line and editor.note.fields[sentence_idx] != new_sentence_line:
+        editor.note.fields[sentence_idx] = new_sentence_line
         updated = True
 
     if new_translation_line and editor.note.fields[translation_idx] != new_translation_line:
-        editor.note.fields[translation_idx] = new_sentence_text
+        editor.note.fields[translation_idx] = new_translation_line
         updated = True
 
     if updated:
@@ -381,10 +389,10 @@ def generate_fields_helper(editor):
     return match.group(1) if match else None
 
 # checks each field, generating and updating if needed. Returns each field, empty if not needed
-def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx):
+def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sentence_line, sentence_idx, image_line, image_idx):
     print(f"gen fields sound line: {sound_line}")
-    sentence_blocks = [line for line in sentence_text.splitlines() if line.strip()]
-    sentence_lines = [line for line in sentence_text.split(" ") if line.strip()]
+    sentence_blocks = [line for line in sentence_line.splitlines() if line.strip()]
+    sentence_lines = [line for line in sentence_line.split(" ") if line.strip()]
     print(f"sentence lines: {sentence_lines}")
     if not sentence_lines:
         showInfo("sentence field empty")
@@ -401,7 +409,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sent
             sound_line, target_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
         else:
             print("already formatted")
-            target_block = manage_files.get_subtitle_block_from_sound_line_and_sentence_text(sound_line, first_line)
+            target_block = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_line)
     else:
         sound_line, target_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
     print(f"first_sound_line: {sound_line}")
@@ -409,13 +417,17 @@ def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sent
     if not target_block or len(target_block) < 4:
         print(f"Invalid or incomplete block: {target_block}")
         return None
-    sentence_text = target_block[3]
+    sentence_line = target_block[3]
 
-    generate_image = get_field_key_from_label("Image")
+    config = manage_files.extract_config_data()
+    note_type_name = list(config["mapped_fields"].keys())[0]
+    generate_image = get_field_key_from_label(note_type_name, "Image", config)
     print(f"genreate image: {generate_image}")
     if not image_line.strip() and generate_image:
+        print(f"generating image since empty")
         new_image_line = manage_files.get_image_if_empty_helper(image_line, sound_line)
     else:
+        print(f"image already generated: {image_line}, or generate_image: {generate_image}")
         new_image_line = image_line
 
     sound_line = manage_files.alter_sound_file_times(sound_line, 0, 0, 0)
@@ -423,7 +435,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sent
     translation_line = manage_files.get_translation_line_from_sound_line(sound_line)
     print(f"translation_line: {translation_line}")
 
-    return sound_line, sentence_text, new_image_line, translation_line
+    return sound_line, sentence_line, new_image_line, translation_line
 
 def on_note_loaded(editor: Editor):
     editor.web.eval("window.getSelection().removeAllRanges();")

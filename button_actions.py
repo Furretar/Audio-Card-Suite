@@ -44,13 +44,14 @@ def index_of_field(field_name, fields):
             return i
     return -1
 
-def get_sound_and_sentence_from_editor(editor: Editor):
+
+def get_fields_from_editor(editor: Editor):
     config = manage_files.extract_config_data()
 
     mapped_fields = config["mapped_fields"]
     if not mapped_fields:
         showInfo("fields not mapped")
-        return
+        return {}
 
     note_type_name = list(config["mapped_fields"].keys())[0]
     note_type = editor.note.note_type()
@@ -67,11 +68,6 @@ def get_sound_and_sentence_from_editor(editor: Editor):
     translation_idx = index_of_field(translation_field, fields) if translation_field else -1
     image_idx = index_of_field(image_field, fields) if image_field else -1
 
-    print(f"sentence_idx: {sentence_idx}")
-    print(f"sound_idx: {sound_idx}")
-    print(f"translation_idx: {translation_idx}")
-    print(f"image_idx: {image_idx}")
-
     sound_line = editor.note.fields[sound_idx] if 0 <= sound_idx < len(editor.note.fields) else ""
     if "[sound:" not in sound_line:
         sound_line = ""
@@ -80,22 +76,26 @@ def get_sound_and_sentence_from_editor(editor: Editor):
     if "<img src=" not in image_line:
         image_line = ""
 
-    sentence_text = editor.note.fields[sentence_idx] if 0 <= sentence_idx < len(editor.note.fields) else ""
+    sentence_line = editor.note.fields[sentence_idx] if 0 <= sentence_idx < len(editor.note.fields) else ""
     format = manage_files.detect_format(sound_line)
     if format != "backtick":
         selected_text = editor.web.selectedText().strip()
         if selected_text:
-            sentence_text = selected_text
-            print(f"using selected text: {sentence_text}")
+            sentence_line = selected_text
 
-    return (
-        strip_html_tags(sound_line),
-        sound_idx,
-        strip_html_tags(sentence_text),
-        sentence_idx,
-        strip_html_tags(image_line),
-        image_idx,
-    )
+    translation_line = editor.note.fields[translation_idx] if 0 <= translation_idx < len(editor.note.fields) else ""
+
+    return {
+        "sound_line": strip_html_tags(sound_line),
+        "sound_idx": sound_idx,
+        "sentence_line": strip_html_tags(sentence_line),
+        "sentence_idx": sentence_idx,
+        "image_line": strip_html_tags(image_line),
+        "image_idx": image_idx,
+        "translation_line": strip_html_tags(translation_line),
+        "translation_idx": translation_idx,
+    }
+
 
 def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index):
     data = manage_files.extract_sound_line_data(sound_line)
@@ -170,8 +170,12 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_
 
 def remove_edge_lines_helper(editor, relative_index):
     generate_fields_helper(editor)
-    sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx = get_sound_and_sentence_from_editor(editor)
 
+    fields = get_fields_from_editor(editor)
+    sound_line = fields["sound_line"]
+    sound_idx = fields["sound_idx"]
+    sentence_text = fields["sentence_text"]
+    sentence_idx = fields["sentence_idx"]
 
     new_sentence_text, new_sound_line = remove_edge_new_sentence_new_sound_file(sound_line, sentence_text, relative_index)
 
@@ -196,7 +200,12 @@ def remove_edge_lines_helper(editor, relative_index):
 
 def add_context_line_helper(editor: Editor, relative_index):
     generate_fields_helper(editor)
-    sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx = get_sound_and_sentence_from_editor(editor)
+
+    fields = get_fields_from_editor(editor)
+    sound_line = fields["sound_line"]
+    sound_idx = fields["sound_idx"]
+    sentence_text = fields["sentence_text"]
+    sentence_idx = fields["sentence_idx"]
 
 
     print(f"sound_line from editor: {sound_line}")
@@ -266,7 +275,10 @@ def get_context_line_data(sound_line, sentence_text, relative_index):
     return new_sound_line.strip(), new_sentence_text.strip()
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
-    sound_line, sound_idx, sentence_text, sentence_idx, image_line, image_idx = get_sound_and_sentence_from_editor(editor)
+    fields = get_fields_from_editor(editor)
+    sound_line = fields["sound_line"]
+    sound_idx = fields["sound_idx"]
+    sentence_text = fields["sentence_text"]
 
     # check for modifier keys
     modifiers = QApplication.keyboardModifiers()
@@ -315,8 +327,16 @@ def generate_fields_button(editor):
         QTimer.singleShot(100, lambda: play(sound_filename))
 
 def generate_fields_helper(editor):
-    sound_line, sound_idx, sentence_line, sentence_idx, image_line, image_idx = get_sound_and_sentence_from_editor(editor)
 
+    fields = get_fields_from_editor(editor)
+    sound_line = fields["sound_line"]
+    sound_idx = fields["sound_idx"]
+    sentence_line = fields["sentence_line"]
+    sentence_idx = fields["sentence_idx"]
+    image_line = fields["image_line"]
+    image_idx = fields["image_idx"]
+    translation_line = fields["translation_line"]
+    translation_idx = fields["translation_idx"]
 
     print(f"current sound line: {sound_line}")
 
@@ -330,10 +350,9 @@ def generate_fields_helper(editor):
         print("generate_fields_sound_sentence_image failed to return valid values.")
         return None
     
-    new_sound_line, new_sentence_text = new_result
+    new_sound_line, new_sentence_text, new_image_line, new_translation_line = new_result
     print(f"new sound line: {new_sound_line}")
 
-    generated_img = None
     if not editor.note.fields[image_idx].strip():
         generated_img = manage_files.get_image_if_empty_helper("", new_sound_line)
         if generated_img and isinstance(generated_img, str):
@@ -348,6 +367,10 @@ def generate_fields_helper(editor):
 
     if new_sentence_text and editor.note.fields[sentence_idx] != new_sentence_text:
         editor.note.fields[sentence_idx] = new_sentence_text
+        updated = True
+
+    if new_translation_line and editor.note.fields[translation_idx] != new_translation_line:
+        editor.note.fields[translation_idx] = new_sentence_text
         updated = True
 
     if updated:
@@ -397,16 +420,19 @@ def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sent
 
     sound_line = manage_files.alter_sound_file_times(sound_line, 0, 0, 0)
 
-    translation_line = manage_files.get_translation_line_from_sound_line_and_target_block(sound_line, target_block)
+    translation_line = manage_files.get_translation_line_from_sound_line(sound_line)
+    print(f"translation_line: {translation_line}")
 
-    return sound_line, sentence_text, new_image_line
+    return sound_line, sentence_text, new_image_line, translation_line
 
 def on_note_loaded(editor: Editor):
     editor.web.eval("window.getSelection().removeAllRanges();")
     print(f"note loaded")
     av_player.stop_and_clear_queue()
     if getattr(editor, "_auto_play_enabled", False):
-        sound_line, sound_idx, _, _, _, _ = get_sound_and_sentence_from_editor(editor)
+        fields = get_fields_from_editor(editor)
+        sound_idx = fields["sound_idx"]
+
         if sound_idx < len(editor.note.fields):
             field_text = editor.note.fields[sound_idx]
             match = re.search(r"\[sound:([^\]]+)\]", field_text)

@@ -500,10 +500,51 @@ def get_translation_line_from_sound_line(sound_line):
     start_time = data["start_time"]
     end_time = data["end_time"]
     filename_base = data["filename_base"]
+
+
+    translation_subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, translation_language_track, translation_language_code)
+    overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
+
+    translation_line = ""
+    for block in overlapping_translation_blocks:
+        translation_line += block[3] + "\n\n"
+
+    return translation_line
+
+
+def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, start_time, end_time):
     start_ms = time_hmsms_to_milliseconds(start_time)
     end_ms = time_hmsms_to_milliseconds(end_time)
 
-    translation_subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, translation_language_track, translation_language_code)
+    if not os.path.exists(subtitle_path):
+        print(f"Subtitle file not found: {subtitle_path}")
+        return []
+
+    with open(subtitle_path, "r", encoding="utf-8") as f:
+        raw_blocks = f.read().strip().split("\n\n")
+
+    overlapping_blocks = []
+
+    for raw_block in raw_blocks:
+        lines = raw_block.strip().splitlines()
+        if len(lines) < 3:
+            continue
+
+        timing_line = lines[1]
+        try:
+            start_str, end_str = timing_line.split(" --> ")
+            sub_start_ms = time_srt_to_milliseconds(start_str)
+            sub_end_ms = time_srt_to_milliseconds(end_str)
+        except:
+            continue
+
+        if sub_start_ms > end_ms:
+            break
+
+        if sub_start_ms <= end_ms and sub_end_ms >= start_ms:
+            overlapping_blocks.append(lines)
+
+    return overlapping_blocks
 
 
 def normalize_text(s):
@@ -792,7 +833,10 @@ def create_just_normalize_audio_command(source_path):
     cmd.append(new_collection_path)
     return cmd
 
-
+def time_srt_to_milliseconds(t):
+    h, m, s_ms = t.split(":")
+    s, ms = s_ms.split(",")
+    return (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
 
 def convert_hmsms_to_ffmpeg_time_notation(t: str) -> str:
     hmsms_match = re.match(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms", t)

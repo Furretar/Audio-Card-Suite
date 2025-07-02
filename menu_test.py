@@ -121,7 +121,7 @@ def add_context_line_test():
 - 還差點被處死
 - 我來舔您的鞋子吧"""
     relative_index1 = 1
-    new_sound_tag1, target_sentence_text1 = menu.get_context_line_data(sound_line1, sentence_text1, relative_index1)
+    new_sound_tag1, target_sentence_text1 = menu.get_context_sound_and_sentence_line_data(sound_line1, sentence_text1, relative_index1)
     if relative_index1 == 1:
         new_sentence_text1 = f"{sentence_text1}\n\n{target_sentence_text1}"
     else:
@@ -137,7 +137,7 @@ def add_context_line_test():
     new_sound_line_check2 = "[sound:02_クビシメロマンチスト_人間失格・零崎人識`ABCD`08h44m13s918ms-08h44m20s190ms`10895-10896.mp3]"
     new_sentence_text_check2 = "「……別に。見ての通りに人畜無害で極めて大人しい、\n\nただの公明正大な男の子ですから\n\n「へえ、そうですか」"
     relative_index2 = 1
-    new_sound_tag2, target_sentence_text2 = menu.get_context_line_data(sound_line2, sentence_text2, relative_index2)
+    new_sound_tag2, target_sentence_text2 = menu.get_context_sound_and_sentence_line_data(sound_line2, sentence_text2, relative_index2)
     if relative_index2 == 1:
         new_sentence_text2 = f"{sentence_text2}\n\n{target_sentence_text2}"
     else:
@@ -149,7 +149,7 @@ def add_context_line_test():
     sentence_text3 = "さながら松永弾正のような死に際だっただけに、こうした再会に戸惑いを覚える僕だったが……漫画やなんかではよくある台詞だが、\n\nこれが"
     sound_line3 = ""
     relative_index3 = 1
-    new_sound_tag3, new_sentence_text3 = menu.get_context_line_data(sound_line3, sentence_text3, relative_index3)
+    new_sound_tag3, new_sentence_text3 = menu.get_context_sound_and_sentence_line_data(sound_line3, sentence_text3, relative_index3)
     print(f"{new_sentence_text3}")
 add_context_line_test()
 

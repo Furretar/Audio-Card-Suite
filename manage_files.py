@@ -209,7 +209,6 @@ def get_ffmpeg_exe_path():
         return exe_path, probe_path
 
     if os.path.exists(temp_ffmpeg_exe):
-        print("Using bundled FFmpeg executable.")
         return temp_ffmpeg_exe, temp_ffprobe_exe
 
     print("FFmpeg executable not found in PATH or addon folder.")
@@ -249,7 +248,7 @@ def format_subtitle_block(subtitle_block):
 
     return [subtitle_index, start_time, end_time, subtitle_text]
 
-def get_subtitle_block_from_relative_index(relative_index, subtitle_index, subtitle_path) -> str:
+def get_subtitle_block_from_relative_index(relative_index, subtitle_index, subtitle_path):
     with open(subtitle_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
@@ -282,10 +281,10 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
         print(f"valid backtick subtitle path: {subtitle_path}")
         print(f"\nblock from text {sentence_line}: {block}\n")
         if not block or not subtitle_path:
-            return None, None
+            return None, None, None
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
         print(f"valid backtick sound line: {sound_line}")
-        return sound_line, block
+        return sound_line, block, subtitle_path
 
     format = detect_format(sound_line)
     print(f"detected format: {format} for sound line: {sound_line}")
@@ -293,7 +292,7 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
     if format not in ["backtick", "subs2srs"]:
         block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
         if not block or not subtitle_path:
-            return None, None
+            return None, None, None
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
 
     data = extract_sound_line_data(sound_line)
@@ -309,17 +308,17 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
         start_index = data["start_index"]
         end_index = data["end_index"]
         block, _ = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
-        return sound_line, block
+        return sound_line, block, subtitle_path
 
     elif format == "subs2srs":
         first_sentence = sentence_line.strip().split()[0]
         print(f"first_sentence: {first_sentence}")
         block, _ = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_sentence)
         if block is None:
-            return None, None
+            return None, None, None
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
 
-    return sound_line, block
+    return sound_line, block, subtitle_path
 
 
 
@@ -1006,7 +1005,6 @@ def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
     bitrate = config["bitrate"]
 
     altered_data = get_altered_sound_data(sound_line, start_ms, end_ms, relative_index)
-    print("altered_data new_filename: " + altered_data['new_filename'])
     data = extract_sound_line_data(sound_line)
     if not altered_data:
         return ""

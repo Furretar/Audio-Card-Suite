@@ -3,6 +3,7 @@
 - [ ] tag cards with the name of the source file
 - [ ] allow editing end start times even without backtick filename
 - [ ] button/function to find next match, useful for context aware generation
+- [ ] add next and previous lines without a source file, for just text sentence cards
 
 
 

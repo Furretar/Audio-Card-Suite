@@ -556,6 +556,7 @@ def get_translation_line_from_sound_line(sound_line):
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
 
     translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
+    translation_line = re.sub(r"\{.*?\}", "", translation_line)
     return translation_line.strip()
 
 

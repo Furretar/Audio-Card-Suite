@@ -362,11 +362,10 @@ def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, senten
 
 # 1-based indexing
 def get_subtitle_track_number_by_code(source_path, code):
-    print(f"code in get_subtitle_track_number_by_code: {code}, source_path: {source_path}")
     ffmpeg_exe, ffprobe_exe = get_ffmpeg_exe_path()
     try:
         cmd = [
-            f"{ffprobe_exe}", "-v", "error", "-select_streams", "s",
+            ffprobe_exe, "-v", "error", "-select_streams", "s",
             "-show_entries", "stream=index:stream_tags=language",
             "-of", "json", source_path
         ]
@@ -378,14 +377,18 @@ def get_subtitle_track_number_by_code(source_path, code):
             print("No subtitle streams found.")
             return None
 
-        for stream in streams:
+        for i, stream in enumerate(streams, start=1):
             lang = stream.get("tags", {}).get("language", "")
             if lang.lower() == code.lower():
-                return stream.get("index", None)
+                return i  # Return ordinal subtitle track number
+
+        print(f"No subtitle with code '{code}' found, falling back to subtitle track 1")
+        return 1  # Fallback to first subtitle track ordinal
 
     except Exception as e:
         print(f"ffprobe error: {e}")
 
+    print(f"could not get track number by code: {code}, source_path: {source_path}")
     return None
 
 
@@ -408,9 +411,14 @@ def get_subtitle_code_by_track_number(source_path, track_number):
         print(f"ffprobe error: {e}")
     return None
 
+source_path = r"""C:\Users\wyatt\AppData\Roaming\Anki2\addons21\Audio-Card-Suite\Sources\jìnjī_de_jùrén_s1_1-5_1.mkv"""
+code = "chi"
+track_number = get_subtitle_track_number_by_code(source_path, code)
+print(track_number)
+
 # translation_field = get_field_key_from_label(note_type_name, "Translation Sub Line", config)
 def extract_subtitle_files(source_path, track, code):
-
+    print(f"extracting subtitles files, track: {track}, code: {code}")
     filename_base, _ = os.path.splitext(os.path.basename(source_path))
     tagged_subtitle_file = f"{filename_base}`track_{track}`{code}.srt"
     tagged_subtitle_path = os.path.join(addon_source_folder, tagged_subtitle_file)
@@ -425,8 +433,7 @@ def extract_subtitle_files(source_path, track, code):
 
     track_by_code = get_subtitle_track_number_by_code(source_path, code)
     if track_by_code is None:
-        print("No subtitle track found — skipping extraction.")
-        return None
+        track_by_code = track
 
     if track_by_code != track:
         print(f"track_by_code ({track_by_code}) != set track ({track})")
@@ -477,15 +484,20 @@ def get_subtitle_path_from_filename_track_code(filename, track, code):
         return tagged_subtitle_path
 
     # 2. Fallback: match by code or track
+    print(f"fallback, looking for {code} or {track}")
     if selected_tab_index == 0:
         for file in os.listdir(addon_source_folder):
             if file.startswith(filename_base) and file.endswith(f"{code}.srt"):
                 return os.path.join(addon_source_folder, file)
-    else:
-        track_str = f"`track_{track}`"
-        for file in os.listdir(addon_source_folder):
-            if file.startswith(filename_base) and track_str in file:
-                return os.path.join(addon_source_folder, file)
+
+    track_str = f"`track_{track}`"
+    for file in os.listdir(addon_source_folder):
+        starts = file.startswith(filename_base)
+        has_track = track_str in file
+        print(f"checking: {file}, starts: {starts}, has_track: {has_track}")
+
+        if file.startswith(filename_base) and track_str in file:
+            return os.path.join(addon_source_folder, file)
 
     print("No matching subtitle file found.")
     return None

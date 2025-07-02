@@ -508,26 +508,27 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
         print(f"checking filename: {filename}")
         filename_base, file_extension = os.path.splitext(filename)
         if file_extension.lower() in video_exts or file_extension.lower() in audio_exts:
-            source_path = os.path.join(addon_source_folder, filename)
-            config = extract_config_data()
-            track = config["target_subtitle_track"]
-            code = config["target_language_code"]
-            tagged_subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
+            for base in [filename_base, filename_base.replace(" ", "_")]:
+                source_path = os.path.join(addon_source_folder, base + file_extension)
+                config = extract_config_data()
+                track = config["target_subtitle_track"]
+                code = config["target_language_code"]
+                tagged_subtitle_path = get_subtitle_path_from_filename_track_code(base, track, code)
 
-            if not tagged_subtitle_path or not os.path.exists(tagged_subtitle_path):
-                print("Subtitle path is None or file does not exist.")
-                return None, None
+                if not tagged_subtitle_path or not os.path.exists(tagged_subtitle_path):
+                    print("Subtitle path is None or file does not exist.")
+                    continue
 
-            with open(tagged_subtitle_path, 'r', encoding='utf-8') as f:
-                blocks = f.read().strip().split('\n\n')
+                with open(tagged_subtitle_path, 'r', encoding='utf-8') as f:
+                    blocks = f.read().strip().split('\n\n')
 
-            for block in blocks:
-                formatted_block = format_subtitle_block(block)
-                if formatted_block and len(formatted_block) == 4:
-                    subtitle_text = formatted_block[3]
+                for block in blocks:
+                    formatted_block = format_subtitle_block(block)
+                    if formatted_block and len(formatted_block) == 4:
+                        subtitle_text = formatted_block[3]
 
-                    if normalize_text(sentence_line) in normalize_text(subtitle_text):
-                        return formatted_block, tagged_subtitle_path
+                        if normalize_text(sentence_line) in normalize_text(subtitle_text):
+                            return formatted_block, tagged_subtitle_path
 
     return None, None
 
@@ -651,11 +652,14 @@ def get_source_file(filename_base) -> str:
     if video_source_path:
         return video_source_path
 
-    for ext in set(audio_exts):
-        path = os.path.join(addon_source_folder, filename_base + ext)
-        print("now checking: ", path)
-        if os.path.exists(path):
-            return path
+    possible_bases = [filename_base, filename_base.replace("_", " ")]
+
+    for base in possible_bases:
+        for ext in set(audio_exts + video_exts):
+            path = os.path.join(addon_source_folder, base + ext)
+            print("now checking: ", path)
+            if os.path.exists(path):
+                return path
 
     print(f"No source file found for base name: {filename_base}")
     showInfo(f"No source file found for base name: {filename_base}")

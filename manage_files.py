@@ -1007,12 +1007,8 @@ def get_audio_start_time_ms(source_file_path: str) -> int:
         print(f"Could not get pts_time from packets: {e}")
         return 0
 
-def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
-    config = extract_config_data()
-    lufs = config["lufs"]
-    bitrate = config["bitrate"]
 
-    altered_data = get_altered_sound_data(sound_line, start_ms, end_ms, relative_index)
+def alter_sound_file_times(altered_data, sound_line) -> str:
     data = extract_sound_line_data(sound_line)
     if not altered_data:
         return ""
@@ -1040,6 +1036,7 @@ def alter_sound_file_times(sound_line, start_ms, end_ms, relative_index) -> str:
     if os.path.exists(altered_data["new_path"]):
         return f"[sound:{altered_data['new_filename']}]"
     return ""
+
 
 
 def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relative_index) -> dict:
@@ -1092,11 +1089,13 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
 
     new_filename = "`".join(filename_parts) + f".{data['file_extension']}"
     new_path = os.path.join(get_collection_dir(), new_filename)
+    new_sound_line = f"[sound:{new_filename}]"
 
     return {
         "new_start_time": new_start_time,
         "new_end_time": new_end_time,
         "new_filename": new_filename,
+        "new_sound_line": new_sound_line,
         "new_path": new_path,
         "old_path": data["collection_path"]
     }

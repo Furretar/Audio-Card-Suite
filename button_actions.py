@@ -424,7 +424,7 @@ def generate_fields_helper(editor, note):
 # checks each field, generating and updating if needed. Returns each field, empty if not needed
 def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sentence_line, selected_text, sentence_idx, image_line, image_idx):
     sentence_blocks = [line for line in sentence_line.splitlines() if line.strip()]
-    sentence_lines = [line for line in re.split(r"[ \n]{2,}|\s", sentence_line) if line.strip()]
+    sentence_lines = [line for line in re.split(r"[ \n]{2,}|[\s。、,.]", sentence_line) if line.strip()]
     print(f"sentence lines: {sentence_lines}")
     if not sentence_lines:
         showInfo("sentence field empty")
@@ -564,9 +564,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sent
     config = manage_files.extract_config_data()
     note_type_name = list(config["mapped_fields"].keys())[0]
     generate_image = get_field_key_from_label(note_type_name, "Image", config)
-    print(f"genreate image: {generate_image}")
     if not image_line and generate_image:
-        print(f"generating image since empty")
         new_image_line = manage_files.get_image_if_empty_helper(image_line, new_sound_line)
     else:
         print(f"image already generated: {image_line}, or generate_image: {generate_image}")

@@ -421,8 +421,13 @@ def extract_subtitle_files(source_path, track, code):
     filename_base, _ = os.path.splitext(os.path.basename(source_path))
     tagged_subtitle_file = f"{filename_base}`track_{track}`{code}.srt"
     tagged_subtitle_path = os.path.join(addon_source_folder, tagged_subtitle_file)
+    basename_subtitle_file = f"{filename_base}.srt"
+    basename_subtitle_path = os.path.join(addon_source_folder, basename_subtitle_file)
 
     if os.path.exists(tagged_subtitle_path):
+        return
+
+    if os.path.exists(basename_subtitle_path):
         return
 
     config = extract_config_data()
@@ -481,6 +486,12 @@ def get_subtitle_path_from_filename_track_code(filename, track, code):
     tagged_subtitle_path = os.path.join(addon_source_folder, tagged_subtitle_file)
     if os.path.exists(tagged_subtitle_path):
         return tagged_subtitle_path
+
+    # try name matching basename
+    basename_subtitle_file = f"{filename_base}.srt"
+    basename_subtitle_path = os.path.join(addon_source_folder, basename_subtitle_file)
+    if os.path.exists(basename_subtitle_path):
+        return basename_subtitle_path
 
     # 2. Fallback: match by code or track
     print(f"fallback, looking for {code} or {track}")
@@ -710,9 +721,7 @@ def get_image_if_empty_helper(image_line, sound_line):
     )
 
     if image_path:
-        print(f"video extension: {video_extension}")
         if video_extension == ".m4b":
-            print("EXTENSION IS M4B")
             embed_image = f'<img src="{os.path.basename(m4b_image_collection_path)}">'
         else:
             embed_image = f'<img src="{os.path.basename(image_filename)}">'
@@ -734,7 +743,6 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
 
     
     if source_path.lower().endswith(".m4b"):
-        print("m4b detected")
         output_path = m4b_image_collection_path
         cmd = [
             f"{ffmpeg_path}", "-y",

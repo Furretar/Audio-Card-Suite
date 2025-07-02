@@ -4,8 +4,9 @@
 - [ ] allow editing end start times even without backtick filename
 - [ ] button/function to find next match, useful for context aware generation
 - [ ] add next and previous lines without a source file, for just text sentence cards
+- [ ] combine all lines in sentence field, combine all lines in every subtitle file, then check if sentence line is inside subtitle file, this is less ambiguous than splitting at commas and periods
 
-
+.
 
 - [ ] add generate button, add blocks for every matching string in text field
 - [ ] add a button to fetch next result for text if it matched something else

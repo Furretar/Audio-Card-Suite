@@ -1,7 +1,8 @@
 - [ ] button to open source folder
-- [ ] read every sub folder in source folder, allow for setting download folder as source?
+- [ ] read every sub folder in source folder, add folder it will ignore for easy management
 - [ ] tag cards with the name of the source file
 - [ ] allow editing end start times even without backtick filename
+- [ ] button/function to find next match, useful for context aware generation
 
 
 

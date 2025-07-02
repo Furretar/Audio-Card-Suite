@@ -97,7 +97,6 @@ class AudioToolsDialog(QDialog):
 
     def load_settings(self):
         config_file_path = os.path.join(addon_dir, "config.json")
-        print(f"Loading config for {self.addon_id} from: {config_file_path}")
 
         default_settings = {
             "default_model": "Basic",
@@ -367,8 +366,6 @@ class AudioToolsDialog(QDialog):
                 combo.setCurrentIndex(idx)
 
             edit.setText(saved_code)
-            print(f"saved_language: {saved_language}")
-            print(f"saved_code: {saved_code}")
 
             combo.currentTextChanged.connect(
                 lambda text, idx=i: self.on_lang_code_changed(idx, str(text))
@@ -513,6 +510,7 @@ class AudioToolsDialog(QDialog):
                     deck,
                     note_type,
                     overwrite=overwrite_fields_checkbox.isChecked(),
+                    normalize_audio=normalize_audio_checkbox.isChecked()
                 )
 
             def on_reject():

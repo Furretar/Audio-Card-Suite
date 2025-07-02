@@ -53,6 +53,7 @@ SUBS2SRS_PATTERN = re.compile(
 )
 
 
+
 def detect_format(sound_line: str) -> str:
     if not sound_line:
         return None
@@ -64,7 +65,6 @@ def detect_format(sound_line: str) -> str:
         return "subs2srs"
     else:
         return "unknown"
-
 
 def extract_sound_line_data(sound_line):
     print(f"extracting data from {sound_line}")
@@ -122,6 +122,10 @@ def extract_sound_line_data(sound_line):
             f"{filename_base}_{start_time_raw}-{end_time_raw}"
         )
     else:
+        if not sound_line:
+            print("extract_sound_line_data received None or empty string.")
+            return None
+
         if sound_line.startswith("[sound:") and sound_line.endswith("]"):
             filename = sound_line[len("[sound:"):-1]
             collection_path = os.path.join(get_collection_dir(), filename)
@@ -284,7 +288,7 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
         return sound_line, block
 
     format = detect_format(sound_line)
-    print(f"detected format: {format}")
+    print(f"detected format: {format} for sound line: {sound_line}")
 
     if format not in ["backtick", "subs2srs"]:
         block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
@@ -297,6 +301,8 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
     config = extract_config_data()
     track = config.get("target_subtitle_track")
     code = config.get("target_language_code")
+    print(f"target_language_code: {code}")
+    print(f"config: {config}")
     subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
 
     if format == "backtick":
@@ -356,6 +362,7 @@ def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, senten
 
 # 1-based indexing
 def get_subtitle_track_number_by_code(source_path, code):
+    print(f"code in get_subtitle_track_number_by_code: {code}, source_path: {source_path}")
     ffmpeg_exe, ffprobe_exe = get_ffmpeg_exe_path()
     try:
         cmd = [
@@ -365,13 +372,22 @@ def get_subtitle_track_number_by_code(source_path, code):
         ]
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         info = json.loads(result.stdout)
-        for i, stream in enumerate(info.get("streams", [])):
+        streams = info.get("streams", [])
+
+        if not streams:
+            print("No subtitle streams found.")
+            return None
+
+        for stream in streams:
             lang = stream.get("tags", {}).get("language", "")
             if lang.lower() == code.lower():
-                return i + 1  # 1-based index
+                return stream.get("index", None)
+
     except Exception as e:
         print(f"ffprobe error: {e}")
+
     return None
+
 
 # 1-based indexing
 def get_subtitle_code_by_track_number(source_path, track_number):
@@ -394,6 +410,7 @@ def get_subtitle_code_by_track_number(source_path, track_number):
 
 # translation_field = get_field_key_from_label(note_type_name, "Translation Sub Line", config)
 def extract_subtitle_files(source_path, track, code):
+
     filename_base, _ = os.path.splitext(os.path.basename(source_path))
     tagged_subtitle_file = f"{filename_base}`track_{track}`{code}.srt"
     tagged_subtitle_path = os.path.join(addon_source_folder, tagged_subtitle_file)
@@ -405,7 +422,12 @@ def extract_subtitle_files(source_path, track, code):
     selected_tab_index = config["selected_tab_index"]
     exe_path, _ = get_ffmpeg_exe_path()
 
+
     track_by_code = get_subtitle_track_number_by_code(source_path, code)
+    if track_by_code is None:
+        print("No subtitle track found — skipping extraction.")
+        return None
+
     if track_by_code != track:
         print(f"track_by_code ({track_by_code}) != set track ({track})")
         if selected_tab_index == 0 and track_by_code:
@@ -442,6 +464,10 @@ def get_subtitle_path_from_filename_track_code(filename, track, code):
         print(f"Source video not found: {source_path}")
         return None
 
+    if not code or code.lower() == "none":
+        print(f"Invalid subtitle language code: {code!r}")
+        return None
+
     extract_subtitle_files(source_path, track, code)
 
     # 1. Try exact match
@@ -476,6 +502,10 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
             code = config["target_language_code"]
             tagged_subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
 
+            if not tagged_subtitle_path or not os.path.exists(tagged_subtitle_path):
+                print("Subtitle path is None or file does not exist.")
+                return None, None
+
             with open(tagged_subtitle_path, 'r', encoding='utf-8') as f:
                 blocks = f.read().strip().split('\n\n')
 
@@ -490,11 +520,18 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
     return None, None
 
 def get_translation_line_from_sound_line(sound_line):
+    if not sound_line:
+        print("get_translation_line_from_sound_line received None sound_line.")
+        return ""
+
+    data = extract_sound_line_data(sound_line)
+    if not data:
+        print("extract_sound_line_data returned None.")
+        return ""
 
     config = extract_config_data()
     translation_audio_track = config["translation_audio_track"]
     translation_language_code = config["translation_language_code"]
-    data = extract_sound_line_data(sound_line)
     start_time = data["start_time"]
     end_time = data["end_time"]
     filename_base = data["filename_base"]
@@ -511,6 +548,14 @@ def get_translation_line_from_sound_line(sound_line):
 
 def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, start_time, end_time):
     print(f"start time: {start_time}, end time: {end_time}")
+
+    if not subtitle_path:
+        print("Subtitle path is None.")
+        return []
+
+    if not os.path.exists(subtitle_path):
+        print(f"Subtitle file not found: {subtitle_path}")
+        return []
 
     start_ms = time_hmsms_to_milliseconds(start_time)
     end_ms = time_hmsms_to_milliseconds(end_time)

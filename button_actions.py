@@ -186,7 +186,7 @@ def remove_edge_lines_helper(editor, relative_index):
     new_field = re.sub(r"\[sound:.*?\]", new_sound_line, sound_line)
     editor.note.fields[sound_idx] = new_field
     editor.note.fields[sentence_idx] = new_sentence_line
-    generate_fields_helper(editor)
+    generate_editor_fields_helper(editor)
 
     def play_after_reload():
         sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_line)
@@ -230,7 +230,7 @@ def add_context_line_helper(editor: Editor, relative_index):
         editor.loadNote()
 
     print(f"riunning generate fields helper")
-    generate_fields_helper(editor)
+    generate_editor_fields_helper(editor)
 
 def get_context_line_data(sound_line, sentence_line, relative_index):
 
@@ -324,12 +324,12 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     return
 
 def generate_fields_button(editor):
-    sound_filename = generate_fields_helper(editor)
+    sound_filename = generate_editor_fields_helper(editor)
     if sound_filename:
         print(f"Playing sound filename: {sound_filename}")
         QTimer.singleShot(100, lambda: play(sound_filename))
 
-def generate_fields_helper(editor):
+def generate_editor_fields_helper(editor):
     fields = get_fields_from_editor(editor)
     sound_line = fields["sound_line"]
     sound_idx = fields["sound_idx"]
@@ -408,8 +408,8 @@ def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sent
             print("already formatted")
             target_block, _ = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_line)
     else:
+        print(f"1 sentnece block")
         sound_line, target_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
-
     if not target_block or len(target_block) < 4:
         print(f"Invalid or incomplete block: {target_block}, length: {len(target_block) if target_block else 'N/A'}")
     else:
@@ -448,20 +448,134 @@ def on_note_loaded(editor: Editor):
                 print(f"Playing sound from field {sound_idx}: {filename}")
                 QTimer.singleShot(0, lambda fn=filename: play(fn))
 
+def get_fields_from_note(note):
+    config = manage_files.extract_config_data()
+    mapped_fields = config.get("mapped_fields", {})
+
+    if not mapped_fields:
+        showInfo("fields not mapped")
+        return {}
+
+    note_type_name = list(mapped_fields.keys())[0]
+    note_type = note.note_type()
+    fields = note_type["flds"]
+
+    def get_index(label):
+        key = manage_files.get_field_key_from_label(note_type_name, label, config)
+        return index_of_field(key, fields) if key else -1
+
+    sentence_idx = get_index("Target Sub Line")
+    sound_idx = get_index("Target Audio")
+    translation_idx = get_index("Translation Sub Line")
+    image_idx = get_index("Image")
+
+    sound_line = note.fields[sound_idx] if 0 <= sound_idx < len(note.fields) else ""
+    if "[sound:" not in sound_line:
+        sound_line = ""
+
+    image_line = note.fields[image_idx] if 0 <= image_idx < len(note.fields) else ""
+    if "<img src=" not in image_line:
+        print("no valid image detected")
+        image_line = ""
+
+    sentence_line = note.fields[sentence_idx] if 0 <= sentence_idx < len(note.fields) else ""
+    translation_line = note.fields[translation_idx] if 0 <= translation_idx < len(note.fields) else ""
+
+    return {
+        "sound_line": sound_line,
+        "sound_idx": sound_idx,
+        "sentence_line": sentence_line,
+        "sentence_idx": sentence_idx,
+        "image_line": image_line,
+        "image_idx": image_idx,
+        "translation_line": translation_line,
+        "translation_idx": translation_idx,
+    }
+
+
+def generate_note_fields_helper(note):
+    config = manage_files.extract_config_data()
+    mapped_fields = config["mapped_fields"]
+    note_type_name = list(mapped_fields.keys())[0]
+    fields = note.note_type()["flds"]
+
+    def get_idx(label):
+        field_key = manage_files.get_field_key_from_label(note_type_name, label, config)
+        return index_of_field(field_key, fields) if field_key else -1
+
+    sentence_idx = get_idx("Target Sub Line")
+    sound_idx = get_idx("Target Audio")
+    image_idx = get_idx("Image")
+    translation_idx = get_idx("Translation Sub Line")
+    print(f"sentence_idx: {sentence_idx}")
+    print(f"sound_idx: {sound_idx}")
+    print(f"image_idx: {image_idx}")
+    print(f"translation_idx: {translation_idx}")
+
+
+    sentence_line = note.fields[sentence_idx] if 0 <= sentence_idx < len(note.fields) else ""
+    sound_line = note.fields[sound_idx] if 0 <= sound_idx < len(note.fields) else ""
+    image_line = note.fields[image_idx] if 0 <= image_idx < len(note.fields) else ""
+    translation_line = note.fields[translation_idx] if 0 <= translation_idx < len(note.fields) else ""
+
+    print(f"got here")
+    new_result = generate_fields_sound_sentence_image_translation(
+        sound_line, sound_idx, sentence_line, sentence_idx, image_line, image_idx
+    )
+    print(f"new_result: {new_result}")
+
+    if not new_result or not all(new_result):
+        print("generate_fields_sound_sentence_image failed to return valid values.")
+        if new_result:
+            for i, val in enumerate(new_result):
+                print(f"  Field {i}: {val!r}")
+        else:
+            print("  new_result is None or empty.")
+        return None
+
+    new_sound_line, new_sentence_line, new_image_line, new_translation_line = new_result
+
+    updated = False
+
+    if new_image_line and note.fields[image_idx] != new_image_line:
+        note.fields[image_idx] = new_image_line
+        updated = True
+
+    if new_sound_line and note.fields[sound_idx] != new_sound_line:
+        note.fields[sound_idx] = new_sound_line
+        updated = True
+
+    if new_sentence_line and note.fields[sentence_idx] != new_sentence_line:
+        note.fields[sentence_idx] = new_sentence_line
+        updated = True
+
+    print(f"new translation line: {new_translation_line}")
+    if new_translation_line and note.fields[translation_idx] != new_translation_line:
+        note.fields[translation_idx] = new_translation_line
+        updated = True
+
+    if updated:
+        mw.col.update_note(note)
+
+    match = re.search(r"\[sound:(.*?)]", note.fields[sound_idx])
+    return match.group(1) if match else None
+
+
 
 # bulk generation
 def is_normalized(sound_line):
-    return bool(re.search(r'`\-\d+LUFS\.\w+$', sound_line))
+    return bool(re.search(r'`-\d+LUFS\.\w+$', sound_line))
 
-def bulk_generate(deck, note_type, overwrite):
+def bulk_generate(deck, note_type, overwrite, normalize_audio):
 
+    config = manage_files.extract_config_data()
+    lufs = config["lufs"]
 
     current_deck_name = deck["name"]
 
     print("Running bulk_generate...")
     print("Deck:", current_deck_name)
     print("Overwrite Fields:", overwrite)
-    print("Normalize Audio:", normalize)
 
     deck_id = mw.col.decks.id(current_deck_name)
     note_ids = mw.col.find_notes(f'deck:"{current_deck_name}"')
@@ -482,15 +596,16 @@ def bulk_generate(deck, note_type, overwrite):
     print(f"note ids: {note_ids}")
     for note_id in note_ids:
         note = mw.col.get_note(note_id)
+        fields = get_fields_from_note(note)
+        sound_idx = fields["sound_idx"]
         if note.note_type()['name'] != note_type:
             continue
-
         print("Processing note:", note.id, note.note_type()['name'])
-
         sound_line = note.fields[sound_idx]
         print("Sound line:", sound_line)
 
-        if normalize:
+        # skip if already normalized to same lufs
+        if normalize_audio:
             m = re.search(r'`(-\d+)LUFS', sound_line)
             if m:
                 print(f"m: {m.group(1)}")
@@ -502,6 +617,8 @@ def bulk_generate(deck, note_type, overwrite):
 
         format = manage_files.detect_format(sound_line)
         if "[sound:" in sound_line:
+
+            # will not edit any fields with data if overwrite is not checked
             if overwrite:
                 data = manage_files.extract_sound_line_data(sound_line)
                 if not data:
@@ -509,7 +626,7 @@ def bulk_generate(deck, note_type, overwrite):
                 collection_path = data["collection_path"]
                 print(f"Collection path: {collection_path}")
 
-                if normalize and not is_normalized(sound_line):
+                if normalize_audio and not is_normalized(sound_line):
                     base, file_extension = os.path.splitext(collection_path)
                     print(f"base name: {base}, extension: {file_extension}, og soiund line: {sound_line}, collection path: {collection_path}")
                     if format == "backtick":
@@ -522,10 +639,8 @@ def bulk_generate(deck, note_type, overwrite):
                         filename = f"{base_name}`{lufs}LUFS{file_extension}"
 
                     print(f"filename: {filename}")
-
                     folder = os.path.dirname(collection_path)
                     new_collection_path = os.path.join(folder, filename)
-
                     cmd = manage_files.create_just_normalize_audio_command(collection_path)
 
                     try:
@@ -534,7 +649,6 @@ def bulk_generate(deck, note_type, overwrite):
                     except subprocess.CalledProcessError as e:
                         print(f"ffmpeg command failed: {e}")
                         continue
-
                     if os.path.exists(new_collection_path):
                         print(f"trashing: {collection_path}")
                         send2trash(collection_path)
@@ -545,6 +659,9 @@ def bulk_generate(deck, note_type, overwrite):
                     new_filename = os.path.basename(new_collection_path)
                     note.fields[sound_idx] = f"[sound:{new_filename}]"
                     mw.col.update_note(note)
+            else:
+                generate_note_fields_helper(note)
+                mw.col.update_note(note)
 
 
 

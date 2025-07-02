@@ -76,13 +76,14 @@ def get_fields_from_editor(editor: Editor):
         image_line = ""
 
     sentence_line = editor.note.fields[sentence_idx] if 0 <= sentence_idx < len(editor.note.fields) else ""
+
+    translation_line = editor.note.fields[translation_idx] if 0 <= translation_idx < len(editor.note.fields) else ""
+
     format = manage_files.detect_format(sound_line)
     if format != "backtick":
         selected_text = editor.web.selectedText().strip()
-        if selected_text:
-            sentence_line = selected_text
-
-    translation_line = editor.note.fields[translation_idx] if 0 <= translation_idx < len(editor.note.fields) else ""
+    else:
+        selected_text = ""
 
     return {
         "sound_line": sound_line,
@@ -93,6 +94,7 @@ def get_fields_from_editor(editor: Editor):
         "image_idx": image_idx,
         "translation_line": translation_line,
         "translation_idx": translation_idx,
+        "selected_text": selected_text,
     }
 
 
@@ -349,6 +351,7 @@ def generate_fields_helper(editor, note):
         sound_line = note.fields[sound_idx] if 0 <= sound_idx < len(note.fields) else ""
         image_line = note.fields[image_idx] if 0 <= image_idx < len(note.fields) else ""
         translation_line = note.fields[translation_idx] if 0 <= translation_idx < len(note.fields) else ""
+        selected_text = ""
 
         field_obj = note
     else:
@@ -362,13 +365,17 @@ def generate_fields_helper(editor, note):
         sound_line = fields["sound_line"]
         image_line = fields["image_line"]
         translation_line = fields["translation_line"]
+        selected_text = fields["selected_text"]
 
         field_obj = editor.note
 
     updated = False
+
+    # generate fields using sentence line
     new_result = generate_fields_sound_sentence_image_translation(
-        sound_line, sound_idx, sentence_line, sentence_idx, image_line, image_idx
+        sound_line, sound_idx, sentence_line, selected_text, sentence_idx, image_line, image_idx
     )
+
 
     if not new_result or not all(new_result):
         print("generate_fields_sound_sentence_image failed to return valid values.")
@@ -414,9 +421,9 @@ def generate_fields_helper(editor, note):
 
 
 # checks each field, generating and updating if needed. Returns each field, empty if not needed
-def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sentence_line, sentence_idx, image_line, image_idx):
+def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sentence_line, selected_text, sentence_idx, image_line, image_idx):
     sentence_blocks = [line for line in sentence_line.splitlines() if line.strip()]
-    sentence_lines = [line for line in sentence_line.split(" ") if line.strip()]
+    sentence_lines = [line for line in re.split(r"[ \n]{2,}|\s", sentence_line) if line.strip()]
     print(f"sentence lines: {sentence_lines}")
     if not sentence_lines:
         showInfo("sentence field empty")
@@ -425,22 +432,39 @@ def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sent
     if first_line == "-":
         first_line += sentence_lines[1] if len(sentence_lines) > 1 else ""
 
-    # If more than 1 block, reformat if needed
-    if len(sentence_blocks) > 1:
-        format = manage_files.detect_format(sound_line)
-        if format != "backtick":
-            print("formatting sound line")
-            sound_line, target_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
+    # dont overwrite if sound line already formatted
+    format = manage_files.detect_format(sound_line)
+    if format != "backtick":
+        # check selected text first
+        if selected_text:
+            print("getting sound line from selected text")
+            sound_line, target_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, selected_text)
         else:
-            print("already formatted")
-            target_block, _ = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_line)
+            if len(sentence_blocks) > 1:
+                print("formatting sound line from first line of multiple")
+            else:
+                print("formatting sound line from sentence line")
+            sound_line, target_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
     else:
-        print(f"1 sentnece block")
-        sound_line, target_block = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
+        print("already formatted")
+        target_block, _ = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_line)
+
     if not target_block or len(target_block) < 4:
         print(f"Invalid or incomplete block: {target_block}, length: {len(target_block) if target_block else 'N/A'}")
+        new_sentence_line = ""
     else:
-        sentence_line = target_block[3]
+        new_sentence_line = target_block[3]
+
+    leftover_sentence = sentence_line.strip()
+    # remove text only once
+    index = leftover_sentence.find(new_sentence_line)
+    if index != -1:
+        leftover_sentence = (leftover_sentence[:index] + leftover_sentence[index + len(new_sentence_line):]).strip()
+
+    if leftover_sentence:
+        print(f"leftover sentence: {leftover_sentence}")
+    else:
+        print(f"no leftover sentence")
 
     config = manage_files.extract_config_data()
     note_type_name = list(config["mapped_fields"].keys())[0]
@@ -453,11 +477,9 @@ def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sent
         print(f"image already generated: {image_line}, or generate_image: {generate_image}")
         new_image_line = image_line
 
-    print(f"using this sound line for transltaion times: {sound_line}")
     translation_line = manage_files.get_translation_line_from_sound_line(sound_line)
-    print(f"translation_line: {translation_line}")
 
-    return sound_line, sentence_line, new_image_line, translation_line
+    return sound_line, new_sentence_line, new_image_line, translation_line
 
 def on_note_loaded(editor: Editor):
     editor.web.eval("window.getSelection().removeAllRanges();")

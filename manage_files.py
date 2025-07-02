@@ -551,8 +551,6 @@ def get_translation_line_from_sound_line(sound_line):
 
 
     translation_subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, translation_audio_track, translation_language_code)
-    print(f"translation subtitle path: {translation_subtitle_path}")
-    print(f"translation code: {translation_language_code}")
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
 
     translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
@@ -561,7 +559,6 @@ def get_translation_line_from_sound_line(sound_line):
 
 
 def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, start_time, end_time):
-    print(f"start time: {start_time}, end time: {end_time}")
 
     if not subtitle_path:
         print("Subtitle path is None.")

@@ -1,3 +1,5 @@
+- [ ] implement 4 character sha code for file disambiguation
+- [ ] bulk convert my current underscore audios/subs2srs underscore files to use the actual file name with normal spaces
 - [ ] button to open source folder
 - [ ] read every sub folder in source folder, add folder it will ignore for easy management
 - [ ] tag cards with the name of the source file
@@ -5,6 +7,7 @@
 - [ ] button/function to find next match, useful for context aware generation
 - [ ] add next and previous lines without a source file, for just text sentence cards
 - [ ] combine all lines in sentence field, combine all lines in every subtitle file, then check if sentence line is inside subtitle file, this is less ambiguous than splitting at commas and periods
+
 
 .
 

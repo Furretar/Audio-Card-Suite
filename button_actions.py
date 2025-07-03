@@ -658,11 +658,6 @@ def is_normalized(sound_line):
     return bool(re.search(r'`-\d+LUFS\.\w+$', sound_line))
 
 def bulk_generate(deck, note_type, overwrite):
-
-    config = manage_files.extract_config_data()
-    lufs = config["lufs"]
-    normalize_audio = config["normalize_audio"]
-
     current_deck_name = deck["name"]
 
     print("Running bulk_generate...")
@@ -688,62 +683,7 @@ def bulk_generate(deck, note_type, overwrite):
     print(f"note ids: {note_ids}")
     for note_id in note_ids:
         note = mw.col.get_note(note_id)
-        fields = get_fields_from_note(note)
-        sound_idx = fields["sound_idx"]
-        if note.note_type()['name'] != note_type:
-            continue
-        print("Processing note:", note.id, note.note_type()['name'])
-        sound_line = note.fields[sound_idx]
-        print("Sound line:", sound_line)
-
-        # will not edit any fields with data if overwrite is not checked
-        if overwrite:
-            if "[sound:" in sound_line:
-                data = manage_files.extract_sound_line_data(sound_line)
-                if not data:
-                    continue
-                collection_path = data["collection_path"]
-                print(f"Collection path: {collection_path}")
-
-                if normalize_audio and not is_normalized(sound_line):
-                    base, file_extension = os.path.splitext(collection_path)
-                    print(f"base name: {base}, extension: {file_extension}, og soiund line: {sound_line}, collection path: {collection_path}")
-                    format = manage_files.detect_format(sound_line)
-                    if format == "backtick":
-                        timestamp_filename_no_normalize = data["timestamp_filename_no_normalize"]
-                        print(f"timestamp_filename_no_normalize: {timestamp_filename_no_normalize}")
-                        filename = f"{timestamp_filename_no_normalize}`{lufs}LUFS{file_extension}"
-                    else:
-                        print(f"not backtick, {sound_line}")
-                        base_name = os.path.splitext(os.path.basename(collection_path))[0]
-                        filename = f"{base_name}`{lufs}LUFS{file_extension}"
-
-                    print(f"filename: {filename}")
-                    folder = os.path.dirname(collection_path)
-                    new_collection_path = os.path.join(folder, filename)
-                    cmd = manage_files.create_just_normalize_audio_command(collection_path)
-
-                    try:
-                        subprocess.run(cmd, check=True)
-                        print(f"running command: {cmd}")
-                    except subprocess.CalledProcessError as e:
-                        print(f"ffmpeg command failed: {e}")
-                        continue
-                    if os.path.exists(new_collection_path):
-                        print(f"trashing: {collection_path}")
-                        send2trash(collection_path)
-                    else:
-                        print(f"Error: new file not found after ffmpeg: {new_collection_path}")
-                        continue
-
-                    new_filename = os.path.basename(new_collection_path)
-                    note.fields[sound_idx] = f"[sound:{new_filename}]"
-                    generate_fields_helper(None, note)
-                    mw.col.update_note(note)
-        else:
-            print(f"gen note fields called")
-            generate_fields_helper(None, note)
-            mw.col.update_note(note)
+        generate_fields_helper(None, note)
 
 
 

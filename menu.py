@@ -510,7 +510,6 @@ class AudioToolsDialog(QDialog):
                     deck,
                     note_type,
                     overwrite=overwrite_fields_checkbox.isChecked(),
-                    normalize_audio=normalize_audio_checkbox.isChecked()
                 )
 
             def on_reject():

@@ -340,6 +340,7 @@ def generate_fields_button(editor):
         QTimer.singleShot(100, lambda: play(sound_filename))
 
 def generate_fields_helper(editor, note):
+    print(f"gen fields called")
     def get_idx(label):
         field_key = manage_files.get_field_key_from_label(note_type_name, label, config)
         return index_of_field(field_key, fields) if field_key else -1
@@ -384,7 +385,7 @@ def generate_fields_helper(editor, note):
         sound_line, sound_idx, sentence_line, selected_text, sentence_idx, image_line, image_idx
     )
 
-
+    print(f"new result: {new_result}")
     if not new_result or not all(new_result):
         print("generate_fields_sound_sentence_image failed to return valid values.")
         if new_result:
@@ -396,18 +397,24 @@ def generate_fields_helper(editor, note):
 
     new_sound_line, new_sentence_line, new_image_line, new_translation_line = new_result
 
-    altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, 0)
-    new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line)
+    print(f"recieved translation line: {new_translation_line}")
 
     def update_field(idx, new_val):
         nonlocal updated
-        if new_val and field_obj.fields[idx] != new_val:
+        current_field = field_obj.fields[idx]
+        if new_val and current_field != new_val:
             field_obj.fields[idx] = new_val
+            print(f"updating field: {new_val}")
             updated = True
 
-    update_field(sound_idx, new_sound_line)
     update_field(sentence_idx, new_sentence_line)
     update_field(translation_idx, new_translation_line)
+
+    altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, 0)
+    if new_sound_line and new_sound_line != field_obj.fields[sound_idx]:
+        new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line)
+        field_obj.fields[sound_idx] = new_sound_line
+        updated = True
 
     if not image_line:
         generated_img = manage_files.get_image_if_empty_helper("", new_sound_line)
@@ -467,6 +474,22 @@ def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sent
         print("already formatted")
         target_block, subtitle_path = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_line)
 
+    new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path)
+
+    config = manage_files.extract_config_data()
+    note_type_name = list(config["mapped_fields"].keys())[0]
+    generate_image = get_field_key_from_label(note_type_name, "Image", config)
+    if not image_line and generate_image:
+        new_image_line = manage_files.get_image_if_empty_helper(image_line, new_sound_line)
+    else:
+        print(f"image already generated: {image_line}, or generate_image: {generate_image}")
+        new_image_line = image_line
+
+    translation_line = manage_files.get_translation_line_from_sound_line(new_sound_line)
+
+    return new_sound_line, new_sentence_line, new_image_line, translation_line
+
+def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path):
     # check before and after selected text for more lines to add
     leftover_sentence = sentence_line.strip()
     # remove new sentence line text only once
@@ -567,21 +590,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sound_idx, sent
 
     print(f"new sound line: {new_sound_line}")
     print(f"new sentence line: {new_sentence_line}")
-
-
-
-    config = manage_files.extract_config_data()
-    note_type_name = list(config["mapped_fields"].keys())[0]
-    generate_image = get_field_key_from_label(note_type_name, "Image", config)
-    if not image_line and generate_image:
-        new_image_line = manage_files.get_image_if_empty_helper(image_line, new_sound_line)
-    else:
-        print(f"image already generated: {image_line}, or generate_image: {generate_image}")
-        new_image_line = image_line
-
-    translation_line = manage_files.get_translation_line_from_sound_line(new_sound_line)
-
-    return new_sound_line, new_sentence_line, new_image_line, translation_line
+    return new_sound_line, new_sentence_line
 
 
 def on_note_loaded(editor: Editor):
@@ -648,10 +657,11 @@ def get_fields_from_note(note):
 def is_normalized(sound_line):
     return bool(re.search(r'`-\d+LUFS\.\w+$', sound_line))
 
-def bulk_generate(deck, note_type, overwrite, normalize_audio):
+def bulk_generate(deck, note_type, overwrite):
 
     config = manage_files.extract_config_data()
     lufs = config["lufs"]
+    normalize_audio = config["normalize_audio"]
 
     current_deck_name = deck["name"]
 
@@ -686,22 +696,9 @@ def bulk_generate(deck, note_type, overwrite, normalize_audio):
         sound_line = note.fields[sound_idx]
         print("Sound line:", sound_line)
 
-        # skip if already normalized to same lufs
-        if normalize_audio:
-            m = re.search(r'`(-\d+)LUFS', sound_line)
-            if m:
-                print(f"m: {m.group(1)}")
-                if int(m.group(1)) == lufs:
-                    print(f"Skipping normalization for note {note.id}, LUFS already matches {m.group(1)}")
-                    continue
-            else:
-                print("No LUFS tag found in sound line")
-
-        format = manage_files.detect_format(sound_line)
-        if "[sound:" in sound_line:
-
-            # will not edit any fields with data if overwrite is not checked
-            if overwrite:
+        # will not edit any fields with data if overwrite is not checked
+        if overwrite:
+            if "[sound:" in sound_line:
                 data = manage_files.extract_sound_line_data(sound_line)
                 if not data:
                     continue
@@ -711,6 +708,7 @@ def bulk_generate(deck, note_type, overwrite, normalize_audio):
                 if normalize_audio and not is_normalized(sound_line):
                     base, file_extension = os.path.splitext(collection_path)
                     print(f"base name: {base}, extension: {file_extension}, og soiund line: {sound_line}, collection path: {collection_path}")
+                    format = manage_files.detect_format(sound_line)
                     if format == "backtick":
                         timestamp_filename_no_normalize = data["timestamp_filename_no_normalize"]
                         print(f"timestamp_filename_no_normalize: {timestamp_filename_no_normalize}")

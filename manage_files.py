@@ -670,7 +670,6 @@ def get_source_file(filename_base) -> str:
                 return path
 
     print(f"No source file found for base name: {filename_base}")
-    showInfo(f"No source file found for base name: {filename_base}")
     return ""
 
 def get_video_duration_seconds(path):

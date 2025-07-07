@@ -756,8 +756,9 @@ def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, senten
             print("Subtitle path still not found after extraction.")
             return None, None
 
+    with open(subtitle_path, 'r', encoding='utf-8') as f:
+        blocks = f.read().strip().split('\n\n')
 
-    blocks = f.read().strip().split('\n\n')
     for block in blocks:
         formatted_block = format_subtitle_block(block)
         if formatted_block and len(formatted_block) == 4:

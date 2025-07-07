@@ -103,15 +103,12 @@ def generate_fields_button(editor):
 
 def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, selected_text, image_line, translation_line):
     # checks each field, generating and updating if needed. Returns each field, empty if not needed
-    sentence_blocks = [line for line in sentence_line.splitlines() if line.strip()]
-    sentence_lines = [line for line in re.split(r"[ \n]{2,}|[\s。、,.]", sentence_line) if line.strip()]
-    print(f"sentence lines: {sentence_lines}")
-    if not sentence_lines:
+    sentence_line = sentence_line or ""
+    sentence_blocks = [line for line in str(sentence_line).splitlines() if line.strip()]
+    print(f"sentence_line: {sentence_line}")
+    if not sentence_line:
         showInfo("sentence field empty")
         return
-    first_line = sentence_lines[0]
-    if first_line == "-":
-        first_line += sentence_lines[1] if len(sentence_lines) > 1 else ""
 
     # dont overwrite if sound line already formatted
     new_sentence_line = sentence_line
@@ -126,7 +123,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
                 print("formatting sound line from first line of multiple")
             else:
                 print("formatting sound line from sentence line")
-            sound_line, target_block, subtitle_path = manage_files.get_valid_backtick_sound_line_and_block(sound_line, first_line)
+            sound_line, target_block, subtitle_path = manage_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_line)
             print(f"sub path from line: {subtitle_path}")
         if not target_block or len(target_block) < 4:
             print(
@@ -136,7 +133,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
             new_sentence_line = target_block[3]
     else:
         print("already formatted")
-        target_block, subtitle_path = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_line)
+        target_block, subtitle_path = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
 
     new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path)
 
@@ -197,7 +194,7 @@ def generate_fields_helper(editor, note):
 
     # generate fields using sentence line
     new_result = generate_fields_sound_sentence_image_translation(
-        sound_line, sound_idx, sentence_line, selected_text, translation_line
+        sound_line, sentence_line, selected_text, image_line, translation_line
     )
 
     print(f"new result: {new_result}")

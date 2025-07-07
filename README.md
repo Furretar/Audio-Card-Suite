@@ -9,7 +9,7 @@
 - [ ] combine all lines in sentence field, combine all lines in every subtitle file, then check if sentence line is inside subtitle file, this is less ambiguous than splitting at commas and periods
 
 
-.
+_____________________________________________________
 
 - [ ] add generate button, add blocks for every matching string in text field
 - [ ] add a button to fetch next result for text if it matched something else

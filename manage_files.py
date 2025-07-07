@@ -369,14 +369,20 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
                 usable_blocks = [b for b in formatted_blocks if b and len(b) == 4]
                 normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
 
+                for i, norm_line in enumerate(normalized_lines):
+                    if norm_line.startswith(normalized_sentence):
+                        print(f"Exact line match found at block {i}")
+                        return usable_blocks[i], subtitle_path
+
+                # fallback: sliding window (if no block starts with the sentence)
                 for start in range(len(normalized_lines)):
                     joined = ""
                     for end in range(start, len(normalized_lines)):
                         joined += normalized_lines[end]
-                        if joined in normalized_sentence:
+                        if normalized_sentence in joined:
                             print(f"Found match from block {start} to {end}")
-                            return usable_blocks[start], subtitle_path  # return first block of match
-                        if len(joined) > len(normalized_sentence):
+                            return usable_blocks[start], subtitle_path
+                        if len(joined) > len(normalized_sentence) + 50:
                             break
 
     print("No match found in any subtitle file.")

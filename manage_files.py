@@ -381,7 +381,7 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
                         joined += normalized_lines[end]
                         if normalized_sentence in joined:
                             print(f"Found match from block {start} to {end}")
-                            return usable_blocks[start], subtitle_path
+                            return usable_blocks[end], subtitle_path
                         if len(joined) > len(normalized_sentence) + 50:
                             break
 

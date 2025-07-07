@@ -350,15 +350,13 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
 
 
     sentence_line = sentence_line or ""
+    sentence_lines = [line for line in re.split(r"[ \n]{2,}|[\s。、,.]", sentence_line) if line.strip()]
+    print(f"sentence lines: {sentence_lines}")
 
-    sentence_blocks = [line for line in str(sentence_line).splitlines() if line.strip()]
-    print(f"sentence_line: {sentence_line}")
-    if not sentence_line:
-        showInfo("sentence field empty")
-        return
     first_line = sentence_lines[0]
     if first_line == "-":
         first_line += sentence_lines[1] if len(sentence_lines) > 1 else ""
+    print(f"first line: {first_line}")
 
     for filename in os.listdir(addon_source_folder):
         print(f"checking filename: {filename}")
@@ -375,7 +373,7 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
                     content = f.read().strip()
                     blocks = content.split('\n\n')
 
-                normalized_target = normalize_text(sentence_line)
+                normalized_target = normalize_text(first_line)
                 normalized_all = normalize_text(content)
 
                 if normalized_target not in normalized_all:
@@ -386,7 +384,7 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
                     formatted_block = format_subtitle_block(block)
                     if formatted_block and len(formatted_block) == 4:
                         subtitle_text = formatted_block[3]
-                        if normalize_text(sentence_line) in normalize_text(subtitle_text):
+                        if normalize_text(first_line) in normalize_text(subtitle_text):
                             return formatted_block, subtitle_path
 
     return None, None

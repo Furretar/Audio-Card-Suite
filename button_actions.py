@@ -105,7 +105,6 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
     # checks each field, generating and updating if needed. Returns each field, empty if not needed
     sentence_line = sentence_line or ""
     sentence_blocks = [line for line in str(sentence_line).splitlines() if line.strip()]
-    print(f"sentence_line: {sentence_line}")
     if not sentence_line:
         showInfo("sentence field empty")
         return

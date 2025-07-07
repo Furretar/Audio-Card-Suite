@@ -1,4 +1,5 @@
 from PyQt6.QtCore import Qt, QTimer
+import difflib
 from PyQt6.QtWidgets import QApplication
 from aqt import gui_hooks
 from aqt.sound import play
@@ -142,7 +143,6 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
     if not image_line and generate_image:
         new_image_line = manage_files.get_image_if_empty_helper(image_line, new_sound_line)
     else:
-        print(f"image already generated: {image_line}, or generate_image: {generate_image}")
         new_image_line = image_line
 
     if not translation_line:
@@ -208,14 +208,12 @@ def generate_fields_helper(editor, note):
 
     new_sound_line, new_sentence_line, new_image_line, new_translation_line = new_result
 
-    print(f"recieved translation line: {new_translation_line}")
 
     def update_field(idx, new_val):
         nonlocal updated
         current_field = field_obj.fields[idx]
         if new_val and current_field != new_val:
             field_obj.fields[idx] = new_val
-            print(f"updating field: {new_val}")
             updated = True
 
     update_field(sentence_idx, new_sentence_line)
@@ -485,14 +483,16 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
 def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path):
     # check before and after selected text for more lines to add
     leftover_sentence = sentence_line.strip()
-    # remove new sentence line text only once
-    index = leftover_sentence.find(new_sentence_line)
-    if index != -1:
-        before_removed = leftover_sentence[:index].strip()
-        after_removed = leftover_sentence[index + len(new_sentence_line):].strip()
+
+    # try to find the longest matching block between the two strings
+    matcher = difflib.SequenceMatcher(None, leftover_sentence, new_sentence_line)
+    match = matcher.find_longest_match(0, len(leftover_sentence), 0, len(new_sentence_line))
+    if match.size > 0:
+        before_removed = leftover_sentence[:match.a].strip()
+        after_removed = leftover_sentence[match.a + match.size:].strip()
     else:
         before_removed = ""
-        after_removed = leftover_sentence
+        after_removed = leftover_sentence.strip()
 
     if before_removed or after_removed:
         print(f"leftover sentence before: {before_removed}")
@@ -502,27 +502,28 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
 
     new_sound_line = sound_line
     while before_removed or after_removed:
-        print(f"current sound line: {new_sound_line}")
-        print(f"current sentence line: {new_sentence_line}")
-
         if not subtitle_path:
             break
 
         data = manage_files.extract_sound_line_data(new_sound_line)
+        if not data:
+            break
         start_index = data.get("start_index")
         if start_index is None:
             break
-
         end_index = data.get("end_index")
         if end_index is None:
             break
+
+
+
 
         if before_removed:
             relative_index = -1
             before_block = manage_files.get_subtitle_block_from_relative_index(relative_index, start_index, subtitle_path)
             before_line = before_block[3]
             before_line_clean = before_line.replace('\n', '').strip()
-            print(f"before line: {before_line_clean}")
+            print(f"before_line_clean: {before_line_clean}, before_removed: {before_removed}")
 
             # check if previous line is in leftover line, or if leftover line is in previous line, and add previous line if it is
             if before_line_clean in before_removed:
@@ -549,12 +550,19 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
                 print(f"didnt match before removed to anything")
                 before_removed = ""
 
+        data = manage_files.extract_sound_line_data(new_sound_line)
+        if not data:
+            break
+        start_index = data.get("start_index")
+        end_index = data.get("end_index")
+
+
         if after_removed:
             relative_index = 1
             after_block = manage_files.get_subtitle_block_from_relative_index(relative_index, end_index, subtitle_path)
             after_line = after_block[3]
             after_line_clean = after_line.replace('\n', '').strip()
-            print(f"after_line: {after_line}, after_line_clean: {after_line_clean}, after_removed: {after_removed}")
+            print(f"after_line_clean: {after_line_clean}, after_removed: {after_removed}")
 
             if after_line_clean in after_removed:
                 after_removed = after_removed.replace(after_line_clean, "").strip()
@@ -581,8 +589,6 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
                 after_removed = ""
 
 
-    print(f"new sound line: {new_sound_line}")
-    print(f"new sentence line: {new_sentence_line}")
     return new_sound_line, new_sentence_line
 
 def on_note_loaded(editor: Editor):

@@ -53,7 +53,6 @@ def get_collection_dir():
     return mw.col.media.dir()
 
 def extract_sound_line_data(sound_line):
-    print(f"extracting data from {sound_line}")
     format_type = detect_format(sound_line)
     if format_type == "backtick":
 
@@ -706,11 +705,9 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
         if not block or not subtitle_path:
             return None, None, None
         sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
-        print(f"valid backtick sound line: {sound_line}")
         return sound_line, block, subtitle_path
 
     format = detect_format(sound_line)
-    print(f"detected format: {format} for sound line: {sound_line}")
 
     if format not in ["backtick", "subs2srs"]:
         block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
@@ -800,7 +797,7 @@ def get_subtitle_block_from_index_and_path(subtitle_index, subtitle_path):
 
 # commands and files
 def extract_subtitle_files(source_path, track, code):
-    print(f"extracting subtitles files, track: {track}, code: {code}")
+    # print(f"extracting subtitles files, track: {track}, code: {code}")
     filename_base, _ = os.path.splitext(os.path.basename(source_path))
     tagged_subtitle_file = f"{filename_base}`track_{track}`{code}.srt"
     tagged_subtitle_path = os.path.join(addon_source_folder, tagged_subtitle_file)
@@ -1161,7 +1158,7 @@ def alter_sound_file_times(altered_data, sound_line) -> str:
         altered_data["new_path"]
     )
     try:
-        print("Running subprocess command1:", cmd)
+        print("generating new sound file: " + altered_data["new_path"])
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         # print("Audio extraction succeeded.")
     except subprocess.CalledProcessError:

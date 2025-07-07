@@ -347,15 +347,8 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
     track = config["target_subtitle_track"]
     code = config["target_language_code"]
 
-
     sentence_line = sentence_line or ""
-    sentence_lines = [line for line in re.split(r"[ \n]{2,}|[\s。、,.]", sentence_line) if line.strip()]
-    print(f"sentence lines: {sentence_lines}")
-
-    first_line = sentence_lines[0]
-    if first_line == "-":
-        first_line += sentence_lines[1] if len(sentence_lines) > 1 else ""
-    print(f"first line: {first_line}")
+    normalized_sentence = normalize_text(sentence_line)
 
     for filename in os.listdir(addon_source_folder):
         print(f"checking filename: {filename}")
@@ -372,20 +365,21 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
                     content = f.read().strip()
                     blocks = content.split('\n\n')
 
-                normalized_target = normalize_text(first_line)
-                normalized_all = normalize_text(content)
+                formatted_blocks = [format_subtitle_block(b) for b in blocks]
+                usable_blocks = [b for b in formatted_blocks if b and len(b) == 4]
+                normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
 
-                if normalized_target not in normalized_all:
-                    print("Sentence not found in subtitle file.")
-                    continue
+                for start in range(len(normalized_lines)):
+                    joined = ""
+                    for end in range(start, len(normalized_lines)):
+                        joined += normalized_lines[end]
+                        if joined in normalized_sentence:
+                            print(f"Found match from block {start} to {end}")
+                            return usable_blocks[start], subtitle_path  # return first block of match
+                        if len(joined) > len(normalized_sentence):
+                            break
 
-                for block in blocks:
-                    formatted_block = format_subtitle_block(block)
-                    if formatted_block and len(formatted_block) == 4:
-                        subtitle_text = formatted_block[3]
-                        if normalize_text(first_line) in normalize_text(subtitle_text):
-                            return formatted_block, subtitle_path
-
+    print("No match found in any subtitle file.")
     return None, None
 
 

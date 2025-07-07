@@ -192,7 +192,7 @@ def generate_fields_helper(editor, note):
         sound_line, sentence_line, selected_text, image_line, translation_line
     )
 
-    if not new_result or not all(new_result):
+    if not new_result:
         print("generate_fields_sound_sentence_image failed to return valid values.")
         if new_result:
             for i, val in enumerate(new_result):

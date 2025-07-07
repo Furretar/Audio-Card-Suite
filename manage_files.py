@@ -1071,9 +1071,11 @@ import re
 def normalize_text(s):
     s = html.unescape(s)
     s = re.sub(r'<.*?>', '', s)
+    s = re.sub(r'（.*?）|\(.*?\)', '', s)
     s = s.replace('\xa0', '')
-    s = re.sub(r'\s+', '', s.strip())
+    s = re.sub(r'[\s\u3000]+', '', s)
     return s
+
 
 def time_srt_to_milliseconds(t):
     h, m, s_ms = t.split(":")

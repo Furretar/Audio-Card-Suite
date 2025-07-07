@@ -53,8 +53,6 @@ def get_fields_from_editor(editor: Editor):
     translation_idx = index_of_field(translation_field, fields) if translation_field else -1
     image_idx = index_of_field(image_field, fields) if image_field else -1
 
-    print(f"image field {image_field} and index: {image_idx}")
-
     sound_line = editor.note.fields[sound_idx] if 0 <= sound_idx < len(editor.note.fields) else ""
     if "[sound:" not in sound_line:
         sound_line = ""
@@ -151,7 +149,6 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
     return new_sound_line, new_sentence_line, new_image_line, translation_line
 
 def generate_fields_helper(editor, note):
-    print(f"gen fields called")
     def get_idx(label):
         field_key = manage_files.get_field_key_from_label(note_type_name, label, config)
         return index_of_field(field_key, fields) if field_key else -1
@@ -190,13 +187,11 @@ def generate_fields_helper(editor, note):
         field_obj = editor.note
 
     updated = False
-    print(f"sending sentence line: {sentence_line}")
     # generate fields using sentence line
     new_result = generate_fields_sound_sentence_image_translation(
         sound_line, sentence_line, selected_text, image_line, translation_line
     )
 
-    print(f"new result: {new_result}")
     if not new_result or not all(new_result):
         print("generate_fields_sound_sentence_image failed to return valid values.")
         if new_result:
@@ -326,12 +321,18 @@ def remove_edge_lines_helper(editor, relative_index):
     sound_idx = fields["sound_idx"]
     sentence_line = fields["sentence_line"]
     sentence_idx = fields["sentence_idx"]
+    translation_idx = fields["translation_idx"]
+
 
     new_sentence_line, new_sound_line = remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_index)
 
     if not new_sound_line or not new_sentence_line:
         print("No new sound line or sentence text returned.")
         return
+
+    # generate new translation line
+    translation_line = manage_files.get_translation_line_from_sound_line(new_sound_line)
+    editor.note.fields[translation_idx] = translation_line
 
     new_field = re.sub(r"\[sound:.*?\]", new_sound_line, sound_line)
     editor.note.fields[sound_idx] = new_field
@@ -355,6 +356,7 @@ def add_context_line_helper(editor: Editor, relative_index):
     sound_idx = fields["sound_idx"]
     sentence_line = fields["sentence_line"]
     sentence_idx = fields["sentence_idx"]
+    translation_idx = fields["translation_idx"]
 
 
     print(f"sound_line from editor: {sound_line}")
@@ -366,6 +368,11 @@ def add_context_line_helper(editor: Editor, relative_index):
     code = config["target_language_code"]
     subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base, track, code)
     new_sound_tag, context_sentence_line = generate_file_from_context_sound_and_sentence_line(sound_line, subtitle_path, relative_index)
+
+    # generate new translation line
+    translation_line = manage_files.get_translation_line_from_sound_line(new_sound_tag)
+    print(f"translation line: {translation_line}, from new_sound_tag: {new_sound_tag}")
+    editor.note.fields[translation_idx] = translation_line
 
     if relative_index == 1:
         new_sentence_line = f"{sentence_line}\n\n{context_sentence_line}"

@@ -476,7 +476,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
         if sub_start_ms > end_ms:
             break
 
-        if sub_start_ms <= end_ms and sub_end_ms >= start_ms:
+        if sub_start_ms < end_ms and sub_end_ms > start_ms:
             overlapping_blocks.append(block)
 
     return overlapping_blocks
@@ -1070,10 +1070,10 @@ import re
 
 def normalize_text(s):
     s = html.unescape(s)
+    s = re.sub(r'<.*?>', '', s)
     s = s.replace('\xa0', '')
     s = re.sub(r'\s+', '', s.strip())
     return s
-
 
 def time_srt_to_milliseconds(t):
     h, m, s_ms = t.split(":")

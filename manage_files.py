@@ -348,6 +348,18 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
     track = config["target_subtitle_track"]
     code = config["target_language_code"]
 
+
+    sentence_line = sentence_line or ""
+
+    sentence_blocks = [line for line in str(sentence_line).splitlines() if line.strip()]
+    print(f"sentence_line: {sentence_line}")
+    if not sentence_line:
+        showInfo("sentence field empty")
+        return
+    first_line = sentence_lines[0]
+    if first_line == "-":
+        first_line += sentence_lines[1] if len(sentence_lines) > 1 else ""
+
     for filename in os.listdir(addon_source_folder):
         print(f"checking filename: {filename}")
         filename_base, file_extension = os.path.splitext(filename)
@@ -1058,8 +1070,15 @@ def is_subs2srs_format(sound_line: str) -> bool:
 def format_timestamp_for_filename(timestamp: str) -> str:
     return timestamp.replace(':', '.').replace(',', '.')
 
+import html
+import re
+
 def normalize_text(s):
-    return ''.join(s.strip().split())
+    s = html.unescape(s)
+    s = s.replace('\xa0', '')
+    s = re.sub(r'\s+', '', s.strip())
+    return s
+
 
 def time_srt_to_milliseconds(t):
     h, m, s_ms = t.split(":")

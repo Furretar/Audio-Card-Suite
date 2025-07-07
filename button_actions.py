@@ -191,7 +191,7 @@ def generate_fields_helper(editor, note):
         field_obj = editor.note
 
     updated = False
-
+    print(f"sending sentence line: {sentence_line}")
     # generate fields using sentence line
     new_result = generate_fields_sound_sentence_image_translation(
         sound_line, sentence_line, selected_text, image_line, translation_line

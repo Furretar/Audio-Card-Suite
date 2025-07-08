@@ -147,6 +147,7 @@ def generate_fields_helper(editor, note):
         sound_idx = get_idx("Target Audio")
         image_idx = get_idx("Image")
         translation_idx = get_idx("Translation Sub Line")
+        translation_sound_idx = fields["translation_sound_idx"]
 
         sentence_line = note.fields[sentence_idx] if 0 <= sentence_idx < len(note.fields) else ""
         sound_line = note.fields[sound_idx] if 0 <= sound_idx < len(note.fields) else ""
@@ -161,6 +162,7 @@ def generate_fields_helper(editor, note):
         sound_idx = fields["sound_idx"]
         image_idx = fields["image_idx"]
         translation_idx = fields["translation_idx"]
+        translation_sound_idx = fields["translation_sound_idx"]
 
         sentence_line = fields["sentence_line"]
         sound_line = fields["sound_line"]
@@ -187,7 +189,7 @@ def generate_fields_helper(editor, note):
             print("  new_result is None or empty.")
         return None
 
-    new_sound_line, new_sentence_line, new_image_line, new_translation_line = new_result
+    new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line = new_result
 
 
     def update_field(idx, new_val):
@@ -204,6 +206,12 @@ def generate_fields_helper(editor, note):
     if new_sound_line and new_sound_line != field_obj.fields[sound_idx]:
         new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line)
         field_obj.fields[sound_idx] = new_sound_line
+        updated = True
+
+    altered_data = manage_files.get_altered_sound_data(new_translation_sound_line, 0, 0, 0)
+    if new_translation_sound_line and new_translation_sound_line != field_obj.fields[translation_sound_idx]:
+        new_translation_sound_line = manage_files.alter_sound_file_times(altered_data, new_translation_sound_line)
+        field_obj.fields[translation_sound_idx] = new_translation_sound_line
         updated = True
 
     if not image_line:
@@ -278,9 +286,13 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
         new_translation_line = ""
 
     if not translation_sound_line and generate_translation_audio:
-        new_translation_audio = manage_files.get_translation_sound_line_from_target_sound_line(new_sound_line)
+        print(f"\ngenerating translation audio\n")
+        new_translation_sound_line = manage_files.get_translation_sound_line_from_target_sound_line(new_sound_line)
+        print(f"new_translation_sound_line: {new_translation_sound_line} ")
+    else:
+        new_translation_sound_line = ""
 
-    return new_sound_line, new_sentence_line, new_image_line, new_translation_line
+    return new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line
 
 def remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_index):
     data = manage_files.extract_sound_line_data(sound_line)

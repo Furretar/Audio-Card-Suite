@@ -20,6 +20,7 @@
   "mapped_fields": {
     "1Chinese": {
       "Expression": "Target Sub Line",
+      "Definitions": "Translation Audio",
       "SentenceAudio": "Target Audio",
       "Image": "Image",
       "Translation": "Translation Sub Line"

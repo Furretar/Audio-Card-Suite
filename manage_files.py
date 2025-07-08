@@ -302,6 +302,7 @@ def get_subtitle_path_from_filename_track_code(filename, track, code):
     filename_base, _ = os.path.splitext(filename)
     config = extract_config_data()
     selected_tab_index = config["selected_tab_index"]
+    translation_language_code = config["translation_language_code"]
     source_path = get_source_file(filename_base)
 
     if not os.path.exists(source_path):
@@ -321,10 +322,11 @@ def get_subtitle_path_from_filename_track_code(filename, track, code):
         return tagged_subtitle_path
 
     # try name matching basename
-    basename_subtitle_file = f"{filename_base}.srt"
-    basename_subtitle_path = os.path.join(addon_source_folder, basename_subtitle_file)
-    if os.path.exists(basename_subtitle_path):
-        return basename_subtitle_path
+    if not code == translation_language_code:
+        basename_subtitle_file = f"{filename_base}.srt"
+        basename_subtitle_path = os.path.join(addon_source_folder, basename_subtitle_file)
+        if os.path.exists(basename_subtitle_path):
+            return basename_subtitle_path
 
     # 2. Fallback: match by code or track
     print(f"fallback, looking for {code} or {track}")

@@ -772,6 +772,8 @@ def add_custom_controls(editor: Editor) -> None:
     generate_btn_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
     generate_btn_layout.setSpacing(BUTTON_ROW_SPACING)
     generate_btn_layout.addWidget(make_button("Generate Fields", lambda: button_actions.generate_fields_button(editor)))
+    generate_btn_layout.addWidget(make_button("Next Result", lambda: button_actions.next_result_button(editor)))
+
     buttons_layout.addWidget(generate_btn_row)
 
     main_layout.insertWidget(0, buttons_container)

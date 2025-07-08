@@ -66,11 +66,7 @@ def get_fields_from_editor(editor: Editor):
 
     translation_line = editor.note.fields[translation_idx] if 0 <= translation_idx < len(editor.note.fields) else ""
 
-    format = manage_files.detect_format(sound_line)
-    if format != "backtick":
-        selected_text = editor.web.selectedText().strip()
-    else:
-        selected_text = ""
+    selected_text = editor.web.selectedText().strip()
 
     return {
         "sound_line": sound_line,
@@ -93,66 +89,48 @@ def index_of_field(field_name, fields):
     return -1
 
 
-# manipulate and generate
+def next_result_button(editor):
+    fields = get_fields_from_editor(editor)
+    sentence_idx = fields["sentence_idx"]
+    sound_idx = fields["sound_idx"]
+    image_idx = fields["image_idx"]
+    translation_idx = fields["translation_idx"]
+
+    sentence_line = fields["sentence_line"]
+    sound_line = fields["sound_line"]
+    image_line = fields["image_line"]
+    translation_line = fields["translation_line"]
+    selected_text = fields["selected_text"]
+    print(f"detected selected txt: {selected_text}")
+
+    field_obj = editor.note
+
+    block, subtitle_path = manage_files.get_next_matching_subtitle_block(sentence_line, selected_text, sound_line)
+    if not block or not subtitle_path:
+        print(f"didnt find another result")
+        return
+
+    next_sentence_line = block[3]
+    next_sound_line = manage_files.get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
+    next_sound_file = re.search(r"\[sound:(.*?)\]", next_sound_line)
+    print(f"next sentence: {next_sentence_line}, next sound: {next_sound_line}")
+    if next_sound_file:
+        print(f"Playing sound filename: {next_sound_file.group(1)}")
+        QTimer.singleShot(100, lambda: play(next_sound_file.group(1)))
+
+
+
 def generate_fields_button(editor):
     sound_filename = generate_fields_helper(editor, None)
     if sound_filename:
         print(f"Playing sound filename: {sound_filename}")
         QTimer.singleShot(100, lambda: play(sound_filename))
 
-def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, selected_text, image_line, translation_line):
-    # checks each field, generating and updating if needed. Returns each field, empty if not needed
-    sentence_line = sentence_line or ""
-    sentence_blocks = [line for line in str(sentence_line).splitlines() if line.strip()]
-    if not sentence_line:
-        showInfo("sentence field empty")
-        return
-
-    # dont overwrite if sound line already formatted
-    new_sentence_line = sentence_line
-    format = manage_files.detect_format(sound_line)
-    if format != "backtick":
-        # check selected text first
-        if selected_text:
-            sound_line, target_block, subtitle_path = manage_files.get_valid_backtick_sound_line_and_block(sound_line, selected_text)
-            print(f"getting sound line from selected text, sub path: {subtitle_path}")
-        else:
-            if len(sentence_blocks) > 1:
-                print("formatting sound line from first line of multiple")
-            else:
-                print("formatting sound line from sentence line")
-            sound_line, target_block, subtitle_path = manage_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_line)
-            print(f"sub path from line: {subtitle_path}")
-        if not target_block or len(target_block) < 4:
-            print(
-                f"Invalid or incomplete block: {target_block}, length: {len(target_block) if target_block else 'N/A'}")
-            new_sentence_line = ""
-        else:
-            new_sentence_line = target_block[3]
-    else:
-        print("already formatted")
-        target_block, subtitle_path = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
-
-    new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path)
-
-    config = manage_files.extract_config_data()
-    note_type_name = list(config["mapped_fields"].keys())[0]
-    generate_image = get_field_key_from_label(note_type_name, "Image", config)
-    if not image_line and generate_image:
-        new_image_line = manage_files.get_image_if_empty_helper(image_line, new_sound_line)
-    else:
-        new_image_line = image_line
-
-    if not translation_line:
-        translation_line = manage_files.get_translation_line_from_sound_line(new_sound_line)
-
-    return new_sound_line, new_sentence_line, new_image_line, translation_line
+def get_idx(label):
+    field_key = manage_files.get_field_key_from_label(note_type_name, label, config)
+    return index_of_field(field_key, fields) if field_key else -1
 
 def generate_fields_helper(editor, note):
-    def get_idx(label):
-        field_key = manage_files.get_field_key_from_label(note_type_name, label, config)
-        return index_of_field(field_key, fields) if field_key else -1
-
     if note:
         config = manage_files.extract_config_data()
         mapped_fields = config["mapped_fields"]
@@ -183,6 +161,7 @@ def generate_fields_helper(editor, note):
         image_line = fields["image_line"]
         translation_line = fields["translation_line"]
         selected_text = fields["selected_text"]
+        print(f"detected selected txt: {selected_text}")
 
         field_obj = editor.note
 
@@ -239,6 +218,54 @@ def generate_fields_helper(editor, note):
     current_sound_line = field_obj.fields[sound_idx]
     match = re.search(r"\[sound:(.*?)\]", current_sound_line)
     return match.group(1) if match else None
+
+def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, selected_text, image_line, translation_line):
+    # checks each field, generating and updating if needed. Returns each field, empty if not needed
+    sentence_line = sentence_line or ""
+    sentence_blocks = [line for line in str(sentence_line).splitlines() if line.strip()]
+    if not sentence_line:
+        showInfo("sentence field empty")
+        return
+
+    # dont overwrite if sound line already formatted
+    new_sentence_line = sentence_line
+    format = manage_files.detect_format(sound_line)
+    if format != "backtick":
+        # check selected text first
+        if selected_text:
+            sound_line, target_block, subtitle_path = manage_files.get_valid_backtick_sound_line_and_block(sound_line, selected_text)
+            print(f"getting sound line from selected text, sub path: {subtitle_path}")
+        else:
+            if len(sentence_blocks) > 1:
+                print("formatting sound line from first line of multiple")
+            else:
+                print("formatting sound line from sentence line")
+            sound_line, target_block, subtitle_path = manage_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_line)
+            print(f"sub path from line: {subtitle_path}")
+        if not target_block or len(target_block) < 4:
+            print(
+                f"Invalid or incomplete block: {target_block}, length: {len(target_block) if target_block else 'N/A'}")
+            new_sentence_line = ""
+        else:
+            new_sentence_line = target_block[3]
+    else:
+        print("already formatted")
+        target_block, subtitle_path = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
+
+    new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path)
+
+    config = manage_files.extract_config_data()
+    note_type_name = list(config["mapped_fields"].keys())[0]
+    generate_image = get_field_key_from_label(note_type_name, "Image", config)
+    if not image_line and generate_image:
+        new_image_line = manage_files.get_image_if_empty_helper(image_line, new_sound_line)
+    else:
+        new_image_line = image_line
+
+    if not translation_line:
+        translation_line = manage_files.get_translation_line_from_sound_line(new_sound_line)
+
+    return new_sound_line, new_sentence_line, new_image_line, translation_line
 
 def remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_index):
     data = manage_files.extract_sound_line_data(sound_line)

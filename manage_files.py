@@ -342,51 +342,6 @@ def get_subtitle_path_from_filename_track_code(filename, track, code):
     print("No matching subtitle file found.")
     return None
 
-def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
-    config = extract_config_data()
-    track = config["target_subtitle_track"]
-    code = config["target_language_code"]
-
-    sentence_line = sentence_line or ""
-    normalized_sentence = normalize_text(sentence_line)
-
-    for filename in os.listdir(addon_source_folder):
-        print(f"checking filename: {filename}")
-        filename_base, file_extension = os.path.splitext(filename)
-        if file_extension.lower() in video_exts or file_extension.lower() in audio_exts:
-            for base in [filename_base, filename_base.replace(" ", "_")]:
-                subtitle_path = get_subtitle_path_from_filename_track_code(base, track, code)
-
-                if not subtitle_path or not os.path.exists(subtitle_path):
-                    print(f"Subtitle path not found or invalid: {subtitle_path}")
-                    continue
-
-                with open(subtitle_path, 'r', encoding='utf-8') as f:
-                    content = f.read().strip()
-                    blocks = content.split('\n\n')
-
-                formatted_blocks = [format_subtitle_block(b) for b in blocks]
-                usable_blocks = [b for b in formatted_blocks if b and len(b) == 4]
-                normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
-
-                for i, norm_line in enumerate(normalized_lines):
-                    if norm_line.startswith(normalized_sentence):
-                        print(f"Exact line match found at block {i}")
-                        return usable_blocks[i], subtitle_path
-
-                # fallback: sliding window (if no block starts with the sentence)
-                for start in range(len(normalized_lines)):
-                    joined = ""
-                    for end in range(start, len(normalized_lines)):
-                        joined += normalized_lines[end]
-                        if normalized_sentence in joined:
-                            print(f"Found match from block {start} to {end}")
-                            return usable_blocks[end], subtitle_path
-                        if len(joined) > len(normalized_sentence) + 50:
-                            break
-
-    print("No match found in any subtitle file.")
-    return None, None
 
 
 def get_sound_line_from_subtitle_block_and_path(block, subtitle_path) -> str:
@@ -740,6 +695,69 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
 
     return sound_line, block, subtitle_path
 
+def get_subtitle_block_from_index_and_path(subtitle_index, subtitle_path):
+    if not os.path.exists(subtitle_path):
+        print(f"Subtitle file does not exist: {subtitle_path}")
+        return []
+
+    with open(subtitle_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    blocks = content.strip().split('\n\n')
+
+    if 0 <= subtitle_index < len(blocks):
+        formatted_block = format_subtitle_block(blocks[subtitle_index])
+        return formatted_block if formatted_block else []
+
+    print(f"Index {subtitle_index} out of range for subtitle file {subtitle_path}")
+    return []
+
+def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
+    config = extract_config_data()
+    track = config["target_subtitle_track"]
+    code = config["target_language_code"]
+
+    sentence_line = sentence_line or ""
+    normalized_sentence = normalize_text(sentence_line)
+
+    for filename in os.listdir(addon_source_folder):
+        print(f"checking filename: {filename}")
+        filename_base, file_extension = os.path.splitext(filename)
+        if file_extension.lower() in video_exts or file_extension.lower() in audio_exts:
+            for base in [filename_base, filename_base.replace(" ", "_")]:
+                subtitle_path = get_subtitle_path_from_filename_track_code(base, track, code)
+
+                if not subtitle_path or not os.path.exists(subtitle_path):
+                    print(f"Subtitle path not found or invalid: {subtitle_path}")
+                    continue
+
+                with open(subtitle_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                    blocks = content.split('\n\n')
+
+                formatted_blocks = [format_subtitle_block(b) for b in blocks]
+                usable_blocks = [b for b in formatted_blocks if b and len(b) == 4]
+                normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
+
+                for i, norm_line in enumerate(normalized_lines):
+                    if norm_line.startswith(normalized_sentence):
+                        print(f"Exact line match found at block {i}")
+                        return usable_blocks[i], subtitle_path
+
+                # fallback: sliding window (if no block starts with the sentence)
+                for start in range(len(normalized_lines)):
+                    joined = ""
+                    for end in range(start, len(normalized_lines)):
+                        joined += normalized_lines[end]
+                        if normalized_sentence in joined:
+                            print(f"Found match from block {start} to {end}")
+                            return usable_blocks[end], subtitle_path
+                        if len(joined) > len(normalized_sentence) + 50:
+                            break
+
+    print("No match found in any subtitle file.")
+    return None, None
+
 def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, sentence_line: str):
     data = extract_sound_line_data(sound_line)
     if not data:
@@ -775,22 +793,63 @@ def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, senten
 
     return None, subtitle_path
 
-def get_subtitle_block_from_index_and_path(subtitle_index, subtitle_path):
-    if not os.path.exists(subtitle_path):
-        print(f"Subtitle file does not exist: {subtitle_path}")
-        return []
+def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line):
+    data = extract_sound_line_data(sound_line)
+    if not data:
+        print(f"no data extracted from {sound_line}")
+        return None, None
 
-    with open(subtitle_path, 'r', encoding='utf-8') as f:
-        content = f.read()
+    target_index = data["start_index"]
+    filename_base = data["filename_base"]
 
-    blocks = content.strip().split('\n\n')
+    config = extract_config_data()
+    track = config["target_subtitle_track"]
+    code = config["target_language_code"]
 
-    if 0 <= subtitle_index < len(blocks):
-        formatted_block = format_subtitle_block(blocks[subtitle_index])
-        return formatted_block if formatted_block else []
+    normalized_target_text = normalize_text(selected_text or sentence_line)
+    print(f"Searching for: {normalized_target_text}")
 
-    print(f"Index {subtitle_index} out of range for subtitle file {subtitle_path}")
-    return []
+    def search_blocks(after_current=True):
+        found_current = not after_current
+        for filename in os.listdir(addon_source_folder):
+            base_candidate, ext = os.path.splitext(filename)
+            if ext.lower() not in video_exts + audio_exts:
+                continue
+
+            subtitle_path = get_subtitle_path_from_filename_track_code(base_candidate, track, code)
+            if not subtitle_path or not os.path.exists(subtitle_path):
+                print(f"Subtitle path not found: {subtitle_path}")
+                continue
+
+            with open(subtitle_path, 'r', encoding='utf-8') as f:
+                blocks = f.read().strip().split('\n\n')
+
+            formatted = [format_subtitle_block(b) for b in blocks]
+            usable = [b for b in formatted if b and len(b) == 4]
+
+            for b in usable:
+                block_idx = int(b[0])
+                text = b[3]
+                if not found_current:
+                    if base_candidate == filename_base and block_idx == target_index:
+                        found_current = True
+                    continue
+                if normalized_target_text in normalize_text(text):
+                    print(f"Match found in block {block_idx} of {base_candidate}")
+                    return b, subtitle_path
+        return None, None
+
+    # Try first pass (after current)
+    result, path = search_blocks(after_current=True)
+    if result:
+        return result, path
+
+    # Wraparound pass (from beginning)
+    print("Wrapping to start of subtitle files...")
+    return search_blocks(after_current=False)
+
+
+
 
 
 

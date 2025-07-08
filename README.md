@@ -6,7 +6,6 @@
 - [ ] allow editing end start times even without backtick filename
 - [ ] add next and previous lines without a source file, for just text sentence cards
 - [ ] PRE INDEXING
-- [ ] make it so it only extracts subtitle files from every other video if its already searched every subtitle file in the directory
 - [ ] add other audio to backside for pure audio cards
 - [ ] store start and end offset every time its pushed, when user moves the whole line forward or backward it automatically adjusts the offset amount
 - [ ] add/subtract 1db for each audio

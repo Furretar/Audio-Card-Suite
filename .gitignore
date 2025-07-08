@@ -1,2 +1,3 @@
 Sources/*
 ffmpeg
+__pycache__

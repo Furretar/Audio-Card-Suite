@@ -6,6 +6,7 @@
 - [ ] PRE INDEXING
 - [ ] add other audio to backside for pure audio cards
 - [ ] store start and end offset every time its pushed, when user moves the whole line forward or backward it automatically adjusts the offset amount
+- [ ] make context aware sound line generation make the sound line first, then extract the sound clip just once
 
 
 low priority, might do after initial release
@@ -13,6 +14,6 @@ low priority, might do after initial release
 - [ ] add next and previous lines without a source file, for just text sentence cards
 - [ ] bulk convert my current underscore audios/subs2srs underscore files to use the actual file name with normal spaces
 - [ ] open mpv option
-- [ ] - [ ] add/subtract 1db for each audio
+- [ ]  add/subtract 1db for each audio
 
 

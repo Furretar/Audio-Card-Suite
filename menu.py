@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QCheckBox
 )
 import os, json
+from aqt.gui_hooks import editor_did_load_note, editor_did_focus_field
 
 
 from PyQt6.QtWidgets import (

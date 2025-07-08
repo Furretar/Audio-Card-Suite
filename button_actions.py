@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
 )
 import json
-from manage_files import get_subtitle_path_from_filename_track_code, get_field_key_from_label
+from .manage_files import get_subtitle_path_from_filename_track_code, get_field_key_from_label
 try:
     from . import manage_files
 except ImportError:
@@ -24,22 +24,23 @@ except ImportError:
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     import manage_files
 
+
 # constants
 ms_amount = 50
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 config_dir = os.path.join(addon_dir, "config.json")
 
 # get data
-def get_fields_from_editor(editor: Editor):
+def get_fields_from_editor(editor):
     config = manage_files.extract_config_data()
 
-    mapped_fields = config["mapped_fields"]
+    mapped_fields = config.get("mapped_fields", {})
     if not mapped_fields:
         showInfo("fields not mapped")
         return {}
 
-    note_type_name = list(config["mapped_fields"].keys())[0]
-    note_type = editor.note.note_type()
+    note_type_name = list(mapped_fields.keys())[0]
+    note_type = editor.note.note_type
 
     fields = note_type["flds"]
 
@@ -53,6 +54,7 @@ def get_fields_from_editor(editor: Editor):
     sound_idx = index_of_field(sound_field, fields) if sound_field else -1
     translation_idx = index_of_field(translation_field, fields) if translation_field else -1
     image_idx = index_of_field(image_field, fields) if image_field else -1
+    translation_sound_idx = index_of_field(translation_sound_field, fields) if translation_sound_field else -1
 
     sound_line = editor.note.fields[sound_idx] if 0 <= sound_idx < len(editor.note.fields) else ""
     if "[sound:" not in sound_line:
@@ -65,9 +67,9 @@ def get_fields_from_editor(editor: Editor):
 
     sentence_line = editor.note.fields[sentence_idx] if 0 <= sentence_idx < len(editor.note.fields) else ""
     translation_line = editor.note.fields[translation_idx] if 0 <= translation_idx < len(editor.note.fields) else ""
-    selected_text = editor.web.selectedText().strip()
-    translation_sound_idx = index_of_field(translation_sound_field, fields) if translation_sound_field else -1
     translation_sound_line = editor.note.fields[translation_sound_idx] if 0 <= translation_sound_idx < len(editor.note.fields) else ""
+
+    selected_text = editor.web.selectedText().strip()
 
     return {
         "sound_line": sound_line,
@@ -517,6 +519,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     print(f"fixed sound line: {fixed_sound_line}")
 
     altered_data = manage_files.get_altered_sound_data(fixed_sound_line, -start_delta, end_delta, None)
+    print(f"sending data to alter sound file times: {altered_data}")
     new_sound_line = manage_files.alter_sound_file_times(altered_data, fixed_sound_line)
 
     print(f"new sound line: {new_sound_line}")
@@ -654,21 +657,52 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
     manage_files.alter_sound_file_times(altered_data, new_sound_line)
     return new_sound_line, new_sentence_line
 
-def on_note_loaded(editor: Editor):
+def on_note_loaded(editor):
     editor.web.eval("window.getSelection().removeAllRanges();")
-    print(f"note loaded")
+    print("note loaded")
     av_player.stop_and_clear_queue()
     if getattr(editor, "_auto_play_enabled", False):
         fields = get_fields_from_editor(editor)
-        sound_idx = fields["sound_idx"]
+        sound_idx = fields.get("sound_idx")
 
-        if sound_idx < len(editor.note.fields):
+        if sound_idx is not None and sound_idx < len(editor.note.fields):
             field_text = editor.note.fields[sound_idx]
             match = re.search(r"\[sound:([^\]]+)\]", field_text)
             if match:
                 filename = match.group(1)
                 print(f"Playing sound from field {sound_idx}: {filename}")
                 QTimer.singleShot(0, lambda fn=filename: play(fn))
+
+
+
+
+
+
+# -*- coding: utf-8 -*-
+# Anki Add-on: Minimal Field Focus Detector
+
+from aqt import gui_hooks
+from anki.notes import Note
+
+def on_editor_field_focused_minimal(note: Note, field_name: str) -> None:
+    model_fields = note.note_type()["flds"]
+    focused_idx = next((i for i, f in enumerate(model_fields) if f["name"] == field_name), -1)
+    sound_idx = next((i for i, f in enumerate(model_fields) if f["name"] == "Target Audio"), -1)
+    translation_sound_idx = next((i for i, f in enumerate(model_fields) if f["name"] == "Translation Audio"), -1)
+
+    if focused_idx in (sound_idx, translation_sound_idx):
+        print(f"Field focused: {field_name}")
+
+gui_hooks.editor_did_focus_field.append(on_editor_field_focused_minimal)
+
+print("Minimal Field Focus Detector add-on loaded.")
+
+
+
+
+
+
+
 
 def get_fields_from_note(note):
     config = manage_files.extract_config_data()

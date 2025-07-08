@@ -725,40 +725,56 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
     sentence_line = sentence_line or ""
     normalized_sentence = normalize_text(sentence_line)
 
+    def try_match_subtitles(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+            blocks = content.split('\n\n')
+
+        formatted_blocks = [format_subtitle_block(b) for b in blocks]
+        usable_blocks = [b for b in formatted_blocks if b and len(b) == 4]
+        normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
+
+        for i, norm_line in enumerate(normalized_lines):
+            if norm_line.startswith(normalized_sentence):
+                print(f"Exact line match found at block {i}")
+                return usable_blocks[i], path
+
+        for start in range(len(normalized_lines)):
+            joined = ""
+            for end in range(start, len(normalized_lines)):
+                joined += normalized_lines[end]
+                if normalized_sentence in joined:
+                    print(f"Found match from block {start} to {end}")
+                    return usable_blocks[end], path
+                if len(joined) > len(normalized_sentence) + 50:
+                    break
+
+        return None, None
+
+    # first pass, check all already extracted subtitle files
     for filename in os.listdir(addon_source_folder):
-        print(f"checking filename: {filename}")
         filename_base, file_extension = os.path.splitext(filename)
         if file_extension.lower() in video_exts or file_extension.lower() in audio_exts:
-            for base in [filename_base, filename_base.replace(" ", "_")]:
-                subtitle_path = get_subtitle_path_from_filename_track_code(base, track, code)
+            subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
+            if subtitle_path and os.path.exists(subtitle_path):
+                block, path = try_match_subtitles(subtitle_path)
+                if block:
+                    return block, path
 
-                if not subtitle_path or not os.path.exists(subtitle_path):
-                    print(f"Subtitle path not found or invalid: {subtitle_path}")
-                    continue
-
-                with open(subtitle_path, 'r', encoding='utf-8') as f:
-                    content = f.read().strip()
-                    blocks = content.split('\n\n')
-
-                formatted_blocks = [format_subtitle_block(b) for b in blocks]
-                usable_blocks = [b for b in formatted_blocks if b and len(b) == 4]
-                normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
-
-                for i, norm_line in enumerate(normalized_lines):
-                    if norm_line.startswith(normalized_sentence):
-                        print(f"Exact line match found at block {i}")
-                        return usable_blocks[i], subtitle_path
-
-                # fallback: sliding window (if no block starts with the sentence)
-                for start in range(len(normalized_lines)):
-                    joined = ""
-                    for end in range(start, len(normalized_lines)):
-                        joined += normalized_lines[end]
-                        if normalized_sentence in joined:
-                            print(f"Found match from block {start} to {end}")
-                            return usable_blocks[end], subtitle_path
-                        if len(joined) > len(normalized_sentence) + 50:
-                            break
+    # second pass, extract and check one at a time
+    for filename in os.listdir(addon_source_folder):
+        filename_base, file_extension = os.path.splitext(filename)
+        if file_extension.lower() in video_exts or file_extension.lower() in audio_exts:
+            subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
+            if not subtitle_path or not os.path.exists(subtitle_path):
+                print(f"Extracting subtitles for: {filename_base}")
+                source_path = get_source_file(filename_base)
+                extract_subtitle_files(source_path, track, code)
+                subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
+                if subtitle_path and os.path.exists(subtitle_path):
+                    block, path = try_match_subtitles(subtitle_path)
+                    if block:
+                        return block, path
 
     print("No match found in any subtitle file.")
     return None, None

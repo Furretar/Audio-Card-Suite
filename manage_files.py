@@ -1318,10 +1318,7 @@ def alter_sound_file_times(altered_data, sound_line) -> str:
         send2trash(altered_data["old_path"])
 
     filename_base = data["filename_base"]
-
     source_path = get_source_file(filename_base)
-
-
 
     cmd = create_ffmpeg_extract_audio_command(
         source_path,

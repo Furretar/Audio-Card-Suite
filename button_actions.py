@@ -493,11 +493,6 @@ def new_sound_line_from_sound_line_path_and_relative_index(sound_line, subtitle_
     return new_sound_line.strip(), new_sentence_line.strip()
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
-    fields = get_fields_from_editor(editor)
-    sound_line = fields["sound_line"]
-    sound_idx = fields["sound_idx"]
-    sentence_line = fields["sentence_line"]
-
     # check for modifier keys
     modifiers = QApplication.keyboardModifiers()
     if modifiers & Qt.KeyboardModifier.ShiftModifier:
@@ -506,6 +501,16 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     elif modifiers & Qt.KeyboardModifier.ControlModifier:
         start_delta *= 5
         end_delta *= 5
+
+    fields = get_fields_from_editor(editor)
+    if modifiers & Qt.KeyboardModifier.AltModifier:
+        sound_line = fields["translation_sound_line"]
+        sound_idx = fields["translation_sound_idx"]
+        sentence_line = fields["translation_line"]
+    else:
+        sound_line = fields["sound_line"]
+        sound_idx = fields["sound_idx"]
+        sentence_line = fields["sentence_line"]
 
     print(f"current sound line: {sound_line}")
     fixed_sound_line, block, subtitle_path = manage_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_line)

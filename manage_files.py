@@ -26,14 +26,17 @@ video_exts = [
 
 BACKTICK_PATTERN = re.compile(
     r'^\[sound:'
-    r'(?P<filename_base>[^`]+?)`'                            # filename base
-    r'(?P<sha>[A-Za-z0-9]{4})`'                              # 4-char SHA
-    r'(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'            # start time
-    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'              # end time
-    r'(?P<subtitle_range>\d+-\d+)'                           # subtitle range
-    r'(?:`(?P<normalize_tag>[^`]+))?'                        # optional normalize tag
-    r'\.(?P<file_extension>\w+)\]$'                          # file extension
+    r'(?P<filename_base>[^`]+?)`'                         # filename base
+    r'(?:'                                                # start optional group for SHA
+        r'(?P<sha>[A-Za-z0-9]{4})`'                      # 4-char SHA and trailing backtick
+    r')?'                                                 # end optional group
+    r'(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'        # start time
+    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'          # end time
+    r'(?P<subtitle_range>\d+-\d+)'                        # subtitle range
+    r'(?:`(?P<normalize_tag>[^`]+))?'                     # optional normalize tag
+    r'\.(?P<file_extension>\w+)\]$'                       # file extension
 )
+
 
 SUBS2SRS_PATTERN = re.compile(
     r"""\[sound:
@@ -356,7 +359,7 @@ def get_sound_line_from_subtitle_block_and_path(block, subtitle_path) -> str:
         start_time = convert_timestamp_dot_to_hmsms(block[1])
         end_time = convert_timestamp_dot_to_hmsms(block[2])
 
-        timestamp = f"{filename_base}`ABCD`{start_time}-{end_time}`{start_index}-{start_index}.mp3"
+        timestamp = f"{filename_base}`{start_time}-{end_time}`{start_index}-{start_index}.mp3"
         new_sound_line = f"[sound:{timestamp}]"
         return new_sound_line
 
@@ -559,7 +562,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     new_end_time = milliseconds_to_hmsms_format(new_end_ms)
 
     time_range = f"{new_start_time}-{new_end_time}"
-    filename_parts = [data["filename_base"], "ABCD", time_range]
+    filename_parts = [data["filename_base"], time_range]
 
     subtitle_range = f"{start_index}-{end_index}" if start_index is not None and end_index is not None else ""
     if subtitle_range:

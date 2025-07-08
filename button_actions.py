@@ -98,12 +98,9 @@ def next_result_button(editor):
 
     sentence_line = fields["sentence_line"]
     sound_line = fields["sound_line"]
-    image_line = fields["image_line"]
-    translation_line = fields["translation_line"]
     selected_text = fields["selected_text"]
     print(f"detected selected txt: {selected_text}")
 
-    field_obj = editor.note
 
     block, subtitle_path = manage_files.get_next_matching_subtitle_block(sentence_line, selected_text, sound_line)
     if not block or not subtitle_path:
@@ -112,12 +109,18 @@ def next_result_button(editor):
 
     next_sentence_line = block[3]
     next_sound_line = manage_files.get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
-    next_sound_file = re.search(r"\[sound:(.*?)\]", next_sound_line)
-    print(f"next sentence: {next_sentence_line}, next sound: {next_sound_line}")
-    if next_sound_file:
-        print(f"Playing sound filename: {next_sound_file.group(1)}")
-        QTimer.singleShot(100, lambda: play(next_sound_file.group(1)))
 
+    # generate file using next sound line
+    altered_data = manage_files.get_altered_sound_data(next_sound_line, 0, 0, 0)
+    next_sound_line = manage_files.alter_sound_file_times(altered_data, next_sound_line)
+    print(f"next sentence: {next_sentence_line}, next sound: {next_sound_line}")
+
+    editor.note.fields[sentence_idx] = next_sentence_line
+    editor.note.fields[sound_idx] = next_sound_line
+    editor.note.fields[image_idx] = ""
+    editor.note.fields[translation_idx] = ""
+    editor.loadNote()
+    generate_fields_button(editor)
 
 
 def generate_fields_button(editor):

@@ -369,12 +369,12 @@ def get_sound_line_from_subtitle_block_and_path(block, subtitle_path) -> str:
         print(f"Error parsing timestamp in block:\n{block}\nError: {e}")
         return ""
 
-def get_translation_line_from_sound_line(sound_line):
-    if not sound_line:
+def get_translation_line_from_target_sound_line(target_sound_line):
+    if not target_sound_line:
         print("get_translation_line_from_sound_line received None sound_line.")
         return ""
 
-    data = extract_sound_line_data(sound_line)
+    data = extract_sound_line_data(target_sound_line)
     if not data:
         print("extract_sound_line_data returned None.")
         return ""
@@ -393,6 +393,31 @@ def get_translation_line_from_sound_line(sound_line):
     translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
     translation_line = re.sub(r"\{.*?\}", "", translation_line)
     return translation_line.strip()
+
+def get_translation_sound_line_from_target_sound_line(target_sound_line):
+    if not target_sound_line:
+        print("get_translation_line_from_sound_line received None sound_line.")
+        return ""
+
+    data = extract_sound_line_data(target_sound_line)
+    if not data:
+        print("extract_sound_line_data returned None.")
+        return ""
+
+    config = extract_config_data()
+    translation_audio_track = config["translation_audio_track"]
+    translation_language_code = config["translation_language_code"]
+    start_time = data["start_time"]
+    end_time = data["end_time"]
+    filename_base = data["filename_base"]
+
+    translation_subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, translation_audio_track, translation_language_code)
+    overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
+
+    translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
+    translation_line = re.sub(r"\{.*?\}", "", translation_line)
+    return translation_line.strip()
+
 
 def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, start_time, end_time):
 
@@ -547,7 +572,6 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
         elif lengthen_end_ms < 0:
             end_index -= 1
     elif relative_index == -1:
-
         if lengthen_start_ms > 0:
             start_index -= 1
         elif lengthen_start_ms < 0:

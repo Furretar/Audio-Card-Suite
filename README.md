@@ -1,12 +1,10 @@
 
 - [ ] button to open source folder
 - [ ] read every sub folder in source folder, add folder it will ignore for easy management
-- [ ] tag cards with the name of the source file
 - [ ] allow removing from end start times even without backtick filename
 - [ ] PRE INDEXING
-- [ ] add other audio to backside for pure audio cards
 - [ ] store start and end offset every time its pushed, when user moves the whole line forward or backward it automatically adjusts the offset amount
-- [ ] make context aware sound line generation make the sound line first, then extract the sound clip just once
+- [ ] keep extension in sound line?
 
 
 low priority, might do after initial release

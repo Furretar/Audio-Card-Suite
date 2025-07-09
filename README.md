@@ -15,5 +15,6 @@ low priority, might do after initial release
 - [ ] bulk convert my current underscore audios/subs2srs underscore files to use the actual file name with normal spaces
 - [ ] open mpv option
 - [ ]  add/subtract 1db for each audio
+- [ ]  use timings from a different subtitle track but the text for the translation
 
 

@@ -40,7 +40,7 @@ def get_fields_from_editor(editor):
         return {}
 
     note_type_name = list(mapped_fields.keys())[0]
-    note_type = editor.note.note_type
+    note_type = editor.note.note_type()
 
     fields = note_type["flds"]
 
@@ -134,9 +134,11 @@ def generate_fields_button(editor):
         print(f"Playing sound filename: {sound_filename}")
         QTimer.singleShot(100, lambda: play(sound_filename))
 
-def get_idx(label):
+def get_idx(label, note_type_name, config, fields):
     field_key = manage_files.get_field_key_from_label(note_type_name, label, config)
     return index_of_field(field_key, fields) if field_key else -1
+
+
 
 def generate_fields_helper(editor, note):
     if note:
@@ -145,16 +147,18 @@ def generate_fields_helper(editor, note):
         note_type_name = list(mapped_fields.keys())[0]
         fields = note.note_type()["flds"]
 
-        sentence_idx = get_idx("Target Sub Line")
-        sound_idx = get_idx("Target Audio")
-        image_idx = get_idx("Image")
-        translation_idx = get_idx("Translation Sub Line")
-        translation_sound_idx = fields["translation_sound_idx"]
+        sentence_idx = get_idx("Target Sub Line", note_type_name, config, fields)
+        sound_idx = get_idx("Target Audio", note_type_name, config, fields)
+        image_idx = get_idx("Image", note_type_name, config, fields)
+        translation_idx = get_idx("Translation Sub Line", note_type_name, config, fields)
+        translation_sound_idx = get_idx("Translation Audio", note_type_name, config, fields)
 
         sentence_line = note.fields[sentence_idx] if 0 <= sentence_idx < len(note.fields) else ""
         sound_line = note.fields[sound_idx] if 0 <= sound_idx < len(note.fields) else ""
         image_line = note.fields[image_idx] if 0 <= image_idx < len(note.fields) else ""
         translation_line = note.fields[translation_idx] if 0 <= translation_idx < len(note.fields) else ""
+        translation_sound_line = note.fields[translation_sound_idx] if 0 <= translation_sound_idx < len(
+            note.fields) else ""
         selected_text = ""
 
         field_obj = note

@@ -6,9 +6,9 @@
   "image_height": 1080,
   "pad_start": 0,
   "pad_end": 0,
-  "target_language": "Chichewa",
+  "target_language": "Chinese",
   "translation_language": "Japanese",
-  "target_language_code": "nya",
+  "target_language_code": "chi",
   "translation_language_code": "jpn",
   "normalize_audio": true,
   "lufs": -16,
@@ -16,7 +16,7 @@
   "target_subtitle_track": 1,
   "translation_audio_track": 2,
   "translation_subtitle_track": 2,
-  "selected_tab_index": 0,
+  "selected_tab_index": 1,
   "mapped_fields": {
     "1Chinese": {
       "Expression": "Target Sub Line",

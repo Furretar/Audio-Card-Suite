@@ -574,6 +574,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     data = extract_sound_line_data(sound_line)
     if not data:
         return {}
+    print(f"data: {data}")
 
     orig_start_ms = time_hmsms_to_milliseconds(data["start_time"])
     orig_end_ms = time_hmsms_to_milliseconds(data["end_time"])
@@ -603,7 +604,8 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     new_end_time = milliseconds_to_hmsms_format(new_end_ms)
 
     time_range = f"{new_start_time}-{new_end_time}"
-    filename_parts = [data["filename_base"]]
+    filename_base = data["filename_base"]
+    filename_parts = [filename_base]
 
     lang_code = data.get("lang_code")
     if lang_code:
@@ -628,7 +630,8 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
         "new_filename": new_filename,
         "new_sound_line": new_sound_line,
         "new_path": new_path,
-        "old_path": data["collection_path"]
+        "old_path": data["collection_path"],
+        "filename_base": filename_base
     }
 
 
@@ -1267,18 +1270,22 @@ def time_hmsms_to_seconds(t):
     return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000
 
 def time_hmsms_to_milliseconds(ts: str) -> int:
+    print(f"converting time: {ts}")
     pattern_hmsms = re.compile(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms")
 
-    if pattern_hmsms.match(ts):
-        h, m, s, ms = pattern_hmsms.match(ts).groups()
-    else:
-        # dot format
+    match = pattern_hmsms.match(ts)
+    if match:
+        h, m, s, ms = match.groups()
+    elif '.' in ts:
         parts = ts.split('.')
         if len(parts) != 4:
             raise ValueError(f"Unrecognized timestamp format: {ts}")
         h, m, s, ms = parts
+    else:
+        raise ValueError(f"Unrecognized timestamp format: {ts}")
 
     total_ms = (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
+    print(f"returning ms: {total_ms}")
     return total_ms
 
 def milliseconds_to_hmsms_format(ms: int) -> str:
@@ -1310,14 +1317,10 @@ def format_subtitle_block(subtitle_block):
     return [subtitle_index, start_time, end_time, subtitle_text]
 
 def alter_sound_file_times(altered_data, sound_line) -> str:
-    data = extract_sound_line_data(sound_line)
-    if not altered_data:
-        return ""
-
     if os.path.exists(altered_data["old_path"]):
         send2trash(altered_data["old_path"])
 
-    filename_base = data["filename_base"]
+    filename_base = altered_data["filename_base"]
     source_path = get_source_file(filename_base)
 
     cmd = create_ffmpeg_extract_audio_command(

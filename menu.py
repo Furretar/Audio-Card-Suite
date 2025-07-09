@@ -193,28 +193,6 @@ class AudioToolsDialog(QDialog):
         # For example, set the modelFieldsButton text to show selection (optional)
         self.modelFieldsButton.setText(field_name)
 
-    def language_to_code(self, language):
-        print(f"recieved language: {language}")
-        mapping = {
-            "None": "",
-            "Chinese": "chi",
-            "Cantonese": "yue",
-            "Spanish": "spa",
-            "English": "eng",
-            "Arabic": "ara",
-            "Portuguese": "por",
-            "Russian": "rus",
-            "Japanese": "jpn",
-            "German": "ger",
-            "Korean": "kor",
-            "French": "fre",
-            "Italian": "ita",
-            "Thai": "tha",
-            "Swedish": "swe"
-        }
-
-        return mapping.get(language, "")
-
     def on_lang_code_changed(self, idx, language):
         code = self.language_to_code(language)
         edit = self.langCodeEdits[idx]
@@ -373,7 +351,11 @@ class AudioToolsDialog(QDialog):
             langGrid.addWidget(QLabel(label_text), i + 1, 0)
 
             combo = QComboBox()
-            combo.addItems(["None", "Chinese", "Japanese", "English", "Cantonese"])
+
+            combo.addItems([
+                "None", "Japanese", "Chinese", "English", "Korean", "Cantonese", "German", "Spanish"
+            ])
+
             saved_language = self.settings.get(lang_keys[i], "None")
 
             combo.setCurrentText(saved_language)

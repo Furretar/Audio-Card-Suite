@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
 )
 import json
+
 from .manage_files import get_subtitle_path_from_filename_track_code, get_field_key_from_label
 try:
     from . import manage_files
@@ -104,8 +105,6 @@ def next_result_button(editor):
     sentence_line = fields["sentence_line"]
     sound_line = fields["sound_line"]
     selected_text = fields["selected_text"]
-    print(f"detected selected txt: {selected_text}")
-
 
     block, subtitle_path = manage_files.get_next_matching_subtitle_block(sentence_line, selected_text, sound_line)
     if not block or not subtitle_path:
@@ -119,6 +118,21 @@ def next_result_button(editor):
     altered_data = manage_files.get_altered_sound_data(next_sound_line, 0, 0, 0)
     next_sound_line = manage_files.alter_sound_file_times(altered_data, next_sound_line)
     print(f"next sentence: {next_sentence_line}, next sound: {next_sound_line}")
+
+    if next_sound_line:
+        filename_base = re.sub(r'^\[sound:|\]$', '', next_sound_line.split("`", 1)[0].strip())
+        prev_filename_base = re.sub(r'^\[sound:|\]$', '', sound_line.split("`", 1)[0].strip())
+
+        filename_base_underscore = filename_base.replace(" ", "_")
+        prev_base_underscore = prev_filename_base.replace(" ", "_")
+
+        print(f"filename_base_underscore: {filename_base_underscore}")
+        print(f"prev_base_underscore: {prev_base_underscore}")
+        if filename_base_underscore != prev_base_underscore:
+            editor.note.remove_tag(prev_base_underscore)
+
+        if filename_base_underscore not in editor.note.tags:
+            editor.note.add_tag(filename_base_underscore)
 
     editor.note.fields[sentence_idx] = next_sentence_line
     editor.note.fields[sound_idx] = next_sound_line
@@ -176,7 +190,6 @@ def generate_fields_helper(editor, note):
         translation_line = fields["translation_line"]
         translation_sound_line = fields["translation_sound_line"]
         selected_text = fields["selected_text"]
-        print(f"detected selected txt: {selected_text}")
 
         field_obj = editor.note
 
@@ -270,7 +283,6 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
         else:
             new_sentence_line = target_block[3]
     else:
-        print("already formatted")
         target_block, subtitle_path = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
 
     new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path)
@@ -300,7 +312,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
 
     return new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line
 
-def remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_index):
+def remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_index, alt_pressed):
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
         print(f"no data extracted from {sound_line}")
@@ -313,8 +325,12 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_
 
     filename_base = data["filename_base"]
     config = manage_files.extract_config_data()
-    track = config["target_subtitle_track"]
-    code = config["target_language_code"]
+    if alt_pressed:
+        track = config["translation_subtitle_track"]
+        code = config["translation_language_code"]
+    else:
+        track = config["target_subtitle_track"]
+        code = config["target_language_code"]
     subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base, track, code)
 
     sentence_blocks = [b.strip() for b in sentence_line.split("\n\n") if b.strip()]
@@ -377,22 +393,33 @@ def remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_
 
 def remove_edge_lines_helper(editor, relative_index):
     fields = get_fields_from_editor(editor)
-    sound_line = fields["sound_line"]
-    sound_idx = fields["sound_idx"]
-    sentence_line = fields["sentence_line"]
-    sentence_idx = fields["sentence_idx"]
-    translation_idx = fields["translation_idx"]
 
+    modifiers = QApplication.keyboardModifiers()
+    alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
+    if alt_pressed:
+        sound_line = fields["translation_sound_line"]
+        sound_idx = fields["translation_sound_idx"]
+        sentence_line = fields["translation_line"]
+        sentence_idx = fields["translation_idx"]
+        translation_idx = ""
+    else:
+        sound_line = fields["sound_line"]
+        sound_idx = fields["sound_idx"]
+        sentence_line = fields["sentence_line"]
+        sentence_idx = fields["sentence_idx"]
+        translation_idx = fields["translation_idx"]
 
-    new_sentence_line, new_sound_line = remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_index)
+    print(f"sound line: {sound_line}, sentence: {sentence_line}")
+    new_sentence_line, new_sound_line = remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_index, alt_pressed)
 
     if not new_sound_line or not new_sentence_line:
         print("No new sound line or sentence text returned.")
         return
 
     # generate new translation line
-    translation_line = manage_files.get_translation_line_from_target_sound_line(new_sound_line)
-    editor.note.fields[translation_idx] = translation_line
+    if not alt_pressed:
+        translation_line = manage_files.get_translation_line_from_target_sound_line(new_sound_line)
+        editor.note.fields[translation_idx] = translation_line
 
     new_field = re.sub(r"\[sound:.*?\]", new_sound_line, sound_line)
     editor.note.fields[sound_idx] = new_field
@@ -412,27 +439,44 @@ def remove_edge_lines_helper(editor, relative_index):
 
 def add_context_line_helper(editor: Editor, relative_index):
     fields = get_fields_from_editor(editor)
-    sound_line = fields["sound_line"]
-    sound_idx = fields["sound_idx"]
-    sentence_line = fields["sentence_line"]
-    sentence_idx = fields["sentence_idx"]
-    translation_idx = fields["translation_idx"]
+    config = manage_files.extract_config_data()
 
-
+    modifiers = QApplication.keyboardModifiers()
+    alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
+    if alt_pressed:
+        sound_line = fields["translation_sound_line"]
+        sound_idx = fields["translation_sound_idx"]
+        sentence_line = fields["translation_line"]
+        sentence_idx = fields["translation_idx"]
+        translation_idx = ""
+        track = config["translation_subtitle_track"]
+        code = config["translation_language_code"]
+    else:
+        sound_line = fields["sound_line"]
+        sound_idx = fields["sound_idx"]
+        sentence_line = fields["sentence_line"]
+        sentence_idx = fields["sentence_idx"]
+        translation_idx = fields["translation_idx"]
+        track = config["target_subtitle_track"]
+        code = config["target_language_code"]
     print(f"sound_line from editor: {sound_line}")
 
     filename_base = re.sub(r'^\[sound:|\]$', '', sound_line.split("`", 1)[0].strip())
 
-    config = manage_files.extract_config_data()
-    track = config["target_subtitle_track"]
-    code = config["target_language_code"]
     subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base, track, code)
-    new_sound_tag, context_sentence_line = new_sound_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, relative_index)
+
+    result = new_sound_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, relative_index)
+    if not result or result[0] is None or result[1] is None:
+        print("Failed to retrieve new sound tag or context sentence line.")
+        return
+    new_sound_tag, context_sentence_line = result
+    context_sentence_line = re.sub(r"\{.*?\}", "", context_sentence_line)
 
     # generate new translation line
-    translation_line = manage_files.get_translation_line_from_target_sound_line(new_sound_tag)
-    print(f"translation line: {translation_line}, from new_sound_tag: {new_sound_tag}")
-    editor.note.fields[translation_idx] = translation_line
+    if not alt_pressed:
+        translation_line = manage_files.get_translation_line_from_target_sound_line(new_sound_tag)
+        print(f"translation line: {translation_line}, from new_sound_tag: {new_sound_tag}")
+        editor.note.fields[translation_idx] = translation_line
 
     if relative_index == 1:
         new_sentence_line = f"{sentence_line}\n\n{context_sentence_line}"
@@ -460,6 +504,7 @@ def get_context_sound_and_sentence_line():
     pass
 
 def new_sound_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, relative_index):
+    print(f"soundl ine: {sound_line}, sub path: {subtitle_path}, index: {relative_index}")
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
         return "", ""
@@ -485,7 +530,11 @@ def new_sound_line_from_sound_line_path_and_relative_index(sound_line, subtitle_
     if relative_index == 1:
         delta = target_end_ms - end_ms
         altered_data = manage_files.get_altered_sound_data(sound_line, 0, delta, relative_index)
+        if "new_sound_line" not in altered_data:
+            print("no sound line returned")
+            return
         new_sound_line = altered_data["new_sound_line"]
+
         new_sentence_line = f"{target_line}"
     else:
         delta = start_ms - target_start_ms
@@ -568,8 +617,6 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
     if before_removed or after_removed:
         print(f"leftover sentence before: {before_removed}")
         print(f"leftover sentence after: {after_removed}")
-    else:
-        print("no leftover sentence")
 
     new_sound_line = sound_line
     while before_removed or after_removed:

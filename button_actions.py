@@ -500,9 +500,9 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     if modifiers & Qt.KeyboardModifier.ShiftModifier:
         start_delta //= 2
         end_delta //= 2
-    elif modifiers & Qt.KeyboardModifier.ControlModifier:
-        start_delta *= 5
-        end_delta *= 5
+    if modifiers & Qt.KeyboardModifier.ControlModifier:
+        start_delta *= 10
+        end_delta *= 10
 
     fields = get_fields_from_editor(editor)
     if modifiers & Qt.KeyboardModifier.AltModifier:

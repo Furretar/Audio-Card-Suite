@@ -201,6 +201,8 @@ def generate_fields_helper(editor, note):
         sound_line, sentence_line, selected_text, image_line, translation_line, translation_sound_line
     )
 
+    print(f"new result: {new_result}")
+
     if not new_result:
         print("generate_fields_sound_sentence_image failed to return valid values.")
         if new_result:
@@ -212,6 +214,7 @@ def generate_fields_helper(editor, note):
 
     new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line = new_result
 
+    print(f"got new result")
 
     def update_field(idx, new_val):
         nonlocal updated
@@ -257,7 +260,7 @@ def generate_fields_helper(editor, note):
 
 def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, selected_text, image_line, translation_line, translation_sound_line):
     # checks each field, generating and updating if needed. Returns each field, empty if not needed
-    sentence_line = sentence_line or ""
+    print(f"{sound_line}, {sentence_line}")
     sentence_blocks = [line for line in str(sentence_line).splitlines() if line.strip()]
     if not sentence_line:
         showInfo("sentence field empty")
@@ -287,7 +290,9 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
     else:
         target_block, subtitle_path = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
 
+    print(f"fsfdgs: {sentence_line}, {new_sentence_line}")
     new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path)
+    print(f"aaaaaaaaaaaaaa: {new_sound_line}")
 
     config = manage_files.extract_config_data()
     note_type_name = list(config["mapped_fields"].keys())[0]
@@ -461,7 +466,11 @@ def add_context_line_helper(editor: Editor, relative_index):
         translation_idx = fields["translation_idx"]
         track = config["target_subtitle_track"]
         code = config["target_language_code"]
-    print(f"sound_line from editor: {sound_line}")
+
+    if sound_idx == -1:
+        print(f"no sound line detected")
+        generate_fields_helper(editor, None)
+        return
 
     filename_base = re.sub(r'^\[sound:|\]$', '', sound_line.split("`", 1)[0].strip())
 
@@ -486,7 +495,11 @@ def add_context_line_helper(editor: Editor, relative_index):
         new_sentence_line = f"{context_sentence_line}\n\n{sentence_line}"
 
     if new_sound_tag and new_sentence_line:
-        editor.note.fields[sound_idx] = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
+        new_sound_line = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
+        altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, None)
+        new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line)
+
+        editor.note.fields[sound_idx] = new_sound_line
         editor.note.fields[sentence_idx] = new_sentence_line
 
         match = re.search(r"\[sound:(.*?)\]", new_sound_tag)
@@ -506,7 +519,6 @@ def get_context_sound_and_sentence_line():
     pass
 
 def new_sound_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, relative_index):
-    print(f"soundl ine: {sound_line}, sub path: {subtitle_path}, index: {relative_index}")
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
         return "", ""
@@ -603,6 +615,9 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     return
 
 def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path):
+    if sentence_line == new_sentence_line:
+        return sound_line, sentence_line
+
     # check before and after selected text for more lines to add
     leftover_sentence = sentence_line.strip()
 
@@ -753,19 +768,15 @@ print("Minimal Field Focus Detector add-on loaded.")
 
 
 
-
-
-
-
 def get_fields_from_note(note):
     config = manage_files.extract_config_data()
     mapped_fields = config.get("mapped_fields", {})
 
-    if not mapped_fields:
-        showInfo("fields not mapped")
+    note_type_name = note.model()["name"]
+    if note_type_name not in mapped_fields:
+        showInfo(f"fields not mapped for note type '{note_type_name}'")
         return {}
 
-    note_type_name = list(mapped_fields.keys())[0]
     note_type = note.note_type()
     fields = note_type["flds"]
 

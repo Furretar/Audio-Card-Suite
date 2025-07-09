@@ -574,7 +574,6 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     data = extract_sound_line_data(sound_line)
     if not data:
         return {}
-    print(f"data: {data}")
 
     orig_start_ms = time_hmsms_to_milliseconds(data["start_time"])
     orig_end_ms = time_hmsms_to_milliseconds(data["end_time"])
@@ -624,7 +623,6 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     new_path = os.path.join(get_collection_dir(), new_filename)
     new_sound_line = f"[sound:{new_filename}]"
     old_path = data["collection_path"]
-    print(f"old path: {old_path}")
 
     return {
         "new_start_time": new_start_time,
@@ -1272,7 +1270,6 @@ def time_hmsms_to_seconds(t):
     return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000
 
 def time_hmsms_to_milliseconds(ts: str) -> int:
-    print(f"converting time: {ts}")
     pattern_hmsms = re.compile(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms")
 
     match = pattern_hmsms.match(ts)
@@ -1287,7 +1284,6 @@ def time_hmsms_to_milliseconds(ts: str) -> int:
         raise ValueError(f"Unrecognized timestamp format: {ts}")
 
     total_ms = (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
-    print(f"returning ms: {total_ms}")
     return total_ms
 
 def milliseconds_to_hmsms_format(ms: int) -> str:

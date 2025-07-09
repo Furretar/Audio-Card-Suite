@@ -101,6 +101,7 @@ def next_result_button(editor):
     sound_idx = fields["sound_idx"]
     image_idx = fields["image_idx"]
     translation_idx = fields["translation_idx"]
+    translation_sound_idx = fields["translation_sound_idx"]
 
     sentence_line = fields["sentence_line"]
     sound_line = fields["sound_line"]
@@ -138,6 +139,7 @@ def next_result_button(editor):
     editor.note.fields[sound_idx] = next_sound_line
     editor.note.fields[image_idx] = ""
     editor.note.fields[translation_idx] = ""
+    editor.note.fields[translation_sound_idx] = ""
     editor.loadNote()
     generate_fields_button(editor)
 
@@ -222,13 +224,13 @@ def generate_fields_helper(editor, note):
     update_field(translation_idx, new_translation_line)
 
     altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, 0)
-    if new_sound_line and new_sound_line != field_obj.fields[sound_idx]:
+    if new_sound_line and new_sound_line != field_obj.fields[sound_idx] and altered_data:
         new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line)
         field_obj.fields[sound_idx] = new_sound_line
         updated = True
 
     altered_data = manage_files.get_altered_sound_data(new_translation_sound_line, 0, 0, 0)
-    if new_translation_sound_line and new_translation_sound_line != field_obj.fields[translation_sound_idx]:
+    if new_translation_sound_line and new_translation_sound_line != field_obj.fields[translation_sound_idx] and altered_data:
         new_translation_sound_line = manage_files.alter_sound_file_times(altered_data, new_translation_sound_line)
         field_obj.fields[translation_sound_idx] = new_translation_sound_line
         updated = True
@@ -291,7 +293,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
     note_type_name = list(config["mapped_fields"].keys())[0]
     generate_image = get_field_key_from_label(note_type_name, "Image", config)
     generate_translation_line = get_field_key_from_label(note_type_name, "Translation Sub Line", config)
-    generate_translation_audio = get_field_key_from_label(note_type_name, "Translation Audio", config)
+    generate_translation_sound = get_field_key_from_label(note_type_name, "Translation Audio", config)
 
     if not image_line and generate_image:
         new_image_line = manage_files.get_image_if_empty_helper(image_line, new_sound_line)
@@ -303,7 +305,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
     else:
         new_translation_line = ""
 
-    if not translation_sound_line and generate_translation_audio:
+    if not translation_sound_line and generate_translation_sound:
         print(f"\ngenerating translation audio\n")
         new_translation_sound_line = manage_files.get_translation_sound_line_from_target_sound_line(new_sound_line)
         print(f"new_translation_sound_line: {new_translation_sound_line} ")

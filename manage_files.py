@@ -623,6 +623,8 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     new_filename = "`".join(filename_parts) + f".{data['file_extension']}"
     new_path = os.path.join(get_collection_dir(), new_filename)
     new_sound_line = f"[sound:{new_filename}]"
+    old_path = data["collection_path"]
+    print(f"old path: {old_path}")
 
     return {
         "new_start_time": new_start_time,
@@ -630,7 +632,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
         "new_filename": new_filename,
         "new_sound_line": new_sound_line,
         "new_path": new_path,
-        "old_path": data["collection_path"],
+        "old_path": old_path,
         "filename_base": filename_base
     }
 
@@ -1317,6 +1319,10 @@ def format_subtitle_block(subtitle_block):
     return [subtitle_index, start_time, end_time, subtitle_text]
 
 def alter_sound_file_times(altered_data, sound_line) -> str:
+    if not altered_data:
+        print(f"altered data is empty")
+        return
+
     if os.path.exists(altered_data["old_path"]):
         send2trash(altered_data["old_path"])
 

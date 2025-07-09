@@ -23,12 +23,14 @@ from PyQt6.QtWidgets import (
 try:
     from . import manage_files
     from . import button_actions
+    from . import language_codes
 except ImportError:
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     import manage_files
     import button_actions
+    import language_codes
 
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -139,8 +141,6 @@ class AudioToolsDialog(QDialog):
         self.settings.update(config)
 
     def save_settings(self):
-        """Saves current UI settings to Anki's add-on configuration."""
-        # Update self.settings from UI elements before saving
         self.settings["image_height"] = int(self.imageHeightEdit.text())
         self.settings["pad_start"] = int(self.padStartEdit.text())
         self.settings["pad_end"] = int(self.padEndEdit.text())
@@ -149,17 +149,28 @@ class AudioToolsDialog(QDialog):
         self.settings["normalize_audio"] = self.normalize_checkbox.isChecked()
         self.settings["lufs"] = self.lufsSpinner.value()
 
-        # Save track numbers
         self.settings["target_audio_track"] = self.trackSpinners[0].value()
         self.settings["target_subtitle_track"] = self.trackSpinners[1].value()
         self.settings["translation_audio_track"] = self.trackSpinners[2].value()
         self.settings["translation_subtitle_track"] = self.trackSpinners[3].value()
 
+        # Convert T codes to B codes before saving
+        target_code_t = self.settings.get("target_language_code", "")
+        translation_code_t = self.settings.get("translation_language_code", "")
+
+        target_code_b = language_codes.PyLangISO639_2.t_to_b(target_code_t)
+        translation_code_b = language_codes.PyLangISO639_2.t_to_b(translation_code_t)
+
+        self.settings["target_language_code"] = target_code_b
+        self.settings["translation_language_code"] = translation_code_b
+
         config_path = os.path.join(addon_dir, "config.json")
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(self.settings, f, indent=2)
 
-        print("Settings saved:", self.settings) # Debug print
+        print("Language codes and names:")
+        print(f"{target_code_b} {self.settings.get('target_language', '')}")
+        print(f"{translation_code_b} {self.settings.get('translation_language', '')}")
 
     def show_fields_menu(self):
         current_model_name = self.modelButton.text()
@@ -187,24 +198,37 @@ class AudioToolsDialog(QDialog):
         mapping = {
             "None": "",
             "Chinese": "chi",
-            "Japanese": "jpn",
+            "Cantonese": "yue",
+            "Spanish": "spa",
             "English": "eng",
-            "Cantonese": "yue"
+            "Arabic": "ara",
+            "Portuguese": "por",
+            "Russian": "rus",
+            "Japanese": "jpn",
+            "German": "ger",
+            "Korean": "kor",
+            "French": "fre",
+            "Italian": "ita",
+            "Thai": "tha",
+            "Swedish": "swe"
         }
+
         return mapping.get(language, "")
 
     def on_lang_code_changed(self, idx, language):
         code = self.language_to_code(language)
-        print(f"code: {code}, language: {language}")
-        self.langCodeEdits[idx].setText(code)
+        edit = self.langCodeEdits[idx]
+        edit.blockSignals(True)
+        edit.setText(code)
+        edit.blockSignals(False)
+
         if idx == 0:
-            self.settings[f"target_language"] = language
-            target_language_code = self.language_to_code(language)
-            print(f"code: {target_language_code}")
-            self.settings[f"target_language_code"] = target_language_code
+            self.settings["target_language"] = language
+            self.settings["target_language_code"] = code
         else:
-            self.settings[f"translation_language"] = language
-            self.settings[f"translation_language_code"] = self.language_to_code(language)
+            self.settings["translation_language"] = language
+            self.settings["translation_language_code"] = code
+
         self.save_settings()
 
     def initUI(self):
@@ -221,8 +245,8 @@ class AudioToolsDialog(QDialog):
             self.modelButton.setText(mw.col.models.current()['name'])
         self.modelButton.setAutoDefault(False)
         self.modelButton.clicked.connect(lambda: None)
-        self.deckButton = QPushButton(self.settings["default_deck"])
-        self.deckButton.clicked.connect(lambda: None)
+        # self.deckButton = QPushButton(self.settings["default_deck"])
+        # self.deckButton.clicked.connect(lambda: None)
 
         self.modelFieldsButton = QPushButton()
         self.modelFieldsButton.setText("⚙️")
@@ -235,9 +259,9 @@ class AudioToolsDialog(QDialog):
         grid.addWidget(self.modelButton, 0, 1)
         grid.setColumnStretch(1, 1)
         grid.addWidget(self.modelFieldsButton, 0, 2)
-        grid.addWidget(QLabel("Deck:"), 0, 3)
-        grid.addWidget(self.deckButton, 0, 4)
-        grid.setColumnStretch(4, 1)
+        # grid.addWidget(QLabel("Deck:"), 0, 3)
+        # grid.addWidget(self.deckButton, 0, 4)
+        # grid.setColumnStretch(4, 1)
 
         importGroup.setLayout(grid)
         vbox.addWidget(importGroup)
@@ -325,7 +349,7 @@ class AudioToolsDialog(QDialog):
         vbox.addLayout(hbox)
 
         # Subtitles group with tabs
-        subsGroup = QGroupBox("Mpv Tracks")
+        subsGroup = QGroupBox("Source Tracks")
         subsLayout = QVBoxLayout()
 
         info_label = QLabel("The currently selected tab will have its settings used.")
@@ -333,53 +357,46 @@ class AudioToolsDialog(QDialog):
 
         self.tabs = QTabWidget()
 
-        # Language Codes Tab
+        # language codes tab
         langCodesTab = QWidget()
         langGrid = QGridLayout()
 
-        lang_labels = [
-            "Target Language Code",
-            "Translation Language Code",
-        ]
 
         self.langCodeCombos = []
         self.langCodeEdits = []
 
-        for i, label_text in enumerate(lang_labels):
-            langGrid.addWidget(QLabel(label_text + ":"), i, 0)
+        labels = ["Target Language Code:", "Translation Language Code:"]
+        lang_keys = ["target_language", "translation_language"]
+        code_keys = ["target_language_code", "translation_language_code"]
+
+        for i, label_text in enumerate(labels):
+            langGrid.addWidget(QLabel(label_text), i + 1, 0)
+
             combo = QComboBox()
+            combo.addItems(["None", "Chinese", "Japanese", "English", "Cantonese"])
+            saved_language = self.settings.get(lang_keys[i], "None")
+
+            combo.setCurrentText(saved_language)
+
             edit = QLineEdit()
             edit.setFixedWidth(30)
             edit.setStyleSheet("QLineEdit{background: #f4f3f4;}")
             edit.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
 
-            combo.addItems(["None", "Chinese", "Japanese", "English", "Cantonese"])
-
-            if i == 0:
-                saved_language = self.settings.get("target_language", "None")
-                saved_code = self.settings.get("target_language_code", "")
-            else:
-                saved_language = self.settings.get("translation_language", "None")
-                saved_code = self.settings.get("translation_language_code", "")
-
-            idx = combo.findText(saved_language)
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
-
-            edit.setText(saved_code)
-
-            combo.currentTextChanged.connect(
-                lambda text, idx=i: self.on_lang_code_changed(idx, str(text))
-            )
+            combo.currentTextChanged.connect(lambda text, idx=i: self.on_lang_code_changed(idx, str(text)))
+            edit.textChanged.connect(lambda text, idx=i: self.on_code_edit_changed(idx, text))
 
             self.langCodeCombos.append(combo)
             self.langCodeEdits.append(edit)
 
-            langGrid.addWidget(combo, i, 1)
-            langGrid.addWidget(edit, i, 2)
+            langGrid.addWidget(combo, i + 1, 1)
+            langGrid.addWidget(edit, i + 1, 2)
 
         langCodesTab.setLayout(langGrid)
         self.tabs.addTab(langCodesTab, "Language Codes")
+
+
+
 
         # Tracks Tab
         tracksTab = QWidget()
@@ -412,6 +429,14 @@ class AudioToolsDialog(QDialog):
 
         subsLayout.addWidget(self.tabs)
         subsGroup.setLayout(subsLayout)
+
+        codes_label = QLabel()
+        codes_label.setText(
+            'If your language is not listed, enter the <a href="https://en.wikipedia.org/wiki/List_of_ISO_639-2_codes">ISO 639-2 language code</a> in the text box.'
+        )
+        codes_label.setOpenExternalLinks(True)
+        codes_label.setWordWrap(True)
+        subsLayout.addWidget(codes_label)
 
         # Add subtitles group first (full width)
         vbox.addWidget(subsGroup)
@@ -488,12 +513,6 @@ class AudioToolsDialog(QDialog):
             )
             layout.addWidget(message)
 
-            # Checkboxes
-            overwrite_fields_checkbox = QCheckBox("Overwrite Fields")
-            normalize_audio_checkbox = QCheckBox("Normalize Audio")
-            layout.addWidget(overwrite_fields_checkbox)
-            layout.addWidget(normalize_audio_checkbox)
-
             # Buttons
             button_box = QDialogButtonBox(
                 QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
@@ -504,13 +523,10 @@ class AudioToolsDialog(QDialog):
 
 
                 print("User confirmed conversion.")
-                print("Overwrite:", overwrite_fields_checkbox.isChecked())
-                print("Normalize Audio:", normalize_audio_checkbox.isChecked())
                 dialog.accept()
                 button_actions.bulk_generate(
                     deck,
                     note_type,
-                    overwrite=overwrite_fields_checkbox.isChecked(),
                 )
 
             def on_reject():
@@ -525,13 +541,13 @@ class AudioToolsDialog(QDialog):
 
         self.bulkGenerateButton.clicked.connect(confirm_bulk_generate)
         hbox2.addWidget(self.bulkGenerateButton)
-        hbox2.addStretch(1)
+        hbox2.addStretch(4)
 
         # open file button
-        self.openFileButton = QPushButton("Open File")
-        self.openFileButton.setDefault(True)
-        self.openFileButton.clicked.connect(lambda: None)
-        hbox2.addWidget(self.openFileButton)
+        # self.openFileButton = QPushButton("Open File")
+        # self.openFileButton.setDefault(True)
+        # self.openFileButton.clicked.connect(lambda: None)
+        # hbox2.addWidget(self.openFileButton)
 
         vbox.addLayout(hbox2)
 
@@ -581,11 +597,11 @@ class AudioToolsDialog(QDialog):
         self.trackSpinners[3].setValue(self.settings.get("translation_subtitle_track", 0))
 
         code_keys = [
-            "lang_target_code",
-            "lang_translation_code",
+            "target_language_code",
+            "translation_language_code",
         ]
-        for i, edit in enumerate(self.langCodeEdits):
-            edit.setText(self.settings.get(code_keys[i], ""))
+        for i in range(min(len(self.langCodeEdits), len(code_keys))):
+            self.langCodeEdits[i].setText(self.settings.get(code_keys[i], ""))
 
         # Restore the selected tab index
         selected_index = self.settings.get("selected_tab_index", 0)
@@ -593,6 +609,49 @@ class AudioToolsDialog(QDialog):
             self.tabs.setCurrentIndex(selected_index)
 
         self.on_audio_ext_changed(self.audioExtCombo.currentText())
+
+    def on_code_edit_changed(self, idx, text):
+        code = text.strip().lower()
+        combo = self.langCodeCombos[idx]
+
+        # Get language name from code, empty string if not found
+        lang_name = language_codes.PyLangISO639_2.code_to_name(code)
+
+        combo.blockSignals(True)
+        if lang_name:
+            # Show the language name in the combo box (add temporary item if needed)
+            if combo.findText(lang_name) == -1:
+                combo.insertItem(0, lang_name)
+                combo.setCurrentIndex(0)
+                # Optionally remove this temporary item later
+            else:
+                combo.setCurrentText(lang_name)
+        else:
+            # Show 'None' if no matching language
+            if combo.findText("None") >= 0:
+                combo.setCurrentText("None")
+            else:
+                combo.setCurrentIndex(-1)
+        combo.blockSignals(False)
+
+        # Save settings only if language recognized and not None
+        if lang_name and lang_name != "None":
+            if idx == 0:
+                self.settings["target_language"] = lang_name
+                self.settings["target_language_code"] = code
+            else:
+                self.settings["translation_language"] = lang_name
+                self.settings["translation_language_code"] = code
+        else:
+            # Clear settings if code unknown or None
+            if idx == 0:
+                self.settings["target_language"] = ""
+                self.settings["target_language_code"] = ""
+            else:
+                self.settings["translation_language"] = ""
+                self.settings["translation_language_code"] = ""
+
+        self.save_settings()
 
     def on_audio_ext_changed(self, text):
         if text == "flac":
@@ -688,11 +747,6 @@ def add_audio_tools_menu():
 add_audio_tools_menu()
 
 
-
-
-
-
-
 def set_auto_play_audio(editor: Editor, enabled: bool) -> None:
     editor._auto_play_enabled = enabled
     state = "enabled" if enabled else "disabled"
@@ -704,8 +758,6 @@ def handle_autoplay_checkbox_toggle(_, editor):
     new_state = not current
     editor._auto_play_enabled = new_state
     print(f"Autoplay {'enabled' if new_state else 'disabled'} for editor {id(editor)}")
-
-
 
 def add_custom_controls(editor: Editor) -> None:
     if not hasattr(editor, "widget") or editor.widget is None:

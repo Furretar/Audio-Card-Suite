@@ -764,12 +764,11 @@ def get_fields_from_note(note):
 def is_normalized(sound_line):
     return bool(re.search(r'`-\d+LUFS\.\w+$', sound_line))
 
-def bulk_generate(deck, note_type, overwrite):
+def bulk_generate(deck, note_type):
     current_deck_name = deck["name"]
 
     print("Running bulk_generate...")
     print("Deck:", current_deck_name)
-    print("Overwrite Fields:", overwrite)
 
     deck_id = mw.col.decks.id(current_deck_name)
     note_ids = mw.col.find_notes(f'deck:"{current_deck_name}"')

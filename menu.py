@@ -469,9 +469,9 @@ class AudioToolsDialog(QDialog):
             msg_box = QMessageBox(mw)
             msg_box.setWindowTitle("Confirm Conversion")
             msg_box.setText(
-                "This will convert all video files in the source folder to the selected audio format to save space.\n\n"
+                "This will extract the specified subtitle files and convert all video files in the source folder to the selected audio format to save space.\n\n"
                 "The original video files will be deleted after conversion.\n\n"
-                "After conversion, you will no longer be able to generate screenshots or switch audio tracks for existing cards.")
+                "After conversion, you will no longer be able to generate screenshots or switch tracks for existing cards.")
             msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             msg_box.setIcon(QMessageBox.Icon.Question)
 

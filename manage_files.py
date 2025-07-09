@@ -340,28 +340,69 @@ def get_subtitle_path_from_filename_track_code(filename, track, code):
     return None
 
 
-
-def get_sound_line_from_subtitle_block_and_path(block, subtitle_path) -> str:
+def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path) -> str:
     if not subtitle_path:
         print("Error: subtitle_path is None")
-        return ""
+        return None, None
+
+    if not blocks:
+        return None, None
+
+    if not (isinstance(blocks, (list, tuple)) and isinstance(blocks[0], (list, tuple))):
+        blocks = [blocks]
 
     filename_base = os.path.splitext(os.path.basename(subtitle_path))[0].split('`')[0]
 
     try:
-        start_index = block[0]
-        start_time = convert_timestamp_dot_to_hmsms(block[1])
-        end_time = convert_timestamp_dot_to_hmsms(block[2])
+        start_index = blocks[0][0]
+        end_index = blocks[-1][0]
+        start_time = convert_timestamp_dot_to_hmsms(blocks[0][1])
+        end_time = convert_timestamp_dot_to_hmsms(blocks[-1][2])
 
         config = extract_config_data()
         audio_ext = config["audio_ext"]
 
-        timestamp = f"{filename_base}`{start_time}-{end_time}`{start_index}-{start_index}.{audio_ext}"
+        timestamp = f"{filename_base}`{start_time}-{end_time}`{start_index}-{end_index}.{audio_ext}"
+        new_sound_line = f"[sound:{timestamp}]"
+
+        combined_text = "\n\n".join(b[3].strip() for b in blocks if len(b) > 3)
+
+        return new_sound_line, combined_text
+
+    except Exception as e:
+        print(f"Error parsing timestamp in blocks:\n{blocks}\nError: {e}")
+        return None, None
+
+# todo deprecate in the future?
+def get_sound_line_from_subtitle_blocks_and_path(blocks, subtitle_path) -> str:
+    if not subtitle_path:
+        print("Error: subtitle_path is None")
+        return ""
+
+    # Ensure blocks is a list of blocks
+    if not blocks:
+        return ""
+
+    if not (isinstance(blocks, (list, tuple)) and isinstance(blocks[0], (list, tuple))):
+        blocks = [blocks]
+
+    filename_base = os.path.splitext(os.path.basename(subtitle_path))[0].split('`')[0]
+
+    try:
+        start_index = blocks[0][0]
+        end_index = blocks[-1][0]
+        start_time = convert_timestamp_dot_to_hmsms(blocks[0][1])
+        end_time = convert_timestamp_dot_to_hmsms(blocks[-1][2])
+
+        config = extract_config_data()
+        audio_ext = config["audio_ext"]
+
+        timestamp = f"{filename_base}`{start_time}-{end_time}`{start_index}-{end_index}.{audio_ext}"
         new_sound_line = f"[sound:{timestamp}]"
         return new_sound_line
 
     except Exception as e:
-        print(f"Error parsing timestamp in block:\n{block}\nError: {e}")
+        print(f"Error parsing timestamp in blocks:\n{blocks}\nError: {e}")
         return ""
 
 def get_translation_line_from_target_sound_line(target_sound_line):
@@ -704,6 +745,24 @@ def get_subtitle_block_from_relative_index(relative_index, subtitle_index, subti
         print(f"len(blocks): {len(formatted_blocks)}")
         return []
 
+def get_subtitle_blocks_from_index_range(start_index, end_index, subtitle_path):
+    with open(subtitle_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    blocks = content.strip().split('\n\n')
+
+    formatted_blocks = []
+    for block in blocks:
+        formatted = format_subtitle_block(block)
+        formatted_blocks.append(formatted)
+
+    if start_index < 0 or end_index >= len(formatted_blocks) or start_index > end_index:
+        print(f"Invalid range: {start_index} to {end_index}, total blocks: {len(formatted_blocks)}")
+        return []
+
+    return formatted_blocks[start_index:end_index + 1]
+
+
 def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str):
     block = None
 
@@ -713,7 +772,7 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
         print(f"\nblock from text {sentence_line}: {block}\n")
         if not block or not subtitle_path:
             return None, None, None
-        sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
+        sound_line = get_sound_line_from_subtitle_blocks_and_path(block, subtitle_path)
         return sound_line, block, subtitle_path
 
     format = detect_format(sound_line)
@@ -722,7 +781,7 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
         block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
         if not block or not subtitle_path:
             return None, None, None
-        sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
+        sound_line = get_sound_line_from_subtitle_blocks_and_path(block, subtitle_path)
 
     data = extract_sound_line_data(sound_line)
     filename_base = data["filename_base"]
@@ -745,7 +804,7 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
         block, _ = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_sentence)
         if block is None:
             return None, None, None
-        sound_line = get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
+        sound_line = get_sound_line_from_subtitle_blocks_and_path(block, subtitle_path)
 
     return sound_line, block, subtitle_path
 
@@ -917,7 +976,6 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line):
     # Wraparound pass (from beginning)
     print("Wrapping to start of subtitle files...")
     return search_blocks(after_current=False)
-
 
 
 
@@ -1317,6 +1375,10 @@ def format_subtitle_block(subtitle_block):
 def alter_sound_file_times(altered_data, sound_line) -> str:
     if not altered_data:
         print(f"altered data is empty")
+        return
+
+    if not sound_line:
+        print(f"sound line is empty")
         return
 
     if os.path.exists(altered_data["old_path"]):

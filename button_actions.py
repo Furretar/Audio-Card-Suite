@@ -107,13 +107,17 @@ def next_result_button(editor):
     sound_line = fields["sound_line"]
     selected_text = fields["selected_text"]
 
+    if not sentence_line and not selected_text:
+        print(f"no text to search")
+        return
+
     block, subtitle_path = manage_files.get_next_matching_subtitle_block(sentence_line, selected_text, sound_line)
     if not block or not subtitle_path:
         print(f"didnt find another result")
         return
 
     next_sentence_line = block[3]
-    next_sound_line = manage_files.get_sound_line_from_subtitle_block_and_path(block, subtitle_path)
+    next_sound_line = manage_files.get_sound_line_from_subtitle_blocks_and_path(block, subtitle_path)
 
     # generate file using next sound line
     altered_data = manage_files.get_altered_sound_data(next_sound_line, 0, 0, 0)
@@ -260,10 +264,9 @@ def generate_fields_helper(editor, note):
 
 def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, selected_text, image_line, translation_line, translation_sound_line):
     # checks each field, generating and updating if needed. Returns each field, empty if not needed
-    print(f"{sound_line}, {sentence_line}")
     sentence_blocks = [line for line in str(sentence_line).splitlines() if line.strip()]
     if not sentence_line:
-        showInfo("sentence field empty")
+        print(f"sentence field empty")
         return
 
     # dont overwrite if sound line already formatted
@@ -290,9 +293,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
     else:
         target_block, subtitle_path = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
 
-    print(f"fsfdgs: {sentence_line}, {new_sentence_line}")
     new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path)
-    print(f"aaaaaaaaaaaaaa: {new_sound_line}")
 
     config = manage_files.extract_config_data()
     note_type_name = list(config["mapped_fields"].keys())[0]
@@ -476,7 +477,7 @@ def add_context_line_helper(editor: Editor, relative_index):
 
     subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base, track, code)
 
-    result = new_sound_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, relative_index)
+    result = new_sound_line_from_sound_line_path_and_add_relative_index(sound_line, subtitle_path, relative_index)
     if not result or result[0] is None or result[1] is None:
         print("Failed to retrieve new sound tag or context sentence line.")
         return
@@ -512,13 +513,26 @@ def add_context_line_helper(editor: Editor, relative_index):
         QTimer.singleShot(0, play_after_reload)
         editor.loadNote()
 
-    print(f"riunning generate fields helper")
+    print(f"running generate fields helper")
     generate_fields_helper(editor, None)
 
-def get_context_sound_and_sentence_line():
-    pass
+def new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, relative_start, relative_end):
+    data = manage_files.extract_sound_line_data(sound_line)
+    if not data:
+        return "", ""
 
-def new_sound_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, relative_index):
+    start_index = data["start_index"]
+    end_index = data["end_index"]
+
+    blocks = manage_files.get_subtitle_blocks_from_index_range(start_index + relative_start, end_index + relative_end, subtitle_path)
+    new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path)
+
+    target_block = manage_files.get_subtitle_block_from_relative_index(relative_start, edge_index, subtitle_path)
+    if not target_block or len(target_block) < 4:
+        return "", ""
+
+# todo combine with remove function
+def new_sound_line_from_sound_line_path_and_add_relative_index(sound_line, subtitle_path, relative_index):
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
         return "", ""
@@ -530,7 +544,7 @@ def new_sound_line_from_sound_line_path_and_relative_index(sound_line, subtitle_
         return "", ""
 
     target_line = target_block[3]
-    new_sound_line = manage_files.get_sound_line_from_subtitle_block_and_path(target_block, subtitle_path)
+    new_sound_line = manage_files.get_sound_line_from_subtitle_blocks_and_path(target_block, subtitle_path)
 
     target_data = manage_files.extract_sound_line_data(new_sound_line)
     if not target_data:
@@ -559,6 +573,7 @@ def new_sound_line_from_sound_line_path_and_relative_index(sound_line, subtitle_
     if not new_sound_line:
         return "", ""
 
+    print(f"new dsfjasdfa {new_sound_line}, {new_sentence_line}")
     return new_sound_line.strip(), new_sentence_line.strip()
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
@@ -580,6 +595,11 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         sound_line = fields["sound_line"]
         sound_idx = fields["sound_idx"]
         sentence_line = fields["sentence_line"]
+
+    if not sound_line:
+        print(f"no sound line detected")
+        generate_fields_helper(editor, None)
+        return
 
     print(f"current sound line: {sound_line}")
     fixed_sound_line, block, subtitle_path = manage_files.get_valid_backtick_sound_line_and_block(sound_line, sentence_line)
@@ -663,22 +683,22 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
             # check if previous line is in leftover line, or if leftover line is in previous line, and add previous line if it is
             if before_line_clean in before_removed:
                 before_removed = before_removed.replace(before_line_clean, "").strip()
-                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, relative_index)
+                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_add_relative_index(new_sound_line, subtitle_path, relative_index)
                 new_sentence_line = f"{context_sentence_line}\n\n" + new_sentence_line
                 print(f"before line found")
             elif before_line in before_removed:
                 before_removed = before_removed.replace(before_line, "").strip()
-                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, relative_index)
+                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_add_relative_index(new_sound_line, subtitle_path, relative_index)
                 new_sentence_line = f"{context_sentence_line}\n\n" + new_sentence_line
                 print(f"before line found")
             elif before_removed in before_line:
                 before_removed = ""
-                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, relative_index)
+                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_add_relative_index(new_sound_line, subtitle_path, relative_index)
                 new_sentence_line = f"{context_sentence_line}\n\n" + new_sentence_line
                 print(f"before line found")
             elif before_removed in before_line_clean:
                 before_removed = ""
-                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, relative_index)
+                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_add_relative_index(new_sound_line, subtitle_path, relative_index)
                 new_sentence_line = f"{context_sentence_line}\n\n" + new_sentence_line
                 print(f"before line found")
             else:
@@ -699,22 +719,22 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
 
             if after_line_clean in after_removed:
                 after_removed = after_removed.replace(after_line_clean, "").strip()
-                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, relative_index)
+                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_add_relative_index(new_sound_line, subtitle_path, relative_index)
                 new_sentence_line += f"\n\n{context_sentence_line}"
                 print(f"after line found1")
             elif after_line in after_removed:
                 after_removed = after_removed.replace(after_line, "").strip()
-                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, relative_index)
+                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_add_relative_index(new_sound_line, subtitle_path, relative_index)
                 new_sentence_line += f"\n\n{context_sentence_line}"
                 print(f"after line found2")
             elif after_removed in after_line:
                 after_removed = ""
-                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, relative_index)
+                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_add_relative_index(new_sound_line, subtitle_path, relative_index)
                 new_sentence_line += f"\n\n{context_sentence_line}"
                 print(f"after line found3")
             elif after_removed in after_line_clean:
                 after_removed = ""
-                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, relative_index)
+                new_sound_line, context_sentence_line = new_sound_line_from_sound_line_path_and_add_relative_index(new_sound_line, subtitle_path, relative_index)
                 new_sentence_line += f"\n\n{context_sentence_line}"
                 print(f"after line found4")
             else:

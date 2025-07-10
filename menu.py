@@ -168,10 +168,6 @@ class AudioToolsDialog(QDialog):
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(self.settings, f, indent=2)
 
-        print("Language codes and names:")
-        print(f"{target_code_b} {self.settings.get('target_language', '')}")
-        print(f"{translation_code_b} {self.settings.get('translation_language', '')}")
-
     def show_fields_menu(self):
         current_model_name = self.modelButton.text()
         model = mw.col.models.by_name(current_model_name)
@@ -208,6 +204,9 @@ class AudioToolsDialog(QDialog):
             self.settings["translation_language_code"] = code
 
         self.save_settings()
+
+    def language_to_code(self, language: str) -> str:
+        return language_codes.PyLangISO639_2.name_to_code(language, bibliographic=True)
 
     def initUI(self):
         self.setWindowTitle('Audio Card Suite')

@@ -16,12 +16,13 @@
   "target_subtitle_track": 1,
   "translation_audio_track": 2,
   "translation_subtitle_track": 2,
-  "selected_tab_index": 1,
+  "selected_tab_index": 0,
   "mapped_fields": {
     "1Chinese": {
       "Expression": "Target Sub Line",
       "SentenceAudio": "Target Audio",
       "Image": "Image",
+      "Translation": "Translation Sub Line",
       "TranslationAudio": "Translation Audio"
     },
     "1Japanese": {

@@ -26,16 +26,17 @@ video_exts = [
 
 BACKTICK_PATTERN = re.compile(
     r'^\[sound:'
-    r'(?P<filename_base>[^`]+?)`'                             # filename base
-    r'(?:(?P<source_file_extension>\w+)`)?'                            # optional extension tag (e.g., mp3)
-    r'(?:(?P<lang_code>[a-z]{3})`)?'                          # optional 3-char lowercase language code
-    r'(?:(?P<sha>[A-Za-z0-9]{4})`)?'                          # optional 4-char SHA
-    r'(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'             # start time
-    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'               # end time
-    r'(?P<subtitle_range>\d+-\d+)'                            # subtitle range
-    r'(?:`(?P<normalize_tag>[^`]+))?'                         # optional normalize tag
-    r'\.(?P<sound_file_extension>\w+)\]$'                           # file extension
+    r'(?P<filename_base>[^`]+?)`'
+    r'(?:(?P<source_file_extension>\.[a-z0-9]+)`)?'  # dot + ext (e.g., .mkv)
+    r'(?:(?P<lang_code>[a-z]{3})`)?'
+    r'(?:(?P<sha>[A-Za-z0-9]{4})`)?'
+    r'(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'
+    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'
+    r'(?P<subtitle_range>\d+-\d+)'
+    r'(?:`(?P<normalize_tag>[^`]+))?'
+    r'\.(?P<sound_file_extension>\w+)\]$'
 )
+
 
 
 # get data
@@ -46,7 +47,9 @@ def get_collection_dir():
     return mw.col.media.dir()
 
 def extract_sound_line_data(sound_line):
+    print(f"extracting data from: {sound_line}")
     format_type = detect_format(sound_line)
+    print(f"format detected: {format_type}")
     if format_type == "backtick":
         match = BACKTICK_PATTERN.match(sound_line)
         if not match:
@@ -56,6 +59,7 @@ def extract_sound_line_data(sound_line):
         groups = match.groupdict()
         filename_base = groups["filename_base"]
         source_file_extension = groups.get("source_file_extension") or ""
+        print(f"extracted file extesnion: {source_file_extension} from: {sound_line}")
         lang_code = groups.get("lang_code") or ""
         sha = groups.get("sha") or ""
         start_time_raw = groups["start_time"]
@@ -68,6 +72,8 @@ def extract_sound_line_data(sound_line):
 
         meta_parts = [filename_base]
         if source_file_extension:
+            print(f"extracted source file extension: {source_file_extension}")
+            source_file_extension = source_file_extension.lstrip(".")
             meta_parts.append(source_file_extension)
         if lang_code:
             meta_parts.append(lang_code)
@@ -94,7 +100,8 @@ def extract_sound_line_data(sound_line):
 
             return {
                 "filename_base": filename_base,
-                "sound_file_extension": sound_file_extension ,
+                "sound_file_extension": sound_file_extension,
+                "full_source_filename": filename,  # or construct as needed
                 "collection_path": collection_path
             }
 
@@ -296,6 +303,7 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path)
 
         config = extract_config_data()
         audio_ext = config["audio_ext"]
+        print(f"aaaaaaaaaaa file extension: {file_extension}")
         timestamp = f"{filename_base}`{file_extension}`{start_time}-{end_time}`{start_index}-{end_index}"
 
         normalize_audio = config["normalize_audio"]
@@ -352,6 +360,7 @@ def get_translation_sound_line_from_target_sound_line(target_sound_line):
     translation_audio_track = config["translation_audio_track"]
     translation_language_code = config["translation_language_code"]
     filename_base = data["filename_base"]
+    source_file_extension = data["source_file_extension"]
     full_source_filename = data["full_source_filename"]
 
 
@@ -378,7 +387,7 @@ def get_translation_sound_line_from_target_sound_line(target_sound_line):
         config = extract_config_data()
         audio_ext = config["audio_ext"]
 
-        timestamp = f"{filename_base}`{translation_language_code}`{first_start}-{last_end}`{start_index}-{end_index}.{audio_ext}"
+        timestamp = f"{filename_base}`.{source_file_extension}`{translation_language_code}`{first_start}-{last_end}`{start_index}-{end_index}.{audio_ext}"
         return f"[sound:{timestamp}]"
     except Exception as e:
         print(f"Error generating translation sound line: {e}")
@@ -599,7 +608,7 @@ def get_valid_sound_line_from_sound_and_sentence_line(sound_line: str, sentence_
 
     format = detect_format(sound_line)
 
-    if format not in ["backtick", "subs2srs"]:
+    if format not in ["backtick"]:
         block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
         if not block or not subtitle_path:
             return None, None, None
@@ -617,14 +626,6 @@ def get_valid_sound_line_from_sound_and_sentence_line(sound_line: str, sentence_
     if format == "backtick":
         block, _ = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
         return sound_line, block, subtitle_path
-
-    elif format == "subs2srs":
-        first_sentence = sentence_line.strip().split()[0]
-        print(f"first_sentence: {first_sentence}")
-        block, _ = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, first_sentence)
-        if block is None:
-            return None, None, None
-        sound_line, _ = get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path)
 
     return sound_line, block, subtitle_path
 
@@ -716,7 +717,6 @@ def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, senten
         print(f"no data extracted from {sound_line}")
         return None, None
 
-    filename_base = data["filename_base"]
     full_source_filename = data["full_source_filename"]
 
     config = extract_config_data()
@@ -812,7 +812,7 @@ def extract_subtitle_files(source_path, track, code):
     exe_path, ffprobe_path = get_ffmpeg_exe_path()
 
     def has_subtitle_streams(path):
-        cmd = [f'{ffprobe_path}', '-v', 'error', '-select_streams', 's', '-show_entries', 'stream=index', '-of', 'json', path]
+        cmd = [ffprobe_path, '-v', 'error', '-select_streams', 's', '-show_entries', 'stream=index', '-of', 'json', path]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         data = json.loads(proc.stdout)
         return bool(data.get('streams'))
@@ -823,9 +823,10 @@ def extract_subtitle_files(source_path, track, code):
 
     filename_base, file_extension = os.path.splitext(os.path.basename(source_path))
     file_extension = file_extension.lstrip(".")
-    tagged_subtitle_file = f"{filename_base}`{file_extension}`track_{track}`{code}.srt"
+
+    tagged_subtitle_file = f"{filename_base}`track_{track}`{code}.srt"
     tagged_subtitle_path = os.path.join(addon_source_folder, tagged_subtitle_file)
-    basename_subtitle_file = f"{filename_base}`{file_extension}.srt"
+    basename_subtitle_file = f"{filename_base}`.srt"
     basename_subtitle_path = os.path.join(addon_source_folder, basename_subtitle_file)
 
     if os.path.exists(tagged_subtitle_path) or os.path.exists(basename_subtitle_path):
@@ -833,7 +834,6 @@ def extract_subtitle_files(source_path, track, code):
 
     config = extract_config_data()
     selected_tab_index = config.get("selected_tab_index", 0)
-
 
     track_by_code = get_subtitle_track_number_by_code(source_path, code)
     if track_by_code is None:
@@ -848,13 +848,12 @@ def extract_subtitle_files(source_path, track, code):
             print("Prioritizing set track")
 
     code = get_subtitle_code_by_track_number(source_path, track)
-    tagged_subtitle_file = f"{filename_base}`{file_extension}`track_{track}`{code}.srt"
+    tagged_subtitle_file = f"{filename_base}`track_{track}`{code}.srt"
     tagged_subtitle_path = os.path.join(addon_source_folder, tagged_subtitle_file)
 
     if track and track > 0 and not os.path.exists(tagged_subtitle_path):
         try:
             print(f"Extracting subtitle track {track} from {source_path}")
-            # Using track-1 as stream index, assuming track is 1-based
             subprocess.run([
                 exe_path,
                 "-y",
@@ -864,7 +863,6 @@ def extract_subtitle_files(source_path, track, code):
             ], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Subtitle extraction failed: {e}")
-
 
 def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collection_path, m4b_image_collection_path) -> str:
     out_dir = os.path.dirname(image_collection_path)
@@ -919,6 +917,9 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
         return ""
 
 def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, collection_path, sound_line) -> list:
+    print(f"ffmpeg source path: {source_path}")
+    print(f"ffmpeg sound line: {sound_line}")
+
     config = extract_config_data()
     lufs = config["lufs"]
     bitrate = config["bitrate"]
@@ -1113,16 +1114,11 @@ def detect_format(sound_line: str) -> str:
     line = sound_line.strip()
     if BACKTICK_PATTERN.match(line):
         return "backtick"
-    elif SUBS2SRS_PATTERN.match(line):
-        return "subs2srs"
     else:
         return "unknown"
 
 def is_backtick_format(sound_line: str) -> bool:
     return '`' in sound_line and '-' in sound_line and ']' in sound_line
-
-def is_subs2srs_format(sound_line: str) -> bool:
-    return '_' in sound_line and '-' in sound_line and ']' in sound_line
 
 def format_timestamp_for_filename(timestamp: str) -> str:
     return timestamp.replace(':', '.').replace(',', '.')
@@ -1245,7 +1241,9 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     time_range = f"{new_start_time}-{new_end_time}"
     filename_base = data["filename_base"]
     full_source_filename = data["full_source_filename"]
-    source_file_extension = data["source_file_extension"]
+    print(f"full source filenmae from data: {full_source_filename}")
+    source_file_extension = "."
+    source_file_extension += data["source_file_extension"]
     filename_parts = [filename_base]
     filename_parts.append(source_file_extension)
 

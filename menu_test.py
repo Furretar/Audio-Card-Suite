@@ -186,7 +186,7 @@ remove_edge_new_sentence_new_sound_file_test()
 def get_valid_backtick_sound_line_test():
     sound_line1 = "[sound:Sousou no Frieren - 01`ABCD`00h04m55s719ms-00h04m57s319ms`85-85.mp3]"
     sentence_text1 = "- 因為對國王陛下不敬\n- 我們…我們會再告誡他們的"
-    sound_line, block = manage_files.get_valid_backtick_sound_line_and_block(sound_line1, sentence_text1)
+    sound_line, block = manage_files.get_valid_sound_line_from_sound_and_sentence_line(sound_line1, sentence_text1)
     new_sound_line = manage_files.alter_sound_file_times(sound_line, 0, 0, None)
     # print(f"new_sound_line: {new_sound_line}")
     
@@ -194,7 +194,7 @@ def get_valid_backtick_sound_line_test():
     sound_line2 = "[sound:55_00.13.41.872-00.13.47.418.mp3]"
     sound_line_check2 = "[sound:55`ABCD`00h13m42s215ms-00h13m44s759ms`208-208.mp3]"
     sentence_text2 = "找到一息尚存的團長的時候 我本來想給他一個痛快"
-    new_sound_line2, block2 = manage_files.get_valid_backtick_sound_line_and_block(sound_line2, sentence_text2)
+    new_sound_line2, block2 = manage_files.get_valid_sound_line_from_sound_and_sentence_line(sound_line2, sentence_text2)
     print(f"new_sound_line2: {new_sound_line2}")
     assert sound_line_check2 == new_sound_line2
     
@@ -202,7 +202,7 @@ def get_valid_backtick_sound_line_test():
     sentence_text3 = "- 因為對國王陛下不敬"
     block, subtitle_path = manage_files.get_block_and_subtitle_file_from_sentence_text(sentence_text3)
     print(f"block: {block}, subtitle_path: {subtitle_path}")
-    new_sound_line3, block3 = manage_files.get_valid_backtick_sound_line_and_block(sound_line3, sentence_text3)
+    new_sound_line3, block3 = manage_files.get_valid_sound_line_from_sound_and_sentence_line(sound_line3, sentence_text3)
     print(f"new_sound_line3: {new_sound_line3}")
     print(f"block3: {block3}")
 get_valid_backtick_sound_line_test()

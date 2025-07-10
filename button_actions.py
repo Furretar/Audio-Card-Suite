@@ -8,6 +8,7 @@ from aqt.editor import Editor
 from aqt.sound import av_player
 import os
 from aqt import mw
+import html
 
 from .manage_files import get_field_key_from_label
 try:
@@ -150,7 +151,10 @@ def get_idx(label, note_type_name, config, fields):
     field_key = manage_files.get_field_key_from_label(note_type_name, label, config)
     return index_of_field(field_key, fields) if field_key else -1
 
-
+def format_text(s):
+    s = html.unescape(s)
+    s = re.sub(r'<[^>]+>', '', s)
+    return s.strip()
 
 def generate_fields_helper(editor, note):
     if note:
@@ -302,6 +306,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
         new_translation_line = manage_files.get_translation_line_from_target_sound_line(new_sound_line)
     else:
         new_translation_line = ""
+    new_translation_line = format_text(new_translation_line)
 
     if not translation_sound_line and generate_translation_sound:
         print(f"\ngenerating translation audio\n")

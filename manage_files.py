@@ -319,12 +319,16 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path)
 
         config = extract_config_data()
         audio_ext = config["audio_ext"]
+        timestamp = f"{filename_base}`{start_time}-{end_time}`{start_index}-{end_index}"
 
-        timestamp = f"{filename_base}`{start_time}-{end_time}`{start_index}-{end_index}.{audio_ext}"
+        normalize_audio = config["normalize_audio"]
+        if normalize_audio:
+            lufs = config["lufs"]
+            timestamp += f"`{lufs}LUFS"
+
+        timestamp += f".{audio_ext}"
         new_sound_line = f"[sound:{timestamp}]"
-
         combined_text = "\n\n".join(b[3].strip() for b in blocks if len(b) > 3)
-
         return new_sound_line, combined_text
 
     except Exception as e:
@@ -676,8 +680,6 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
 
     if not sound_line:
         block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
-        print(f"valid backtick subtitle path: {subtitle_path}")
-        print(f"\nblock from text {sentence_line}: {block}\n")
         if not block or not subtitle_path:
             return None, None, None
         sound_line, _ = get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path)
@@ -701,8 +703,6 @@ def get_valid_backtick_sound_line_and_block(sound_line: str, sentence_line: str)
     subtitle_path = get_subtitle_path_from_filename_track_code(filename_base, track, code)
 
     if format == "backtick":
-        start_index = data["start_index"]
-        end_index = data["end_index"]
         block, _ = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
         return sound_line, block, subtitle_path
 
@@ -760,7 +760,6 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
             for end in range(start, len(normalized_lines)):
                 joined += normalized_lines[end]
                 if normalized_sentence in joined:
-                    print(f"Found match from block {start} to {end}")
                     return usable_blocks[end], path
                 if len(joined) > len(normalized_sentence) + 50:
                     break
@@ -893,7 +892,7 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line):
 # commands and files
 def extract_subtitle_files(source_path, track, code):
     # print(f"extracting subtitles files, track: {track}, code: {code}")
-    filename_base, _ = os.path.splitext(os.path.basename(source_path))
+    filename_base, file_extension = os.path.splitext(os.path.basename(source_path))
     tagged_subtitle_file = f"{filename_base}`track_{track}`{code}.srt"
     tagged_subtitle_path = os.path.join(addon_source_folder, tagged_subtitle_file)
     basename_subtitle_file = f"{filename_base}.srt"

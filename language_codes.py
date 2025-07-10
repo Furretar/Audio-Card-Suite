@@ -1,6 +1,7 @@
 class PyLangISO639_2:
     _code_to_name = {
         "zho": "Chinese",
+        "yue": "Cantonese",
         "spa": "Spanish",
         "eng": "English",
         "hin": "Hindi",

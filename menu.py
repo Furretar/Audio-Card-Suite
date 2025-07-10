@@ -121,10 +121,10 @@ class AudioToolsDialog(QDialog):
             "target_subtitle_track": 1,
             "translation_audio_track": 2,
             "translation_subtitle_track": 2,
-            "target_timing_code": "",
-            "translation_timing_code": "",
-            "target_timing_track": 0,
-            "translation_timing_track": 0,
+            "target_timings_code": "",
+            "translation_timings_code": "",
+            "target_timings_track": 0,
+            "translation_timings_track": 0,
             "timing_tracks_enabled": False
         }
 
@@ -162,11 +162,12 @@ class AudioToolsDialog(QDialog):
         self.settings["target_subtitle_track"] = self.trackSpinners[1].value()
         self.settings["translation_audio_track"] = self.trackSpinners[2].value()
         self.settings["translation_subtitle_track"] = self.trackSpinners[3].value()
+        self.settings["target_timings_track"] = self.trackSpinners[4].value()
+        self.settings["translation_timings_track"] = self.trackSpinners[5].value()
 
-        self.settings["target_timing_code"] = self.langCodeEdits[2].text()
-        self.settings["translation_timing_code"] = self.langCodeEdits[3].text()
-        self.settings["target_timing_track"] = self.targetTimingTrack.value()
-        self.settings["translation_timing_track"] = self.translationTimingTrack.value()
+        self.settings["target_timings_code"] = self.langCodeEdits[2].text()
+        self.settings["translation_timings_code"] = self.langCodeEdits[3].text()
+
         self.settings["timing_tracks_enabled"] = self.timingTracksCheckbox.isChecked()
 
         print(f"Saving timing_tracks_enabled = {self.settings['timing_tracks_enabled']}")
@@ -428,8 +429,8 @@ class AudioToolsDialog(QDialog):
         combo_keys = [
             "target_language",
             "translation_language",
-            "target_timing_code",
-            "translation_timing_code"
+            "target_timings_code",
+            "translation_timings_code"
         ]
 
         edit_keys = [
@@ -465,7 +466,6 @@ class AudioToolsDialog(QDialog):
             langGrid.addWidget(edit, i + 1, 2)
 
             combo.currentTextChanged.connect(lambda text, idx=i: self.on_lang_code_changed(idx, str(text)))
-            edit.textChanged.connect(lambda text, idx=i: self.on_code_edit_changed(idx, text))
 
         for i in range(hide_rows_start, len(labels)):
             self.langCodeCombos[i].hide()
@@ -478,55 +478,61 @@ class AudioToolsDialog(QDialog):
         # Tracks Tab
         tracksTab = QWidget()
         tracksGrid = QGridLayout()
+
+        track_keys = [
+            "target_audio_track",
+            "target_subtitle_track",
+            "translation_audio_track",
+            "translation_subtitle_track",
+            "target_timing_track",
+            "translation_timings_track"
+        ]
+
         track_labels = [
             "Target Audio Track",
             "Target Subtitle Track",
             "Translation Audio Track",
             "Translation Subtitle Track",
+            "Target Timings Subtitle Track",
+            "Translation Timings Subtitle Track"
         ]
 
         self.trackSpinners = []
-        self.targetTimingTrack = QSpinBox()
-        self.targetTimingTrack.setMinimum(0)
-        self.targetTimingTrack.setMaximum(1000)
-        self.translationTimingTrack = QSpinBox()
-        self.translationTimingTrack.setMinimum(0)
-        self.translationTimingTrack.setMaximum(1000)
-        self.targetTimingTrackLabel = QLabel("Target Timings Subtitle Track:")
-        self.translationTimingTrackLabel = QLabel("Translation Timings Subtitle Track:")
+        self.trackLabels = []
 
-        for i, label_text in enumerate(track_labels):
-            tracksGrid.addWidget(QLabel(label_text + ":"), i, 0)
+        for i, (label_text, key) in enumerate(zip(track_labels, track_keys)):
+            label = QLabel(label_text + ":")
             spinner = QSpinBox()
             spinner.setMinimum(0)
             spinner.setMaximum(1000)
-            self.trackSpinners.append(spinner)
+            spinner.setValue(self.settings.get(key, 0))
+
+            tracksGrid.addWidget(label, i, 0)
             tracksGrid.addWidget(spinner, i, 1)
 
-        tracksGrid.addWidget(self.targetTimingTrackLabel, 4, 0)
-        tracksGrid.addWidget(self.targetTimingTrack, 4, 1)
-        tracksGrid.addWidget(self.translationTimingTrackLabel, 5, 0)
-        tracksGrid.addWidget(self.translationTimingTrack, 5, 1)
-        self.targetTimingTrackLabel.hide()
-        self.targetTimingTrack.hide()
-        self.translationTimingTrackLabel.hide()
-        self.translationTimingTrack.hide()
+            self.trackLabels.append(label)
+            self.trackSpinners.append(spinner)
+
         tracksTab.setLayout(tracksGrid)
         self.tabs.addTab(tracksTab, "Tracks")
         self.trackSpinners[0].setValue(self.settings.get("target_audio_track", 0))
         self.trackSpinners[1].setValue(self.settings.get("target_subtitle_track", 0))
         self.trackSpinners[2].setValue(self.settings.get("translation_audio_track", 0))
         self.trackSpinners[3].setValue(self.settings.get("translation_subtitle_track", 0))
+        self.trackSpinners[4].setValue(self.settings.get("target_timings_track", 0))
+        self.trackSpinners[5].setValue(self.settings.get("translation_timings_track", 0))
         subsLayout.addWidget(self.tabs)
         subsGroup.setLayout(subsLayout)
         codes_label = QLabel()
         codes_label.setText(
-            'If your language is not listed, enter the <a href="https://en.wikipedia.org/wiki/List_of_ISO_639-2_codes">ISO 639-2 language code</a> in the text box.'
+            'If your language is not listed, enter its <a href="https://en.wikipedia.org/wiki/List_of_ISO_639-2_codes">ISO 639-2 language code</a> in the text box.'
         )
         codes_label.setOpenExternalLinks(True)
         codes_label.setWordWrap(True)
         subsLayout.addWidget(codes_label)
         vbox.addWidget(subsGroup)
+
+        # source folder
         addon_source_folder = os.path.join(addon_dir, "Sources")
         sourceGroup = QGroupBox("Source")
         sourceLayout = QVBoxLayout()
@@ -585,16 +591,14 @@ class AudioToolsDialog(QDialog):
         self.lufsSpinner.valueChanged.connect(self.save_settings)
         for spinner in self.trackSpinners:
             spinner.valueChanged.connect(self.save_settings)
-        self.targetTimingTrack.valueChanged.connect(self.save_settings)
-        self.translationTimingTrack.valueChanged.connect(self.save_settings)
         self.imageHeightEdit.valueChanged.connect(self.save_settings)
         self.padStartEdit.valueChanged.connect(self.save_settings)
         self.padEndEdit.valueChanged.connect(self.save_settings)
         self.normalize_checkbox.stateChanged.connect(self.save_settings)
         self.audioExtCombo.currentTextChanged.connect(self.save_settings)
 
-        self.langCodeEdits[2].textChanged.connect(self.save_settings)
-        self.langCodeEdits[3].textChanged.connect(self.save_settings)
+        for i, edit in enumerate(self.langCodeEdits):
+            edit.textChanged.connect(lambda text, idx=i: self.on_code_edit_changed(idx, text))
 
         self.timingTracksCheckbox.stateChanged.connect(self.save_settings)
         self.timingTracksCheckbox.stateChanged.connect(lambda s: print(f"Checkbox changed to {s}"))
@@ -626,8 +630,6 @@ class AudioToolsDialog(QDialog):
             self.normalize_checkbox,
             self.lufsSpinner,
             *self.trackSpinners,
-            self.targetTimingTrack,
-            self.translationTimingTrack,
             self.langCodeEdits[2],
             self.langCodeEdits[3],
             self.timingTracksCheckbox,
@@ -650,17 +652,21 @@ class AudioToolsDialog(QDialog):
         self.normalize_checkbox.setChecked(self.settings["normalize_audio"])
         self.lufsSpinner.setValue(self.settings["lufs"])
 
-        for i, track in enumerate(("target_audio_track",
-                                   "target_subtitle_track",
-                                   "translation_audio_track",
-                                   "translation_subtitle_track")):
+        tracks = [
+            "target_audio_track",
+            "target_subtitle_track",
+            "translation_audio_track",
+            "translation_subtitle_track",
+            "target_timings_track",
+            "translation_timings_track"
+        ]
+
+        for i, track in enumerate(tracks):
             self.trackSpinners[i].setValue(self.settings[track])
 
-        self.langCodeEdits[2].setText(self.settings["target_timing_code"])
-        self.langCodeEdits[3].setText(self.settings["translation_timing_code"])
+        self.langCodeEdits[2].setText(self.settings["target_timings_code"])
+        self.langCodeEdits[3].setText(self.settings["translation_timings_code"])
 
-        self.targetTimingTrack.setValue(self.settings["target_timing_track"])
-        self.translationTimingTrack.setValue(self.settings["translation_timing_track"])
         self.timingTracksCheckbox.setChecked(self.settings["timing_tracks_enabled"])
 
         # restore them all
@@ -743,10 +749,10 @@ class AudioToolsDialog(QDialog):
         self.langCodeLabels[2].setVisible(show)
         self.langCodeLabels[3].setVisible(show)
 
-        self.targetTimingTrackLabel.setVisible(show)
-        self.targetTimingTrack.setVisible(show)
-        self.translationTimingTrackLabel.setVisible(show)
-        self.translationTimingTrack.setVisible(show)
+        self.trackLabels[4].setVisible(show)
+        self.trackSpinners[4].setVisible(show)
+        self.trackLabels[5].setVisible(show)
+        self.trackSpinners[5].setVisible(show)
 
         self.save_settings()
 

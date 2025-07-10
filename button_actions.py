@@ -28,6 +28,9 @@ config_dir = os.path.join(addon_dir, "config.json")
 # get data
 def get_fields_from_editor(editor):
     config = manage_files.extract_config_data()
+    if config is None:
+        print("Config missing required fields, cannot proceed.")
+        return {}
 
     mapped_fields = config.get("mapped_fields", {})
     if not mapped_fields:
@@ -173,13 +176,16 @@ def generate_fields_helper(editor, note):
         sound_line = note.fields[sound_idx] if 0 <= sound_idx < len(note.fields) else ""
         image_line = note.fields[image_idx] if 0 <= image_idx < len(note.fields) else ""
         translation_line = note.fields[translation_idx] if 0 <= translation_idx < len(note.fields) else ""
-        translation_sound_line = note.fields[translation_sound_idx] if 0 <= translation_sound_idx < len(
-            note.fields) else ""
+        translation_sound_line = note.fields[translation_sound_idx] if 0 <= translation_sound_idx < len(note.fields) else ""
         selected_text = ""
 
         field_obj = note
     else:
         fields = get_fields_from_editor(editor)
+        if not fields:
+            print(f"fields is null, fields are not set in menu")
+            return
+
         sentence_idx = fields["sentence_idx"]
         sound_idx = fields["sound_idx"]
         image_idx = fields["image_idx"]
@@ -318,88 +324,9 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
 
     return new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line
 
-def remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_index, alt_pressed):
-    data = manage_files.extract_sound_line_data(sound_line)
-    if not data:
-        print(f"no data extracted from {sound_line}")
-        return None, None
-
-    start_time = data["start_time"]
-    end_time = data["end_time"]
-    start_index = data["start_index"]
-    end_index   = data["end_index"]
-
-    filename_base = data["filename_base"]
-    config = manage_files.extract_config_data()
-    if alt_pressed:
-        track = config["translation_subtitle_track"]
-        code = config["translation_language_code"]
-    else:
-        track = config["target_subtitle_track"]
-        code = config["target_language_code"]
-    subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base, track, code)
-
-    sentence_blocks = [b.strip() for b in sentence_line.split("\n\n") if b.strip()]
-    if len(sentence_blocks) <= 1:
-        print(f"no sentence blocks extracted from {sentence_line}")
-        return None, None
-
-    if relative_index == 1:
-        # remove last block
-        new_blocks = sentence_blocks[:-1]
-        end_index -= 1
-        new_edge_block = manage_files.get_subtitle_block_from_index_and_path(end_index - 1, subtitle_path)
-
-    else:
-        # remove first block
-        new_blocks = sentence_blocks[1:]
-        start_index += 1
-        new_edge_block = manage_files.get_subtitle_block_from_index_and_path(start_index - 1, subtitle_path)
-
-    print(f"edge block: {new_edge_block}")
-    if abs(int(new_edge_block[0]) - start_index) > 10:
-        print(f"\nblock from very far away\n")
-    if not new_edge_block or len(new_edge_block) < 3:
-        print(f"Could not locate boundary block: {new_edge_block}")
-        return None, None
-
-    new_start_time = start_time
-    new_end_time = end_time
-    if relative_index == 1:
-        new_end_time = new_edge_block[2]
-
-    else:
-        new_start_time = new_edge_block[1]
-    print(new_edge_block[3])
-    orig_start_ms = manage_files.time_hmsms_to_milliseconds(data["start_time"])
-    orig_end_ms = manage_files.time_hmsms_to_milliseconds(data["end_time"])
-    new_start_ms = manage_files.time_hmsms_to_milliseconds(new_start_time)
-    new_end_ms = manage_files.time_hmsms_to_milliseconds(new_end_time)
-
-    lengthen_start = orig_start_ms - new_start_ms
-    print(f"lengthen_start: {lengthen_start}")
-    lengthen_end = new_end_ms - orig_end_ms
-    print(f"lengthen_end: {lengthen_end}")
-
-    altered_data = manage_files.get_altered_sound_data(
-        sound_line,
-        lengthen_start if relative_index == -1 else 0,
-        lengthen_end if relative_index == 1 else 0,
-        relative_index
-    )
-    new_sound_line = manage_files.alter_sound_file_times(altered_data, sound_line)
-
-    if not new_sound_line:
-        print("No new sound tag returned, field not updated.")
-        return None, None
-
-    new_sentence_line = "\n\n".join(new_blocks).strip()
-
-    return new_sentence_line, new_sound_line
-
-def remove_edge_lines_helper(editor, relative_index):
+def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     fields = get_fields_from_editor(editor)
-
+    config = manage_files.extract_config_data()
     modifiers = QApplication.keyboardModifiers()
     alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
     if alt_pressed:
@@ -408,15 +335,26 @@ def remove_edge_lines_helper(editor, relative_index):
         sentence_line = fields["translation_line"]
         sentence_idx = fields["translation_idx"]
         translation_idx = ""
+        track = config.get("translation_subtitle_track")
+        code = config.get("translation_language_code")
     else:
         sound_line = fields["sound_line"]
         sound_idx = fields["sound_idx"]
         sentence_line = fields["sentence_line"]
         sentence_idx = fields["sentence_idx"]
         translation_idx = fields["translation_idx"]
+        track = config.get("target_subtitle_track")
+        code = config.get("target_language_code")
+
 
     print(f"sound line: {sound_line}, sentence: {sentence_line}")
-    new_sentence_line, new_sound_line = remove_edge_new_sentence_new_sound_file(sound_line, sentence_line, relative_index, alt_pressed)
+    data = manage_files.extract_sound_line_data(sound_line)
+    start_index = data["start_index"]
+    end_index = data["end_index"]
+    filename_base = data["filename_base"]
+    subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base, track, code)
+    blocks = manage_files.get_subtitle_blocks_from_index_range(start_index - add_to_start, end_index + add_to_end, subtitle_path)
+    new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path)
 
     if not new_sound_line or not new_sentence_line:
         print("No new sound line or sentence text returned.")
@@ -441,82 +379,6 @@ def remove_edge_lines_helper(editor, relative_index):
     QTimer.singleShot(50, play_after_reload)
 
 
-    print(f"Removed {'last' if relative_index==1 else 'first'} block, new text:\n{new_sentence_line}")
-
-def add_context_line_helper(editor: Editor, relative_index):
-    fields = get_fields_from_editor(editor)
-    config = manage_files.extract_config_data()
-
-    modifiers = QApplication.keyboardModifiers()
-    alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
-    if alt_pressed:
-        sound_line = fields["translation_sound_line"]
-        sound_idx = fields["translation_sound_idx"]
-        sentence_line = fields["translation_line"]
-        sentence_idx = fields["translation_idx"]
-        translation_idx = ""
-        track = config["translation_subtitle_track"]
-        code = config["translation_language_code"]
-    else:
-        sound_line = fields["sound_line"]
-        sound_idx = fields["sound_idx"]
-        sentence_line = fields["sentence_line"]
-        sentence_idx = fields["sentence_idx"]
-        translation_idx = fields["translation_idx"]
-        track = config["target_subtitle_track"]
-        code = config["target_language_code"]
-
-    if sound_idx == -1:
-        print(f"no sound line detected")
-        generate_fields_helper(editor, None)
-        return
-
-    filename_base = re.sub(r'^\[sound:|\]$', '', sound_line.split("`", 1)[0].strip())
-
-    subtitle_path = manage_files.get_subtitle_path_from_filename_track_code(filename_base, track, code)
-
-    data = manage_files.extract_sound_line_data(sound_line)
-    start_index = data["start_index"]
-    end_index = data["end_index"]
-    print(f"start index: {start_index}, end index: {end_index}")
-    if relative_index == 1:
-        result = new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, 0,  1)
-    else:
-        result = new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, 1, 0)
-
-
-    if not result or result[0] is None or result[1] is None:
-        print("Failed to retrieve new sound tag or context sentence line.")
-        return
-    new_sound_tag, new_sentence_line = result
-
-    # generate new translation line
-    if not alt_pressed:
-        translation_line = manage_files.get_translation_line_from_target_sound_line(new_sound_tag)
-        print(f"new_sound_tag: {new_sound_tag}")
-        editor.note.fields[translation_idx] = translation_line
-
-
-    if new_sound_tag and new_sentence_line:
-        new_sound_line = re.sub(r"\[sound:.*?\]", new_sound_tag, sound_line)
-        altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, None)
-        new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line)
-
-        editor.note.fields[sound_idx] = new_sound_line
-        editor.note.fields[sentence_idx] = new_sentence_line
-
-        match = re.search(r"\[sound:(.*?)\]", new_sound_tag)
-        sound_filename = match.group(1) if match else None
-
-        def play_after_reload():
-            if sound_filename:
-                QTimer.singleShot(100, lambda: play(sound_filename))
-
-        QTimer.singleShot(0, play_after_reload)
-        editor.loadNote()
-
-    print(f"running generate fields helper")
-    generate_fields_helper(editor, None)
 
 def new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, relative_start, relative_end):
     print(f"sound_line: {sound_line}")
@@ -745,7 +607,7 @@ def get_fields_from_note(note):
 
     note_type_name = note.model()["name"]
     if note_type_name not in mapped_fields:
-        showInfo(f"fields not mapped for note type '{note_type_name}'")
+        print(f"fields not mapped for note type '{note_type_name}'")
         return {}
 
     note_type = note.note_type()

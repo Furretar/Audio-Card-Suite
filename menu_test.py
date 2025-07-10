@@ -157,7 +157,7 @@ def remove_edge_new_sentence_new_sound_file_test():
     sentence_text1 = "紅茶、\n\nそれもマルコポーロだった"
     sound_line1 = "[sound:02_クビシメロマンチスト_人間失格・零崎人識`ABCD`06h58m17s419ms-06h58m20s989ms`8770-8771.mp3]"
     relative_index1 = 1
-    new_sentence_text, new_sound_line = menu.remove_edge_new_sentence_new_sound_file(sound_line1, sentence_text1, relative_index1)
+    new_sentence_text, new_sound_line = menu.getter_add_and_remove_edge_lines(sound_line1, sentence_text1, relative_index1)
     print(f"{new_sound_line}")
     print(f"{new_sentence_text}\n==\n紅茶、")
     assert new_sentence_text == "紅茶、"
@@ -166,7 +166,7 @@ def remove_edge_new_sentence_new_sound_file_test():
     sentence_text2 = "服装は昨日のサロペット・パンツとは違う。\n\n雪のような真っ白\n\nいベアトップのシャツに、"
     sound_line2 = "[sound:02_クビシメロマンチスト_人間失格・零崎人識`ABCD`08h14m03s990ms-08h14m09s786ms`10287-10288.mp3]"
     relative_index2 = -1
-    new_sentence_text2, new_sound_line2 = menu.remove_edge_new_sentence_new_sound_file(sound_line2, sentence_text2, relative_index2)
+    new_sentence_text2, new_sound_line2 = menu.getter_add_and_remove_edge_lines(sound_line2, sentence_text2, relative_index2)
     assert new_sentence_text2 == "雪のような真っ白\n\nいベアトップのシャツに、"
     
     sentence_text3 = "省線の吊皮には疥癬の虫がうようよ、\n\nまたは、\n\nおさしみ、"
@@ -174,7 +174,7 @@ def remove_edge_new_sentence_new_sound_file_test():
     sound_line_check3 = "[sound:太宰治_-_西村俊彦`ABCD`03h30m30s004ms-03h30m32s820ms`3804-3804.mp3]"
     sound_line3 = "[sound:太宰治 - 西村俊彦`ABCD`03h30m30s004ms-03h30m37s408ms`3804-3805.mp3]"
     relative_index3 = 1
-    new_sentence_text3, new_sound_line3 = menu.remove_edge_new_sentence_new_sound_file(sound_line3, sentence_text3, relative_index3)
+    new_sentence_text3, new_sound_line3 = menu.getter_add_and_remove_edge_lines(sound_line3, sentence_text3, relative_index3)
     
     print(f"{new_sentence_text3}\n==\n{sentence_text_check3}")
     assert new_sentence_text3 == sentence_text_check3

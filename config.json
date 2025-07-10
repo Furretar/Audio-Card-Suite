@@ -6,18 +6,18 @@
   "image_height": 1080,
   "pad_start": 0,
   "pad_end": 0,
-  "target_language": "Chinese",
-  "translation_language": "German",
-  "target_language_code": "chi",
-  "translation_language_code": "ger",
-  "normalize_audio": false,
+  "target_language": "Japanese",
+  "translation_language": "Chinese",
+  "target_language_code": "jpn",
+  "translation_language_code": "chi",
+  "normalize_audio": true,
   "lufs": -16,
   "target_audio_track": 1,
   "target_subtitle_track": 1,
   "translation_audio_track": 2,
   "translation_subtitle_track": 2,
-  "target_timings_code": "ger",
-  "translation_timings_code": "eng",
+  "target_timings_code": "eng",
+  "translation_timings_code": "kor",
   "target_timings_track": 3,
   "translation_timings_track": 3,
   "timing_tracks_enabled": true,
@@ -25,5 +25,16 @@
   "translation_timing_track": 0,
   "target_timing_code": "jpn",
   "target_timing_track": 0,
-  "selected_tab_index": 0
+  "selected_tab_index": 0,
+  "target_timings_language": "English",
+  "translation_timings_language": "Korean",
+  "mapped_fields": {
+    "1Chinese": {
+      "Expression": "Target Sub Line",
+      "SentenceAudio": "Target Audio",
+      "Image": "Image",
+      "Translation": "Translation Sub Line",
+      "TranslationAudio": "Translation Audio"
+    }
+  }
 }

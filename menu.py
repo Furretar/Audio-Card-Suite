@@ -96,6 +96,7 @@ class AudioToolsDialog(QDialog):
         self.initUI()
         self.apply_settings_to_ui()
         self.tabs.currentChanged.connect(self.on_tab_changed)
+        self.setMinimumSize(546, 746)
 
     def load_settings(self):
         self.settings = self.configManager.load()
@@ -132,7 +133,6 @@ class AudioToolsDialog(QDialog):
             try:
                 with open(config_file_path, "r", encoding="utf-8") as f:
                     config = json.load(f)
-                    print(f"checkbox in settings: " + str(config["timing_tracks_enabled"]))
             except Exception as e:
                 print(f"Invalid config.json, resetting to defaults. Error: {e}")
                 config = default_settings.copy()
@@ -146,7 +146,7 @@ class AudioToolsDialog(QDialog):
 
         self.settings = default_settings.copy()
         self.settings.update(config)
-        print(f"checkbox in settings: " + str(config["timing_tracks_enabled"]))
+        print(f"normalize_audio in settings: " + str(config["normalize_audio"]))
 
     def save_settings(self):
         print("save_settings called")
@@ -158,30 +158,27 @@ class AudioToolsDialog(QDialog):
         self.settings["normalize_audio"] = self.normalize_checkbox.isChecked()
         self.settings["lufs"] = self.lufsSpinner.value()
 
-        self.settings["target_audio_track"] = self.trackSpinners[0].value()
-        self.settings["target_subtitle_track"] = self.trackSpinners[1].value()
-        self.settings["translation_audio_track"] = self.trackSpinners[2].value()
-        self.settings["translation_subtitle_track"] = self.trackSpinners[3].value()
-        self.settings["target_timings_track"] = self.trackSpinners[4].value()
-        self.settings["translation_timings_track"] = self.trackSpinners[5].value()
-
-        self.settings["target_timings_code"] = self.langCodeEdits[2].text()
-        self.settings["translation_timings_code"] = self.langCodeEdits[3].text()
+        for i, key in enumerate([
+            "target_audio_track",
+            "target_subtitle_track",
+            "translation_audio_track",
+            "translation_subtitle_track",
+            "target_timings_track",
+            "translation_timings_track"
+        ]):
+            self.settings[key] = self.trackSpinners[i].value()
 
         self.settings["timing_tracks_enabled"] = self.timingTracksCheckbox.isChecked()
 
-        print(f"Saving timing_tracks_enabled = {self.settings['timing_tracks_enabled']}")
-        print(f"checkbox state: {self.timingTracksCheckbox.checkState()}")
-
-        # Convert T codes to B codes before saving
-        target_code_t = self.settings.get("target_language_code", "")
-        translation_code_t = self.settings.get("translation_language_code", "")
-
-        target_code_b = language_codes.PyLangISO639_2.t_to_b(target_code_t)
-        translation_code_b = language_codes.PyLangISO639_2.t_to_b(translation_code_t)
-
-        self.settings["target_language_code"] = target_code_b
-        self.settings["translation_language_code"] = translation_code_b
+        # Save all 4 language code edits
+        for i, key in enumerate(["target_language_code", "translation_language_code", "target_timings_code",
+                                 "translation_timings_code"]):
+            code = self.settings.get(key, "")
+            language_name = language_codes.PyLangISO639_2.code_to_name(code)
+            if language_name:
+                self.langCodeCombos[i].setCurrentText(language_name)
+            else:
+                self.langCodeCombos[i].setCurrentText("None")
 
         config_path = os.path.join(addon_dir, "config.json")
         try:
@@ -213,21 +210,23 @@ class AudioToolsDialog(QDialog):
         self.modelFieldsButton.setText(field_name)
 
     def on_lang_code_changed(self, idx, language):
-        print(f"lang code changed")
         code = self.language_to_code(language)
         edit = self.langCodeEdits[idx]
-        edit.blockSignals(True)
         edit.setText(code)
-        edit.blockSignals(False)
 
         if idx == 0:
             self.settings["target_language"] = language
             self.settings["target_language_code"] = code
-        else:
+        elif idx == 1:
             self.settings["translation_language"] = language
             self.settings["translation_language_code"] = code
+        elif idx == 2:
+            self.settings["target_timings_language"] = language
+            self.settings["target_timings_code"] = code
+        elif idx == 3:
+            self.settings["translation_timings_language"] = language
+            self.settings["translation_timings_code"] = code
 
-        print(f"saving settings, lang code changed")
         self.save_settings()
 
     def language_to_code(self, language: str) -> str:
@@ -294,10 +293,7 @@ class AudioToolsDialog(QDialog):
 
 
         self.setWindowTitle('Audio Card Suite')
-
         vbox = QVBoxLayout()
-
-
         importGroup = QGroupBox("Import Options")
         self.modelButton = QPushButton()
         if mw.col.models.by_name(self.settings["default_model"]):
@@ -391,7 +387,8 @@ class AudioToolsDialog(QDialog):
         self.lufsSpinner.setValue(self.settings.get("lufs", -16))
         self.normalize_checkbox = QCheckBox("Normalize Audio")
         self.normalize_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
-        print(f"ext from checkbox")
+        self.normalize_checkbox.setChecked(self.settings.get("normalize_audio"))
+
         self.normalize_checkbox.stateChanged.connect(lambda _: self.on_audio_ext_changed(self.audioExtCombo.currentText()))
         audioLayout.addWidget(self.normalize_checkbox, 2, 0, 1, 2)
         audioLayout.addWidget(self.lufsSpinner, 3, 0)
@@ -575,16 +572,6 @@ class AudioToolsDialog(QDialog):
         self.on_audio_ext_changed(self.audioExtCombo.currentText())
 
 
-
-        for i, label_text in enumerate(labels):
-            saved_code = self.settings.get(edit_keys[i], "")
-            edit = self.langCodeEdits[i]
-            edit.blockSignals(True)
-            edit.setText(saved_code)
-            edit.blockSignals(False)
-            self.on_code_edit_changed(i, saved_code)
-
-
         # save settings anytime a change is made
         self.imageHeightEdit.valueChanged.connect(self.save_settings)
         self.bitrateEdit.valueChanged.connect(self.save_settings)
@@ -600,10 +587,12 @@ class AudioToolsDialog(QDialog):
         for i, edit in enumerate(self.langCodeEdits):
             edit.textChanged.connect(lambda text, idx=i: self.on_code_edit_changed(idx, text))
 
+        for i, combo in enumerate(self.langCodeCombos):
+            combo.currentTextChanged.connect(lambda text, idx=i: self.on_lang_code_changed(idx, text))
+
         self.timingTracksCheckbox.stateChanged.connect(self.save_settings)
         self.timingTracksCheckbox.stateChanged.connect(lambda s: print(f"Checkbox changed to {s}"))
         self.timingTracksCheckbox.stateChanged.connect(self.on_timing_checkbox_changed)
-        print(f"applying settings to ui")
         self.apply_settings_to_ui()
 
 
@@ -618,9 +607,7 @@ class AudioToolsDialog(QDialog):
         self.save_settings()
 
     def apply_settings_to_ui(self):
-        print("apply settings to ui called")
-
-        # gather every widget that currently calls save_settings()
+        # Block signals on widgets that trigger save_settings
         widgets = [
             self.imageHeightEdit,
             self.padStartEdit,
@@ -630,16 +617,12 @@ class AudioToolsDialog(QDialog):
             self.normalize_checkbox,
             self.lufsSpinner,
             *self.trackSpinners,
-            self.langCodeEdits[2],
-            self.langCodeEdits[3],
+            *self.langCodeEdits,
             self.timingTracksCheckbox,
         ]
-
-        # block them all
         for w in widgets:
             w.blockSignals(True)
 
-        # now do your bulk setting
         self.imageHeightEdit.setValue(self.settings["image_height"])
         self.padStartEdit.setValue(self.settings["pad_start"])
         self.padEndEdit.setValue(self.settings["pad_end"])
@@ -650,7 +633,7 @@ class AudioToolsDialog(QDialog):
 
         self.bitrateEdit.setValue(self.settings["bitrate"])
         self.normalize_checkbox.setChecked(self.settings["normalize_audio"])
-        self.lufsSpinner.setValue(self.settings["lufs"])
+        self.lufsSpinner.setValue(self.settings.get("lufs", -16))
 
         tracks = [
             "target_audio_track",
@@ -660,20 +643,14 @@ class AudioToolsDialog(QDialog):
             "target_timings_track",
             "translation_timings_track"
         ]
-
         for i, track in enumerate(tracks):
-            self.trackSpinners[i].setValue(self.settings[track])
+            self.trackSpinners[i].setValue(self.settings.get(track, 0))
 
-        self.langCodeEdits[2].setText(self.settings["target_timings_code"])
-        self.langCodeEdits[3].setText(self.settings["translation_timings_code"])
+        self.timingTracksCheckbox.setChecked(self.settings.get("timing_tracks_enabled", False))
 
-        self.timingTracksCheckbox.setChecked(self.settings["timing_tracks_enabled"])
-
-        # restore them all
         for w in widgets:
             w.blockSignals(False)
 
-        # finally, update any dependent UI
         self.on_audio_ext_changed(self.audioExtCombo.currentText())
         self.on_timing_checkbox_changed(self.timingTracksCheckbox.checkState())
 
@@ -682,47 +659,23 @@ class AudioToolsDialog(QDialog):
         code = text.strip().lower()
         combo = self.langCodeCombos[idx]
 
-        # Get language name from code, empty string if not found
         lang_name = language_codes.PyLangISO639_2.code_to_name(code)
 
         if lang_name:
-            # Show the language name in the combo box (add temporary item if needed)
             if combo.findText(lang_name) == -1:
                 combo.insertItem(0, lang_name)
                 combo.setCurrentIndex(0)
-                # Optionally remove this temporary item later
             else:
                 combo.setCurrentText(lang_name)
         else:
-            # Show 'None' if no matching language
             if combo.findText("None") >= 0:
                 combo.setCurrentText("None")
             else:
                 combo.setCurrentIndex(-1)
 
-        # Save settings only if language recognized and not None
-        if lang_name and lang_name != "None":
-            if idx == 0:
-                self.settings["target_language"] = lang_name
-                self.settings["target_language_code"] = code
-            else:
-                self.settings["translation_language"] = lang_name
-                self.settings["translation_language_code"] = code
-        else:
-            # Clear settings if code unknown or None
-            if idx == 0:
-                self.settings["target_language"] = ""
-                self.settings["target_language_code"] = ""
-            else:
-                self.settings["translation_language"] = ""
-                self.settings["translation_language_code"] = ""
-
-        print(f"saving settings, code changed")
-        print(f"checkbox state: {self.timingTracksCheckbox.checkState()}")
         self.save_settings()
 
     def on_audio_ext_changed(self, text):
-        print(f"audio ext changed")
         if text == "flac":
             self.bitrateEdit.hide()
             self.kbps_label.hide()
@@ -736,9 +689,6 @@ class AudioToolsDialog(QDialog):
     def on_timing_checkbox_changed(self, state):
         state_val = state.value if hasattr(state, "value") else state
         show = (state_val == Qt.CheckState.Checked.value)
-        print(f"on_timing_checkbox_changed called")
-        print(f"State type: {type(state)}, value: {state}")
-        print(f"Normalized state_val: {state_val}, show: {show}")
 
         self.langCodeEdits[2].setVisible(show)
         self.langCodeEdits[3].setVisible(show)
@@ -782,10 +732,10 @@ class FieldMapping(QDialog):
 
             comboBox = QComboBox()
             comboBox.addItem("None")
+            comboBox.addItem("Target Subtitle Line")
             comboBox.addItem("Target Audio")
-            comboBox.addItem("Target Sub Line")
+            comboBox.addItem("Translation Subtitle Line")
             comboBox.addItem("Translation Audio")
-            comboBox.addItem("Translation Sub Line")
             comboBox.addItem("Image")
             if field in self.mappedFields:
                 comboBox.setCurrentIndex(comboBox.findText(self.mappedFields[field]))
@@ -901,10 +851,10 @@ def add_custom_controls(editor: Editor) -> None:
     add_remove_layout = QHBoxLayout(add_remove_row)
     add_remove_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
     add_remove_layout.setSpacing(BUTTON_ROW_SPACING)
-    add_remove_layout.addWidget(make_button("Add Previous Line", lambda: button_actions.add_context_line_helper(editor, -1)))
-    add_remove_layout.addWidget(make_button("Remove First Line", lambda: button_actions.remove_edge_lines_helper(editor, -1), danger=True))
-    add_remove_layout.addWidget(make_button("Remove Last Line", lambda: button_actions.remove_edge_lines_helper(editor, 1), danger=True))
-    add_remove_layout.addWidget(make_button("Add Next Line", lambda: button_actions.add_context_line_helper(editor, 1)))
+    add_remove_layout.addWidget(make_button("Add Previous Line", lambda: button_actions.add_and_remove_edge_lines_update_note(editor, 1, 0)))
+    add_remove_layout.addWidget(make_button("Remove First Line", lambda: button_actions.add_and_remove_edge_lines_update_note(editor, -1, 0), danger=True))
+    add_remove_layout.addWidget(make_button("Remove Last Line", lambda: button_actions.add_and_remove_edge_lines_update_note(editor, 0, -1), danger=True))
+    add_remove_layout.addWidget(make_button("Add Next Line", lambda: button_actions.add_and_remove_edge_lines_update_note(editor, 0, 1)))
     buttons_layout.addWidget(add_remove_row)
 
     generate_btn_row = QWidget()

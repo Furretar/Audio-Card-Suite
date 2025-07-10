@@ -169,7 +169,6 @@ def extract_config_data():
     with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
 
-    # Gather all expected fields
     keys = [
         "default_model", "default_deck", "audio_ext", "bitrate", "image_height",
         "pad_start", "pad_end", "target_language", "translation_language",
@@ -178,8 +177,6 @@ def extract_config_data():
         "translation_audio_track", "translation_subtitle_track",
         "target_timing_code", "translation_timing_code",
         "target_timing_track", "translation_timing_track",
-        "default_target_timing_code", "default_translation_timing_code",
-        "default_target_timing_subtitle_track", "default_translation_timing_subtitle_track",
         "timing_tracks_enabled", "mapped_fields", "selected_tab_index"
     ]
 
@@ -187,10 +184,13 @@ def extract_config_data():
     missing = [k for k, v in zip(keys, values) if v is None]
 
     if missing:
-        showInfo(f"Missing fields: {', '.join(missing)}")
-        raise ValueError(f"Missing required config field(s): {missing}")
+        # Just return None or empty dict instead of raising error
+        print(f"Warning: Missing required config field(s): {missing}")
+        showInfo(f"Please assign fields to your note type in the menu.")
+        return None
 
     return dict(zip(keys, values))
+
 
 def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> str:
     mapped_fields = config["mapped_fields"][note_type_name]

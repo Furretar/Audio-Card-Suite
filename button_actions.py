@@ -290,6 +290,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
         target_block, subtitle_path = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
 
     new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path)
+    new_sentence_line = format_text(new_sentence_line)
 
     config = manage_files.extract_config_data()
     note_type_name = list(config["mapped_fields"].keys())[0]

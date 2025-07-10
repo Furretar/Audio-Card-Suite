@@ -169,70 +169,28 @@ def extract_config_data():
     with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
 
-    default_model = config.get("default_model")
-    default_deck = config.get("default_deck")
-    audio_ext = config.get("audio_ext")
-    bitrate = config.get("bitrate")
-    image_height = config.get("image_height")
-    pad_start = config.get("pad_start")
-    pad_end = config.get("pad_end")
-    target_language = config.get("target_language")
-    translation_language = config.get("translation_language")
-    target_language_code = config.get("target_language_code")
-    translation_language_code = config.get("translation_language_code")
-    normalize_audio = config.get("normalize_audio")
-    lufs = config.get("lufs")
-    target_audio_track = config.get("target_audio_track")
-    target_subtitle_track = config.get("target_subtitle_track")
-    translation_audio_track = config.get("translation_audio_track")
-    translation_subtitle_track = config.get("translation_subtitle_track")
-    mapped_fields = config.get("mapped_fields")
-    selected_tab_index = config.get("selected_tab_index")
-
-    variable_names = [
+    # Gather all expected fields
+    keys = [
         "default_model", "default_deck", "audio_ext", "bitrate", "image_height",
         "pad_start", "pad_end", "target_language", "translation_language",
         "target_language_code", "translation_language_code", "normalize_audio",
         "lufs", "target_audio_track", "target_subtitle_track",
         "translation_audio_track", "translation_subtitle_track",
-        "mapped_fields", "selected_tab_index"
+        "target_timing_code", "translation_timing_code",
+        "target_timing_track", "translation_timing_track",
+        "default_target_timing_code", "default_translation_timing_code",
+        "default_target_timing_subtitle_track", "default_translation_timing_subtitle_track",
+        "timing_tracks_enabled", "mapped_fields", "selected_tab_index"
     ]
 
-    variables = [
-        default_model, default_deck, audio_ext, bitrate, image_height,
-        pad_start, pad_end, target_language, translation_language,
-        target_language_code, translation_language_code, normalize_audio,
-        lufs, target_audio_track, target_subtitle_track,
-        translation_audio_track, translation_subtitle_track,
-        mapped_fields, selected_tab_index
-    ]
+    values = [config.get(k) for k in keys]
+    missing = [k for k, v in zip(keys, values) if v is None]
 
-    missing_fields = [name for name, val in zip(variable_names, variables) if val is None]
-    if missing_fields:
-        showInfo(f"Missing fields: {', '.join(missing_fields)}")
-        raise ValueError(f"Missing required config field(s): {missing_fields}")
+    if missing:
+        showInfo(f"Missing fields: {', '.join(missing)}")
+        raise ValueError(f"Missing required config field(s): {missing}")
 
-    return {
-        "default_model": default_model,
-        "default_deck": default_deck,
-        "audio_ext": audio_ext,
-        "bitrate": bitrate,
-        "image_height": image_height,
-        "pad_start": pad_start,
-        "pad_end": pad_end,
-        "target_language": target_language,
-        "translation_language": translation_language,
-        "target_language_code": target_language_code,
-        "translation_language_code": translation_language_code,
-        "normalize_audio": normalize_audio,
-        "lufs": lufs,
-        "target_audio_track": target_audio_track,
-        "target_subtitle_track": target_subtitle_track,
-        "translation_audio_track": translation_audio_track,
-        "translation_subtitle_track": translation_subtitle_track,
-        "mapped_fields": mapped_fields,
-        "selected_tab_index": selected_tab_index
-    }
+    return dict(zip(keys, values))
 
 def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> str:
     mapped_fields = config["mapped_fields"][note_type_name]

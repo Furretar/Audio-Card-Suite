@@ -3,33 +3,25 @@
   "default_deck": "Default",
   "audio_ext": "mp3",
   "bitrate": 192,
-  "image_height": 1080,
+  "image_height": 1082,
   "pad_start": 0,
   "pad_end": 0,
-  "target_language": "Chinese",
+  "target_language": "Chichewa",
   "translation_language": "English",
-  "target_language_code": "chi",
+  "target_language_code": "nya",
   "translation_language_code": "eng",
-  "normalize_audio": true,
+  "normalize_audio": false,
   "lufs": -16,
   "target_audio_track": 1,
   "target_subtitle_track": 1,
   "translation_audio_track": 2,
   "translation_subtitle_track": 2,
-  "selected_tab_index": 0,
-  "mapped_fields": {
-    "1Chinese": {
-      "Expression": "Target Sub Line",
-      "SentenceAudio": "Target Audio",
-      "Image": "Image",
-      "Translation": "Translation Sub Line",
-      "TranslationAudio": "Translation Audio"
-    },
-    "1Japanese": {
-      "Expression": "Target Sub Line",
-      "SentenceAudio": "Target Audio",
-      "Image": "Image",
-      "Translation": "Translation Sub Line"
-    }
-  }
+  "target_timing_code": "jpn",
+  "translation_timing_code": "eng",
+  "target_timing_track": 0,
+  "translation_timing_track": 0,
+  "timing_tracks_enabled": false,
+  "target_timings_code": "jpn",
+  "translation_timings_code": "eng",
+  "selected_tab_index": 0
 }

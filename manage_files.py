@@ -119,7 +119,6 @@ def extract_sound_line_data(sound_line):
         timestamp_filename = "`".join(meta_parts) + f".{sound_file_extension}"
         timestamp_filename_no_normalize = "`".join(meta_parts[:-1 if normalize_tag else None])
 
-        print(f"start time raw: {start_time}")
         audio_collection_path = os.path.join(get_collection_dir(), timestamp_filename)
 
         m4b_image_filename = f"{filename_base}.{sound_file_extension}.jpg"
@@ -282,7 +281,7 @@ def get_subtitle_path_from_full_filename_track_code(filename, track, code):
             return basename_subtitle_path
 
     # 2. Fallback: match by code or track
-    print(f"fallback, looking for {code} or {track}")
+    log_command(f"fallback, looking for {code} or {track}")
     if selected_tab_index == 0:
         for file in os.listdir(addon_source_folder):
             if file.startswith(filename_base) and file.endswith(f"{code}.srt"):
@@ -500,11 +499,11 @@ def get_source_path_from_full_filename(full_source_filename) -> str:
 
     for base in possible_bases:
         path = os.path.join(addon_source_folder, base)
-        print("now checking: ", path)
+        log_command(f"now checking: {path}")
         if os.path.exists(path):
             return path
 
-    print(f"No source file found for base name: {full_source_filename}")
+    log_error(f"No source file found for base name: {full_source_filename}")
     return ""
 
 def get_video_duration_seconds(path):
@@ -656,19 +655,22 @@ def get_valid_sound_line_from_sound_and_sentence_line(sound_line: str, sentence_
     config = extract_config_data()
     track = config.get("target_subtitle_track")
     code = config.get("target_language_code")
-    print(f"target_language_code: {code}")
-    print(f"config: {config}")
+    log_command(f"config: {config}")
     subtitle_path = get_subtitle_path_from_full_filename_track_code(full_source_filename, track, code)
 
     if format == "backtick":
-        block, _ = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
-        return sound_line, block, subtitle_path
+        block, subtitle_path = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
+        if not block or not subtitle_path:
+            print(f"no block returned")
+            return None, None, None
+        new_sound_line, _ = get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path)
+        return new_sound_line, block, subtitle_path
 
     return sound_line, block, subtitle_path
 
 def get_subtitle_block_from_index_and_path(subtitle_index, subtitle_path):
     if not os.path.exists(subtitle_path):
-        print(f"Subtitle file does not exist: {subtitle_path}")
+        log_error(f"Subtitle file does not exist: {subtitle_path}")
         return []
 
     with open(subtitle_path, 'r', encoding='utf-8') as f:
@@ -680,7 +682,7 @@ def get_subtitle_block_from_index_and_path(subtitle_index, subtitle_path):
         formatted_block = format_subtitle_block(blocks[subtitle_index])
         return formatted_block if formatted_block else []
 
-    print(f"Index {subtitle_index} out of range for subtitle file {subtitle_path}")
+    log_error(f"Index {subtitle_index} out of range for subtitle file {subtitle_path}")
     return []
 
 def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
@@ -754,7 +756,7 @@ def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, senten
     log_filename(f"extracting data from sound_line: {sound_line}")
     data = extract_sound_line_data(sound_line)
     if not data:
-        print(f"no data extracted from {sound_line}")
+        log_error(f"no data extracted from {sound_line}")
         return None, None
 
     full_source_filename = data["full_source_filename"]
@@ -765,14 +767,21 @@ def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, senten
 
     subtitle_path = get_subtitle_path_from_full_filename_track_code(full_source_filename, track, code)
     if not subtitle_path or not os.path.exists(subtitle_path):
-        print(f"Subtitle path not found or invalid: {subtitle_path}")
-        print(f"get sub block, full source filename: {full_source_filename}")
+        log_error(f"Subtitle path not found or invalid: {subtitle_path}")
+        log_error(f"get sub block, full source filename: {full_source_filename}")
         source_path = get_source_path_from_full_filename(full_source_filename)
         extract_subtitle_files(source_path, track, code)
         subtitle_path = get_subtitle_path_from_full_filename_track_code(full_source_filename, track, code)
         if not subtitle_path or not os.path.exists(subtitle_path):
-            print("Subtitle path still not found after extraction.")
+            log_error("Subtitle path still not found after extraction.")
+
+        block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
+        if not subtitle_path or not os.path.exists(subtitle_path):
+            log_error("Subtitle path still not found after using sentence line.")
             return None, None
+        else:
+            print(f"return block: {block}")
+            return block, subtitle_path
 
     with open(subtitle_path, 'r', encoding='utf-8') as f:
         blocks = f.read().strip().split('\n\n')

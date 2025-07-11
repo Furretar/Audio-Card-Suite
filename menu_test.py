@@ -211,7 +211,7 @@ get_valid_backtick_sound_line_test()
 def generate_fields_test():
     sound_line1 = ""
     sentence_text1 = """- 因為對國王陛下不敬 - 我們…我們會再告誡他們的"""
-    menu.generate_fields_sound_sentence_image_translation(sound_line1, 2, sentence_text1, 0, "", 3)
+    menu.get_generate_fields_sound_sentence_image_translation(sound_line1, 2, sentence_text1, 0, "", 3)
 generate_fields_test()
 
 # "[sound:Sousou_no_Frieren_-_01_00.04.55.719-00.04.58.921.mp3]"

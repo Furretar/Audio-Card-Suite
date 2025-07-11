@@ -6,6 +6,10 @@
 - [ ] store start and end offset every time its pushed, when user moves the whole line forward or backward it automatically adjusts the offset amount
 - [ ] keep extension in sound line?
 
+      refactor
+      get_subtitle_path_from_full_filename_track_code, make it take sound line instead of path
+      make only 2 ways to get sub path, one with just sentence line and one with sound line
+
 
 low priority, might do after initial release
 - [ ] implement 4 character sha code for file disambiguation, use few kilobytes from audio track for hash, add hash to subtitle files to link them to file, this will allow files with the same name to remain unchanged, allowing torrent seeding etc

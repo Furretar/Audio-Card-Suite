@@ -287,7 +287,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         full_source_filename = data["full_source_filename"]
         track = config["target_subtitle_track"]
         code = config["target_language_code"]
-        subtitle_path = manage_files.get_subtitle_path_from_full_filename_track_code(full_source_filename, track, code)
+        subtitle_path = manage_files.get_subtitle_path_from_sound_line(full_source_filename, track, code)
         start_index = data["start_index"]
         end_index = data["end_index"]
         blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path)
@@ -368,7 +368,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     start_index = data["start_index"]
     end_index = data["end_index"]
     full_source_filename = data["full_source_filename"]
-    subtitle_path = manage_files.get_subtitle_path_from_full_filename_track_code(full_source_filename, track, code)
+    subtitle_path = manage_files.get_subtitle_path_from_sound_line(full_source_filename, track, code)
     blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, subtitle_path)
     new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path)
 

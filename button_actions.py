@@ -9,7 +9,7 @@ from aqt.sound import av_player
 import os
 from aqt import mw
 import html
-
+import logging
 from .manage_files import get_field_key_from_label
 try:
     from . import manage_files
@@ -18,6 +18,8 @@ except ImportError:
     import os
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     import manage_files
+
+
 
 
 # constants
@@ -245,7 +247,7 @@ def generate_fields_helper(editor, note):
         updated = True
 
     if not image_line:
-        generated_img = manage_files.get_image_if_empty_helper("", new_sound_line)
+        generated_img = manage_files.get_image_line_if_empty("", new_sound_line)
         if generated_img and isinstance(generated_img, str):
             field_obj.fields[image_idx] = generated_img
             updated = True
@@ -299,7 +301,7 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
     generate_translation_sound = get_field_key_from_label(note_type_name, "Translation Audio", config)
 
     if not image_line and generate_image:
-        new_image_line = manage_files.get_image_if_empty_helper(image_line, new_sound_line)
+        new_image_line = manage_files.get_image_line_if_empty(image_line, new_sound_line)
     else:
         new_image_line = image_line
 

@@ -1,4 +1,4 @@
-
+import logging
 import os
 import shutil
 import subprocess
@@ -11,6 +11,41 @@ addon_source_folder = os.path.join(addon_dir, "Sources")
 temp_ffmpeg_folder = os.path.join(addon_dir, "ffmpeg")
 temp_ffmpeg_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffmpeg.exe")
 temp_ffprobe_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffprobe.exe")
+
+import logging
+
+import logging
+
+class MethodNameFilter(logging.Filter):
+    def filter(self, record):
+        record.method_name = record.funcName
+        return True
+
+formatter = logging.Formatter(f'%(method_name)s:\n%(message)s\n')
+
+def setup_logger(name):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False  # Prevent logs bubbling up to root logger
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(formatter)
+    handler.addFilter(MethodNameFilter())
+    logger.handlers.clear()  # Remove any pre-existing handlers
+    logger.addHandler(handler)
+    return logger
+
+filename_logger = setup_logger("AudioCardSuite.filename")
+error_logger = setup_logger("AudioCardSuite.error")
+command_logger = setup_logger("AudioCardSuite.command")
+
+filename_logger.disabled = False
+error_logger.disabled = False
+command_logger.disabled = False
+
+
+
+
 
 # constants
 addon_dir = os.path.dirname(os.path.abspath(__file__))
@@ -26,16 +61,18 @@ video_exts = [
 
 BACKTICK_PATTERN = re.compile(
     r'^\[sound:'
-    r'(?P<filename_base>[^`]+?)`'
-    r'(?:(?P<source_file_extension>\.[a-z0-9]+)`)?'  # dot + ext (e.g., .mkv)
-    r'(?:(?P<lang_code>[a-z]{3})`)?'
-    r'(?:(?P<sha>[A-Za-z0-9]{4})`)?'
-    r'(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'
+    r'(?P<filename_base>[^`\.]+)'                     # base name before extension
+    r'(?P<source_file_extension>\.[a-z0-9]+)?'        # optional extension (with no backtick)
+    r'(?:`(?P<lang_code>[a-z]{3}))?'                  # optional language code
+    r'(?:`(?P<sha>[A-Za-z0-9]{4}))?'                  # optional sha
+    r'`(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'
     r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'
     r'(?P<subtitle_range>\d+-\d+)'
     r'(?:`(?P<normalize_tag>[^`]+))?'
-    r'\.(?P<sound_file_extension>\w+)\]$'
+    r'\.(?P<sound_file_extension>\w+)\]$',
+    re.IGNORECASE
 )
+
 
 
 
@@ -48,8 +85,10 @@ def get_collection_dir():
 
 def extract_sound_line_data(sound_line):
     print(f"extracting data from: {sound_line}")
+    filename_logger.debug(f"extracting data from: {sound_line}")
     format_type = detect_format(sound_line)
-    print(f"format detected: {format_type}")
+    filename_logger.debug(f"format detected: {format_type}")
+
     if format_type == "backtick":
         match = BACKTICK_PATTERN.match(sound_line)
         if not match:
@@ -59,7 +98,9 @@ def extract_sound_line_data(sound_line):
         groups = match.groupdict()
         filename_base = groups["filename_base"]
         source_file_extension = groups.get("source_file_extension") or ""
-        print(f"extracted file extesnion: {source_file_extension} from: {sound_line}")
+
+        filename_logger.debug(f"extracted file extension: {source_file_extension} from: {sound_line}")
+
         lang_code = groups.get("lang_code") or ""
         sha = groups.get("sha") or ""
         start_time_raw = groups["start_time"]
@@ -85,6 +126,7 @@ def extract_sound_line_data(sound_line):
             meta_parts.append(normalize_tag)
 
         timestamp_filename = "`".join(meta_parts) + f".{sound_file_extension }"
+        filename_logger.info(f"timestamp filename: {timestamp_filename}")
         timestamp_filename_no_normalize = "`".join(meta_parts[:-1 if normalize_tag else None])
 
     else:
@@ -197,44 +239,28 @@ def get_ffmpeg_exe_path():
 
 def get_audio_start_time_ms(source_file_path: str) -> int:
     _, ffprobe_path = get_ffmpeg_exe_path()
+    cmd = [
+        ffprobe_path, "-v", "error",
+        "-select_streams", "a:0",
+        "-show_packets", "-read_intervals", "0%+#5",
+        "-print_format", "compact", source_file_path
+    ]
     try:
-        result = subprocess.run(
-            [
-                f"{ffprobe_path}",
-                "-v", "error",
-                "-select_streams", "a:0",
-                "-show_packets",
-                "-read_intervals", "0%+#5",
-                "-print_format", "compact",
-                source_file_path
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True
-        )
-
-        output = result.stdout
-
-        # find first pts_time using regex
-        match = re.search(r"pts_time=(\d+)", output)
-        if match:
-            start_time = float(match.group(1))
-            delay_ms = round(start_time * 1000)
-            return delay_ms
-        else:
-            print("No pts_time found in packets output.")
-            return 0
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        command_logger.debug(f"ffprobe output: {result.stdout.strip()}")
+        match = re.search(r"pts_time=(\d+(?:\.\d+)?)", result.stdout)
+        return round(float(match.group(1)) * 1000) if match else 0
     except Exception as e:
-        print(f"Could not get pts_time from packets: {e}")
+        error_logger.debug(f"ffprobe failed: {e}")
         return 0
+
 
 def get_subtitle_path_from_full_filename_track_code(filename, track, code):
     filename_base, _ = os.path.splitext(filename)
     config = extract_config_data()
     selected_tab_index = config["selected_tab_index"]
     translation_language_code = config["translation_language_code"]
-    print(f"get sub path from track code, filename: {filename}")
+    filename_logger.debug(f"received filename: {filename}, track/code: {track}/{code}")
     source_path = get_source_path_from_full_filename(filename)
 
     if not os.path.exists(source_path):
@@ -291,9 +317,17 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path)
     if not (isinstance(blocks, (list, tuple)) and isinstance(blocks[0], (list, tuple))):
         blocks = [blocks]
 
-    filename_parts = os.path.splitext(os.path.basename(subtitle_path))[0].split('`')
-    filename_base = filename_parts[0]
-    file_extension = filename_parts[1] if len(filename_parts) > 1 else "mp4"
+    base = os.path.basename(subtitle_path)
+    if '`' in base:
+        parts = base.split('`')
+        filename_base = parts[0]
+        file_extension = parts[1].lstrip('.') if len(parts) > 1 else "mp4"
+    else:
+        filename_base, file_extension = os.path.splitext(base)
+        file_extension = file_extension.lstrip(".")
+
+    filename_logger.debug(f"splitting filename: {base} from sub path: {subtitle_path}")
+    filename_logger.debug(f"extracted file extension: {file_extension}")
 
     try:
         start_index = blocks[0][0]
@@ -303,8 +337,8 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path)
 
         config = extract_config_data()
         audio_ext = config["audio_ext"]
-        print(f"aaaaaaaaaaa file extension: {file_extension}")
-        timestamp = f"{filename_base}`{file_extension}`{start_time}-{end_time}`{start_index}-{end_index}"
+        filename_logger.debug(f"")
+        timestamp = f"{filename_base}{file_extension}`{start_time}-{end_time}`{start_index}-{end_index}"
 
         normalize_audio = config["normalize_audio"]
         if normalize_audio:
@@ -326,9 +360,10 @@ def get_translation_line_from_target_sound_line(target_sound_line):
         print("get_translation_line_from_sound_line received None sound_line.")
         return ""
 
+    filename_logger.debug(f"extracting data from target_sound_line: {target_sound_line}")
     data = extract_sound_line_data(target_sound_line)
     if not data:
-        print("extract_sound_line_data returned None.")
+        error_logger.error(f"extract_sound_line_data returned None.")
         return ""
 
     config = extract_config_data()
@@ -348,12 +383,13 @@ def get_translation_line_from_target_sound_line(target_sound_line):
 
 def get_translation_sound_line_from_target_sound_line(target_sound_line):
     if not target_sound_line:
-        print("get_translation_line_from_sound_line received None sound_line.")
+        error_logger.error(f"received None sound_line. ")
         return ""
 
+    filename_logger.debug(f"extracting data from target_sound_line: {target_sound_line}")
     data = extract_sound_line_data(target_sound_line)
     if not data:
-        print("extract_sound_line_data returned None.")
+        error_logger.error(f"extract_sound_line_data returned None.")
         return ""
 
     config = extract_config_data()
@@ -387,7 +423,7 @@ def get_translation_sound_line_from_target_sound_line(target_sound_line):
         config = extract_config_data()
         audio_ext = config["audio_ext"]
 
-        timestamp = f"{filename_base}`.{source_file_extension}`{translation_language_code}`{first_start}-{last_end}`{start_index}-{end_index}.{audio_ext}"
+        timestamp = f"{filename_base}.{source_file_extension}`{translation_language_code}`{first_start}-{last_end}`{start_index}-{end_index}.{audio_ext}"
         return f"[sound:{timestamp}]"
     except Exception as e:
         print(f"Error generating translation sound line: {e}")
@@ -480,16 +516,15 @@ def get_video_duration_seconds(path):
         print("Failed to get duration:", e)
         return 0
 
-def get_image_if_empty_helper(image_line, sound_line):
+def get_image_line_if_empty(image_line, sound_line):
     # check if any field already has an image
     if image_line:
         return image_line
 
-    print(f"No image found, extracting from source. image line: {image_line}, sound line: {sound_line}")
-
+    filename_logger.debug(f"No image found, extracting from source. image line: {image_line}, sound line: {sound_line}")
     data = extract_sound_line_data(sound_line)
     if not data:
-        print("Failed to extract data from sound tag.")
+        error_logger.error(f"extract_sound_line_data returned None.")
         return ""
 
     filename_base = data.get("filename_base")
@@ -528,54 +563,45 @@ def get_image_if_empty_helper(image_line, sound_line):
 
 
 def get_subtitle_track_number_by_code(source_path, code):
-    # 1-based indexing
-    ffmpeg_exe, ffprobe_exe = get_ffmpeg_exe_path()
+    _, ffprobe_exe = get_ffmpeg_exe_path()
     try:
         cmd = [
             ffprobe_exe, "-v", "error", "-select_streams", "s",
             "-show_entries", "stream=index:stream_tags=language",
             "-of", "json", source_path
         ]
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        info = json.loads(result.stdout)
-        streams = info.get("streams", [])
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        streams = json.loads(result.stdout).get("streams", [])
 
-        if not streams:
-            print("No subtitle streams found.")
-            return None
+        for i, s in enumerate(streams, 1):
+            if s.get("tags", {}).get("language", "").lower() == code.lower():
+                return i
 
-        for i, stream in enumerate(streams, start=1):
-            lang = stream.get("tags", {}).get("language", "")
-            if lang.lower() == code.lower():
-                return i  # Return ordinal subtitle track number
-
-        print(f"No subtitle with code '{code}' found, falling back to subtitle track 1")
-        return 1  # Fallback to first subtitle track ordinal
+        error_logger.debug(f"No subtitle with code '{code}' found in: {source_path}")
+        return 1 if streams else None
 
     except Exception as e:
-        print(f"ffprobe error: {e}")
+        error_logger.debug(f"ffprobe error: {e}")
 
-    print(f"could not get track number by code: {code}, source_path: {source_path}")
+    error_logger.debug(f"Could not get track number by code: {code}, source_path: {source_path}")
     return None
 
 def get_subtitle_code_by_track_number(source_path, track_number):
-    # 1-based indexing
-    ffmpeg_exe, ffprobe_exe = get_ffmpeg_exe_path()
+    _, ffprobe_exe = get_ffmpeg_exe_path()
     try:
         cmd = [
-            f"{ffprobe_exe}", "-v", "error", "-select_streams", "s",
+            ffprobe_exe, "-v", "error", "-select_streams", "s",
             "-show_entries", "stream=index:stream_tags=language",
             "-of", "json", source_path
         ]
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        info = json.loads(result.stdout)
-        streams = info.get("streams", [])
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        streams = json.loads(result.stdout).get("streams", [])
         if 1 <= track_number <= len(streams):
-            stream = streams[track_number - 1]  # convert to 0-based
-            return stream.get("tags", {}).get("language", "")
+            return streams[track_number - 1].get("tags", {}).get("language", "")
     except Exception as e:
-        print(f"ffprobe error: {e}")
+        error_logger.debug(f"ffprobe error: {e}")
     return None
+
 
 def get_subtitle_blocks_from_index_range(start_index, end_index, subtitle_path):
     with open(subtitle_path, 'r', encoding='utf-8') as f:
@@ -818,13 +844,14 @@ def extract_subtitle_files(source_path, track, code):
         return bool(data.get('streams'))
 
     if not has_subtitle_streams(source_path):
-        print("No subtitle streams found, skipping extraction.")
+        filename_logger.debug("No subtitle streams found, skipping extraction.")
         return
 
     filename_base, file_extension = os.path.splitext(os.path.basename(source_path))
-    file_extension = file_extension.lstrip(".")
+    filename_logger.debug(f"extension from sub source path: {file_extension}, from: {source_path}")
 
-    tagged_subtitle_file = f"{filename_base}`track_{track}`{code}.srt"
+    tagged_subtitle_file = f"{filename_base}{file_extension}`track_{track}`{code}.srt"
+    filename_logger.debug(f"tagged subtitle file: {tagged_subtitle_file}")
     tagged_subtitle_path = os.path.join(addon_source_folder, tagged_subtitle_file)
     basename_subtitle_file = f"{filename_base}`.srt"
     basename_subtitle_path = os.path.join(addon_source_folder, basename_subtitle_file)
@@ -840,12 +867,12 @@ def extract_subtitle_files(source_path, track, code):
         track_by_code = track
 
     if track_by_code != track:
-        print(f"track_by_code ({track_by_code}) != set track ({track})")
+        filename_logger.debug(f"track_by_code ({track_by_code}) != set track ({track})")
         if selected_tab_index == 0 and track_by_code:
-            print("Prioritizing language code")
+            filename_logger.debug("Prioritizing language code")
             track = track_by_code
         else:
-            print("Prioritizing set track")
+            filename_logger.debug("Prioritizing set track")
 
     code = get_subtitle_code_by_track_number(source_path, track)
     tagged_subtitle_file = f"{filename_base}`track_{track}`{code}.srt"
@@ -853,7 +880,7 @@ def extract_subtitle_files(source_path, track, code):
 
     if track and track > 0 and not os.path.exists(tagged_subtitle_path):
         try:
-            print(f"Extracting subtitle track {track} from {source_path}")
+            filename_logger.debug(f"Extracting subtitle track {track} from {source_path}")
             subprocess.run([
                 exe_path,
                 "-y",
@@ -862,20 +889,19 @@ def extract_subtitle_files(source_path, track, code):
                 tagged_subtitle_path
             ], check=True)
         except subprocess.CalledProcessError as e:
-            print(f"Subtitle extraction failed: {e}")
+            error_logger.debug(f"Subtitle extraction failed: {e}")
 
 def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collection_path, m4b_image_collection_path) -> str:
     out_dir = os.path.dirname(image_collection_path)
     ffmpeg_path, _ = get_ffmpeg_exe_path()
-    os.makedirs(out_dir, exist_ok=True)          # create it if needed
+    os.makedirs(out_dir, exist_ok=True)
     if not os.access(out_dir, os.W_OK):
         raise RuntimeError(f"Cannot write to directory: {out_dir}")
 
-    
     if source_path.lower().endswith(".m4b"):
         output_path = m4b_image_collection_path
         cmd = [
-            f"{ffmpeg_path}", "-y",
+            ffmpeg_path, "-y",
             "-i", source_path,
             "-map", "0:v",
             "-codec", "copy",
@@ -884,23 +910,21 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
         ]
 
         try:
-            print(f"Extracting cover from m4b: {cmd}")
+            command_logger.debug(f"Extracting cover from m4b: {cmd}")
             subprocess.run(cmd, check=True)
             if os.path.exists(output_path):
-                print(f"Extracted cover: {output_path}")
+                command_logger.debug(f"Extracted cover: {output_path}")
                 return output_path
             else:
-                print("Cover extraction failed: file not found")
+                error_logger.error("Cover extraction failed: file not found")
                 return ""
         except subprocess.CalledProcessError as e:
-            print("FFmpeg cover extraction failed:", e)
+            error_logger.error(f"FFmpeg cover extraction failed: {e}")
             return ""
 
-    # For all other formats (e.g., mp4, mkv, webm, etc.)
     timestamp = convert_hmsms_to_ffmpeg_time_notation(image_timestamp)
-    ffmpeg_path, _ = get_ffmpeg_exe_path()
     cmd = [
-        f"{ffmpeg_path}", "-y",
+        ffmpeg_path, "-y",
         "-ss", timestamp,
         "-i", source_path,
         "-frames:v", "1",
@@ -909,11 +933,12 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
     ]
 
     try:
+        command_logger.debug(f"Extracting image with command: {cmd}")
         subprocess.run(cmd, check=True)
-        print(f"Extracted image: {image_collection_path}")
+        command_logger.debug(f"Extracted image: {image_collection_path}")
         return image_collection_path
     except subprocess.CalledProcessError as e:
-        print("FFmpeg failed:", e)
+        error_logger.error(f"FFmpeg failed: {e}")
         return ""
 
 def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, collection_path, sound_line) -> list:
@@ -1035,12 +1060,11 @@ def ffmpeg_extract_full_audio(source_file_path) -> str:
     delay_ms = get_audio_start_time_ms(source_file_path)
 
     cmd = [
-        f"{ffmpeg_path}", "-y",
+        ffmpeg_path, "-y",
         "-i", source_file_path,
-        "-map", "0:a:0" # first track
+        "-map", "0:a:0"
     ]
 
-    # add delay to beginning if detected
     if delay_ms != 0:
         adelay_str = f"{delay_ms}|{delay_ms}"
         cmd += [
@@ -1052,13 +1076,13 @@ def ffmpeg_extract_full_audio(source_file_path) -> str:
         output_path
     ]
 
-    print(f"Running FFmpeg command: {' '.join(cmd)}")
+    command_logger.debug(f"Running FFmpeg command: {' '.join(cmd)}")
     try:
         subprocess.run(cmd, check=True)
-        print(f"Converted to mp3: {output_path}")
+        command_logger.debug(f"Converted to {audio_ext}: {output_path}")
         return output_path
     except subprocess.CalledProcessError as e:
-        print("FFmpeg conversion failed:", e)
+        error_logger.error(f"FFmpeg conversion failed: {e}")
         return ""
 
 def create_just_normalize_audio_command(source_path):
@@ -1241,7 +1265,9 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     time_range = f"{new_start_time}-{new_end_time}"
     filename_base = data["filename_base"]
     full_source_filename = data["full_source_filename"]
-    print(f"full source filenmae from data: {full_source_filename}")
+
+    filename_logger.debug(f"full source filename from data: {full_source_filename}")
+
     source_file_extension = "."
     source_file_extension += data["source_file_extension"]
     filename_parts = [filename_base]
@@ -1279,20 +1305,19 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
 
 def alter_sound_file_times(altered_data, sound_line) -> str:
     if not altered_data:
-        print(f"altered data is empty")
+        error_logger.error("altered data is empty")
         return
 
     if not sound_line:
-        print(f"sound line is empty")
+        error_logger.error("sound line is empty")
         return
 
     if os.path.exists(altered_data["old_path"]):
         send2trash(altered_data["old_path"])
 
     full_source_filename = altered_data["full_source_filename"]
-    print(f"alter sound file times, full source filenmame: {full_source_filename}")
+    filename_logger.debug(f"alter sound file times, full source filename: {full_source_filename}")
     source_path = get_source_path_from_full_filename(full_source_filename)
-
 
     cmd = create_ffmpeg_extract_audio_command(
         source_path,
@@ -1302,18 +1327,18 @@ def alter_sound_file_times(altered_data, sound_line) -> str:
         sound_line
     )
     try:
-        print("generating new sound file: " + altered_data["new_path"])
-        print("Running FFmpeg command:", " ".join(cmd))
+        command_logger.debug(f"generating new sound file: {altered_data['new_path']}")
+        command_logger.debug(f"Running FFmpeg command: {' '.join(cmd)}")
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        # print("Audio extraction succeeded.")
     except subprocess.CalledProcessError:
-        print("FFmpeg failed.")
+        error_logger.error("FFmpeg failed.")
         return ""
 
     if os.path.exists(altered_data["new_path"]):
         return f"[sound:{altered_data['new_filename']}]"
-    return ""
-
+    else:
+        error_logger.error(f"Expected output file not found: {altered_data['new_path']}")
+        return ""
 
 
 

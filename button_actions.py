@@ -11,6 +11,7 @@ from aqt import mw
 import html
 import logging
 from .manage_files import get_field_key_from_label
+from .manage_files import log_filename
 try:
     from . import manage_files
 except ImportError:
@@ -118,6 +119,7 @@ def next_result_button(editor):
     next_sound_line, next_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path)
 
     # generate file using next sound line
+    log_filename(f"getting altered data from2: {next_sound_line}")
     altered_data = manage_files.get_altered_sound_data(next_sound_line, 0, 0, 0)
     next_sound_line = manage_files.alter_sound_file_times(altered_data, next_sound_line)
     print(f"next sentence: {next_sentence_line}, next sound: {next_sound_line}")
@@ -209,7 +211,7 @@ def generate_fields_helper(editor, note):
         sound_line, sentence_line, selected_text, image_line, translation_line, translation_sound_line
     )
 
-    print(f"new result: {new_result}")
+    log_filename(f"new result: {new_result}")
 
     if not new_result:
         print("generate_fields_sound_sentence_image failed to return valid values.")
@@ -222,8 +224,6 @@ def generate_fields_helper(editor, note):
 
     new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line = new_result
 
-    print(f"got new result")
-
     def update_field(idx, new_val):
         nonlocal updated
         current_field = field_obj.fields[idx]
@@ -234,17 +234,21 @@ def generate_fields_helper(editor, note):
     update_field(sentence_idx, new_sentence_line)
     update_field(translation_idx, new_translation_line)
 
-    altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, 0)
-    if new_sound_line and new_sound_line != field_obj.fields[sound_idx] and altered_data:
-        new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line)
-        field_obj.fields[sound_idx] = new_sound_line
-        updated = True
+    if new_sound_line:
+        log_filename(f"getting altered data from3: {new_sound_line}")
+        altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, 0)
+        if new_sound_line != field_obj.fields[sound_idx] and altered_data:
+            new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line)
+            field_obj.fields[sound_idx] = new_sound_line
+            updated = True
 
-    altered_data = manage_files.get_altered_sound_data(new_translation_sound_line, 0, 0, 0)
-    if new_translation_sound_line and new_translation_sound_line != field_obj.fields[translation_sound_idx] and altered_data:
-        new_translation_sound_line = manage_files.alter_sound_file_times(altered_data, new_translation_sound_line)
-        field_obj.fields[translation_sound_idx] = new_translation_sound_line
-        updated = True
+    if new_translation_sound_line:
+        log_filename(f"getting altered data from translation: {new_translation_sound_line}")
+        altered_data = manage_files.get_altered_sound_data(new_translation_sound_line, 0, 0, 0)
+        if new_translation_sound_line != field_obj.fields[translation_sound_idx] and altered_data:
+            new_translation_sound_line = manage_files.alter_sound_file_times(altered_data, new_translation_sound_line)
+            field_obj.fields[translation_sound_idx] = new_translation_sound_line
+            updated = True
 
     if not image_line:
         generated_img = manage_files.get_image_line_if_empty("", new_sound_line)
@@ -291,7 +295,6 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
         target_block, subtitle_path = manage_files.get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
 
     new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path)
-    print(f"generated new sound line: {new_sound_line}")
     new_sentence_line = format_text(new_sentence_line)
 
     config = manage_files.extract_config_data()
@@ -312,12 +315,17 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
     new_translation_line = format_text(new_translation_line)
 
     if not translation_sound_line and generate_translation_sound:
-        print(f"\ngenerating translation audio\n")
         new_translation_sound_line = manage_files.get_translation_sound_line_from_target_sound_line(new_sound_line)
-        print(f"new_translation_sound_line: {new_translation_sound_line} ")
     else:
         new_translation_sound_line = ""
 
+    log_filename(f"generated fields:\n"
+                          f"new_sound_line: {new_sound_line}\n"
+                          f"new_sentence_line: {new_sentence_line}\n"
+                          f"new_image_line: {new_image_line}\n"
+                          f"new_translation_line: {new_translation_line}\n"
+                          f"new_translation_sound_line: {new_translation_sound_line}\n"
+                          )
     return new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line
 
 def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
@@ -351,6 +359,8 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     subtitle_path = manage_files.get_subtitle_path_from_full_filename_track_code(full_source_filename, track, code)
     blocks = manage_files.get_subtitle_blocks_from_index_range(start_index - add_to_start, end_index + add_to_end, subtitle_path)
     new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path)
+
+    log_filename(f"getting altered data from5: {new_sound_line}")
     altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, 0)
     manage_files.alter_sound_file_times(altered_data, new_sound_line)
 
@@ -390,9 +400,8 @@ def new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, 
     end_index = data["end_index"]
 
     blocks = manage_files.get_subtitle_blocks_from_index_range(start_index - relative_start, end_index + relative_end, subtitle_path)
-    print(f"blocks: {blocks}")
+    log_filename(f"blocks: {blocks}")
     new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path)
-    print(f"new_sound_line: {new_sound_line}")
     return new_sound_line, new_sentence_line
 
 
@@ -425,6 +434,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     fixed_sound_line, block, subtitle_path = manage_files.get_valid_sound_line_from_sound_and_sentence_line(sound_line, sentence_line)
     print(f"fixed sound line: {fixed_sound_line}")
 
+    log_filename(f"getting altered data from1: {fixed_sound_line}")
     altered_data = manage_files.get_altered_sound_data(fixed_sound_line, -start_delta, end_delta, None)
     print(f"sending data to alter sound file times: {altered_data}")
     new_sound_line = manage_files.alter_sound_file_times(altered_data, fixed_sound_line)

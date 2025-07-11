@@ -12,6 +12,8 @@ import html
 import logging
 from .manage_files import get_field_key_from_label
 from .manage_files import log_filename
+from .manage_files import log_error
+from .manage_files import log_image
 try:
     from . import manage_files
 except ImportError:
@@ -63,7 +65,7 @@ def get_fields_from_editor(editor):
 
     image_line = editor.note.fields[image_idx] if 0 <= image_idx < len(editor.note.fields) else ""
     if "<img src=" not in image_line:
-        print("no valid image detected")
+        log_image("no valid image detected")
         image_line = ""
 
     sentence_line = editor.note.fields[sentence_idx] if 0 <= sentence_idx < len(editor.note.fields) else ""
@@ -252,11 +254,12 @@ def generate_fields_helper(editor, note):
 
     if not image_line:
         generated_img = manage_files.get_image_line_if_empty("", new_sound_line)
+        log_image(f"new image: {generated_img}")
         if generated_img and isinstance(generated_img, str):
             field_obj.fields[image_idx] = generated_img
             updated = True
         else:
-            print("Image generation failed or result was not a string.")
+            log_image("Image generation failed or result was not a string.")
     else:
         update_field(image_idx, new_image_line)
 
@@ -304,9 +307,11 @@ def generate_fields_sound_sentence_image_translation(sound_line, sentence_line, 
     generate_translation_sound = get_field_key_from_label(note_type_name, "Translation Audio", config)
 
     if not image_line and generate_image:
+        log_image(f"image line empty, generating new one")
         new_image_line = manage_files.get_image_line_if_empty(image_line, new_sound_line)
     else:
         new_image_line = image_line
+    log_image(f"generated image line: {image_line}")
 
     if not translation_line and generate_translation_line:
         new_translation_line = manage_files.get_translation_line_from_target_sound_line(new_sound_line)
@@ -642,7 +647,7 @@ def get_fields_from_note(note):
 
     image_line = note.fields[image_idx] if 0 <= image_idx < len(note.fields) else ""
     if "<img src=" not in image_line:
-        print("no valid image detected")
+        log_image("no valid image detected")
         image_line = ""
 
     sentence_line = note.fields[sentence_idx] if 0 <= sentence_idx < len(note.fields) else ""

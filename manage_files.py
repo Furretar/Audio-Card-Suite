@@ -16,9 +16,10 @@ temp_ffmpeg_folder = os.path.join(addon_dir, "ffmpeg")
 temp_ffmpeg_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffmpeg.exe")
 temp_ffprobe_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffprobe.exe")
 
-DEBUG_FILENAME = True
+DEBUG_FILENAME = False
 DEBUG_COMMAND = True
 DEBUG_ERROR = True
+DEBUG_IMAGE = True
 
 def log_filename(message):
     if DEBUG_FILENAME:
@@ -34,6 +35,11 @@ def log_error(message):
     if DEBUG_ERROR:
         func = inspect.stack()[1].function
         print(f"{func}:\n[error] {message.strip()}\n")
+
+def log_image(message):
+    if DEBUG_IMAGE:
+        func = inspect.stack()[1].function
+        print(f"{func}:\n[image] {message.strip()}\n")
 
 
 
@@ -78,8 +84,6 @@ def get_collection_dir():
     return mw.col.media.dir()
 
 def extract_sound_line_data(sound_line):
-
-
     format_type = detect_format(sound_line)
 
     if format_type == "backtick":
@@ -91,18 +95,15 @@ def extract_sound_line_data(sound_line):
         groups = match.groupdict()
         filename_base = groups["filename_base"]
         source_file_extension = groups.get("source_file_extension") or ""
-
-
         lang_code = groups.get("lang_code") or ""
         sha = groups.get("sha") or ""
-        start_time_raw = groups["start_time"]
-        end_time_raw = groups["end_time"]
+        start_time = groups["start_time"]
+        end_time = groups["end_time"]
         subtitle_range = groups["subtitle_range"]
-        sound_file_extension  = groups["sound_file_extension"]
+        sound_file_extension = groups["sound_file_extension"]
         normalize_tag = groups.get("normalize_tag") or ""
 
         start_index, end_index = map(int, subtitle_range.split("-"))
-
         full_source_filename = f"{filename_base}{source_file_extension}"
         meta_parts = [full_source_filename]
 
@@ -110,12 +111,21 @@ def extract_sound_line_data(sound_line):
             meta_parts.append(lang_code)
         if sha:
             meta_parts.append(sha)
-        meta_parts.append(f"{start_time_raw}-{end_time_raw}")
+        meta_parts.append(f"{start_time}-{end_time}")
         meta_parts.append(subtitle_range)
         if normalize_tag:
             meta_parts.append(normalize_tag)
 
-        timestamp_filename = "`".join(meta_parts) + f".{sound_file_extension }"
+        timestamp_filename = "`".join(meta_parts) + f".{sound_file_extension}"
+        timestamp_filename_no_normalize = "`".join(meta_parts[:-1 if normalize_tag else None])
+
+        print(f"start time raw: {start_time}")
+        audio_collection_path = os.path.join(get_collection_dir(), timestamp_filename)
+
+        m4b_image_filename = f"{filename_base}.{sound_file_extension}.jpg"
+        image_filename = f"{filename_base}.{sound_file_extension}`{start_time}.jpg"
+        image_collection_path = os.path.join(get_collection_dir(), image_filename)
+        m4b_image_collection_path = os.path.join(get_collection_dir(), m4b_image_filename)
 
         log_filename(
             f"extracting data from: {sound_line}\n"
@@ -123,62 +133,48 @@ def extract_sound_line_data(sound_line):
             f"full_source_filename: {full_source_filename}\n"
             f"timestamp filename: {timestamp_filename}\n"
         )
+        log_image(f"image collection path: {image_collection_path}")
 
-        timestamp_filename_no_normalize = "`".join(meta_parts[:-1 if normalize_tag else None])
+        return {
+            "filename_base": filename_base,
+            "source_file_extension": source_file_extension,
+            "lang_code": lang_code,
+            "sha": sha,
+            "start_time": start_time,
+            "end_time": end_time,
+            "start_index": start_index,
+            "end_index": end_index,
+            "normalize_tag": normalize_tag,
+            "sound_file_extension": sound_file_extension,
+            "full_source_filename": full_source_filename,
+            "timestamp_filename": timestamp_filename,
+            "timestamp_filename_no_normalize": timestamp_filename_no_normalize,
+            "collection_path": audio_collection_path,
+            "image_filename": image_filename,
+            "m4b_image_filename": m4b_image_filename,
+            "image_collection_path": image_collection_path,
+            "m4b_image_collection_path": m4b_image_collection_path,
+        }
 
-    else:
-        if not sound_line:
-            log_error("extract_sound_line_data received None or empty string")
-            return None
-
-        if sound_line.startswith("[sound:") and sound_line.endswith("]"):
-            filename = sound_line[len("[sound:"):-1]
-            collection_path = os.path.join(get_collection_dir(), filename)
-            filename_base = filename.split("`")[0]
-            sound_file_extension = os.path.splitext(filename)[1].lstrip(".")
-
-            return {
-                "filename_base": filename_base,
-                "sound_file_extension": sound_file_extension,
-                "full_source_filename": filename,  # or construct as needed
-                "collection_path": collection_path
-            }
-
+    # fallback if not backtick
+    if not sound_line:
+        log_error("extract_sound_line_data received None or empty string")
         return None
 
-    def convert(ts):
-        return re.sub(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms", r"\1.\2.\3.\4", ts)
+    if sound_line.startswith("[sound:") and sound_line.endswith("]"):
+        filename = sound_line[len("[sound:"):-1]
+        collection_path = os.path.join(get_collection_dir(), filename)
+        filename_base = filename.split("`")[0]
+        sound_file_extension = os.path.splitext(filename)[1].lstrip(".")
 
-    start_time = convert(start_time_raw)
-    end_time = convert(end_time_raw)
-    audio_collection_path = os.path.join(get_collection_dir(), timestamp_filename)
+        return {
+            "filename_base": filename_base,
+            "sound_file_extension": sound_file_extension,
+            "full_source_filename": filename,
+            "collection_path": collection_path
+        }
 
-    m4b_image_filename = f"{filename_base}`{sound_file_extension }.jpg"
-    image_filename = f"{filename_base}`{sound_file_extension }`{start_time}.jpg"
-
-    image_collection_path = os.path.join(get_collection_dir(), image_filename)
-    m4b_image_collection_path = os.path.join(get_collection_dir(), m4b_image_filename)
-
-    return {
-        "filename_base": filename_base,
-        "source_file_extension": source_file_extension,
-        "lang_code": lang_code,
-        "sha": sha,
-        "start_time": start_time,
-        "end_time": end_time,
-        "start_index": start_index,
-        "end_index": end_index,
-        "normalize_tag": normalize_tag,
-        "sound_file_extension": sound_file_extension ,
-        "full_source_filename": full_source_filename,
-        "timestamp_filename": timestamp_filename,
-        "timestamp_filename_no_normalize": timestamp_filename_no_normalize,
-        "collection_path": audio_collection_path,
-        "image_filename": image_filename,
-        "m4b_image_filename": m4b_image_filename,
-        "image_collection_path": image_collection_path,
-        "m4b_image_collection_path": m4b_image_collection_path,
-    }
+    return None
 
 
 def extract_config_data():
@@ -489,6 +485,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
 
 def check_for_video_source(full_source_filename) -> str:
     path = os.path.join(addon_source_folder, full_source_filename)
+    log_image(f"searching path for video: {path}")
     if os.path.exists(path):
         return path
     return ""
@@ -530,21 +527,24 @@ def get_image_line_if_empty(image_line, sound_line):
     if image_line:
         return image_line
 
-    log_filename(f"No image found, extracting from source. image line: {image_line}, sound line: {sound_line}")
+
     data = extract_sound_line_data(sound_line)
     if not data:
         log_error(f"extract_sound_line_data returned None.")
         return ""
 
-    filename_base = data.get("filename_base")
+    full_source_filename = data.get("full_source_filename")
     image_collection_path = data.get("image_collection_path")
     m4b_image_collection_path = data.get("m4b_image_collection_path")
     image_filename = data.get("image_filename")
     start_time = data.get("start_time")
 
-    video_source_path = check_for_video_source(filename_base)
+    video_source_path = check_for_video_source(full_source_filename)
     if not video_source_path:
+        log_image(f"video source path not found, returning")
         return ""
+
+
 
     _, ext = os.path.splitext(video_source_path)
     video_extension = ext.lower()
@@ -556,6 +556,8 @@ def get_image_line_if_empty(image_line, sound_line):
         m4b_image_collection_path
     )
 
+    log_image(f"No image found, extracting from source: {image_path}")
+
     if image_path:
         if video_extension == ".m4b":
             embed_image = f'<img src="{os.path.basename(m4b_image_collection_path)}">'
@@ -563,7 +565,7 @@ def get_image_line_if_empty(image_line, sound_line):
             embed_image = f'<img src="{os.path.basename(image_filename)}">'
 
 
-        print(f"add image: {embed_image}")
+        log_image(f"add image: {embed_image}")
         return embed_image
     else:
         showInfo("Could not add image")
@@ -1344,8 +1346,8 @@ def alter_sound_file_times(altered_data, sound_line) -> str:
         sound_line
     )
     try:
-        log_command(f"generating new sound file: {altered_data['new_path']}")
-        log_command(f"Running FFmpeg command: {' '.join(cmd)}")
+        log_filename(f"generating new sound file: {altered_data['new_path']}")
+        log_filename(f"Running FFmpeg command: {' '.join(cmd)}")
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError:
         log_error("FFmpeg failed.")

@@ -16,7 +16,7 @@ temp_ffmpeg_folder = os.path.join(addon_dir, "ffmpeg")
 temp_ffmpeg_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffmpeg.exe")
 temp_ffprobe_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffprobe.exe")
 
-DEBUG_FILENAME = False
+DEBUG_FILENAME = True
 DEBUG_COMMAND = True
 DEBUG_ERROR = True
 DEBUG_IMAGE = True
@@ -160,19 +160,6 @@ def extract_sound_line_data(sound_line):
         log_error("extract_sound_line_data received None or empty string")
         return None
 
-    if sound_line.startswith("[sound:") and sound_line.endswith("]"):
-        filename = sound_line[len("[sound:"):-1]
-        collection_path = os.path.join(get_collection_dir(), filename)
-        filename_base = filename.split("`")[0]
-        sound_file_extension = os.path.splitext(filename)[1].lstrip(".")
-
-        return {
-            "filename_base": filename_base,
-            "sound_file_extension": sound_file_extension,
-            "full_source_filename": filename,
-            "collection_path": collection_path
-        }
-
     return None
 
 
@@ -291,9 +278,9 @@ def get_subtitle_path_from_full_filename_track_code(filename, track, code):
 
     track_str = f"`track_{track}`"
     for file in os.listdir(addon_source_folder):
-        starts = file.startswith(filename_base)
+        starts = file.startswith(filename)
         has_track = track_str in file
-        log_command(f"checking: {file}, starts: {starts}, has_track: {has_track}")
+        log_command(f"checking: {file}, starts with {filename}: {starts}, has_track: {has_track}")
 
         if file.startswith(filename_base) and track_str in file:
             subtitle_path = os.path.join(addon_source_folder, file)
@@ -613,7 +600,7 @@ def get_subtitle_code_by_track_number(source_path, track_number):
     return None
 
 
-def get_subtitle_blocks_from_index_range(start_index, end_index, subtitle_path):
+def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path):
     with open(subtitle_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
@@ -667,23 +654,6 @@ def get_valid_sound_line_from_sound_and_sentence_line(sound_line: str, sentence_
         return new_sound_line, block, subtitle_path
 
     return sound_line, block, subtitle_path
-
-def get_subtitle_block_from_index_and_path(subtitle_index, subtitle_path):
-    if not os.path.exists(subtitle_path):
-        log_error(f"Subtitle file does not exist: {subtitle_path}")
-        return []
-
-    with open(subtitle_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-
-    blocks = content.strip().split('\n\n')
-
-    if 0 <= subtitle_index < len(blocks):
-        formatted_block = format_subtitle_block(blocks[subtitle_index])
-        return formatted_block if formatted_block else []
-
-    log_error(f"Index {subtitle_index} out of range for subtitle file {subtitle_path}")
-    return []
 
 def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
     config = extract_config_data()

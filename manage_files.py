@@ -1,11 +1,10 @@
-import logging
 import os
 import shutil
 import subprocess
-import re
 import json
-from fileinput import filename
 import inspect
+import html
+import re
 
 
 from aqt.utils import showInfo
@@ -61,7 +60,7 @@ video_exts = [
 
 BACKTICK_PATTERN = re.compile(
     r'^\[sound:'
-    r'(?P<filename_base>[^`\.]+)'                     # base name before extension
+    r'(?P<filename_base>[^`.]+)'                     # base name before extension
     r'(?P<source_file_extension>\.[a-z0-9]+)?'        # optional extension (with no backtick)
     r'(?:`(?P<lang_code>[a-z]{3}))?'                  # optional language code
     r'(?:`(?P<sha>[A-Za-z0-9]{4}))?'                  # optional sha
@@ -69,7 +68,7 @@ BACKTICK_PATTERN = re.compile(
     r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'
     r'(?P<subtitle_range>\d+-\d+)'
     r'(?:`(?P<normalize_tag>[^`]+))?'
-    r'\.(?P<sound_file_extension>\w+)\]$',
+    r'\.(?P<sound_file_extension>\w+)]$',
     re.IGNORECASE
 )
 
@@ -77,6 +76,21 @@ BACKTICK_PATTERN = re.compile(
 
 
 # get data
+def get_ffmpeg_exe_path():
+    exe_path = shutil.which("ffmpeg")
+    probe_path = shutil.which("ffprobe")
+    if exe_path:
+        return exe_path, probe_path
+
+    if os.path.exists(temp_ffmpeg_exe):
+        return temp_ffmpeg_exe, temp_ffprobe_exe
+
+    log_error("FFmpeg executable not found in PATH or addon folder.")
+    showInfo("FFmpeg is not installed or could not be found.\n\n"
+             "Either install FFmpeg globally and add it to your system PATH,\n"
+             "or place ffmpeg.exe in the addon folder under: ffmpeg/bin/ffmpeg.exe")
+    return None, None
+
 def get_collection_dir():
     from aqt import mw
     if not mw or not mw.col:
@@ -162,7 +176,6 @@ def extract_sound_line_data(sound_line):
 
     return None
 
-
 def extract_config_data():
     config_path = os.path.join(os.path.dirname(__file__), "config.json")
     if not os.path.exists(config_path):
@@ -193,7 +206,6 @@ def extract_config_data():
 
     return dict(zip(keys, values))
 
-
 def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> str:
     mapped_fields = config["mapped_fields"][note_type_name]
     for field_key, mapped_label in mapped_fields.items():
@@ -201,45 +213,22 @@ def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> s
             return field_key
     return ""
 
-def get_ffmpeg_exe_path():
-    exe_path = shutil.which("ffmpeg")
-    probe_path = shutil.which("ffprobe")
-    if exe_path:
-        return exe_path, probe_path
-
-    if os.path.exists(temp_ffmpeg_exe):
-        return temp_ffmpeg_exe, temp_ffprobe_exe
-
-    log_error("FFmpeg executable not found in PATH or addon folder.")
-    showInfo("FFmpeg is not installed or could not be found.\n\n"
-             "Either install FFmpeg globally and add it to your system PATH,\n"
-             "or place ffmpeg.exe in the addon folder under: ffmpeg/bin/ffmpeg.exe")
-    return None, None
-
-def get_audio_start_time_ms(source_file_path: str) -> int:
+def get_video_duration_seconds(path):
     _, ffprobe_path = get_ffmpeg_exe_path()
-    cmd = [
-        ffprobe_path, "-v", "error",
-        "-select_streams", "a:0",
-        "-show_packets", "-read_intervals", "0%+#5",
-        "-print_format", "compact", source_file_path
-    ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        log_command(f"ffprobe output: {result.stdout.strip()}")
-        match = re.search(r"pts_time=(\d+(?:\.\d+)?)", result.stdout)
-        return round(float(match.group(1)) * 1000) if match else 0
+        result = subprocess.run(
+            [f"{ffprobe_path}", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        return float(result.stdout.strip())
     except Exception as e:
-        log_error(f"ffprobe failed: {e}")
+        print("Failed to get duration:", e)
         return 0
 
-
-def get_subtitle_path_from_sound_line(sound_line):
-    data = extract_sound_line_data(sound_line)
-    full_source_filename = data["full_source_filename"]
-    track = config["target_subtitle_track"]
-    code = config["target_language_code"]
-
+def get_subtitle_path_from_full_filename_track_and_code(filename, track, code):
     filename_base, _ = os.path.splitext(filename)
     config = extract_config_data()
     selected_tab_index = config["selected_tab_index"]
@@ -295,6 +284,313 @@ def get_subtitle_path_from_sound_line(sound_line):
     print("No matching subtitle file found.")
     return None
 
+def generate_image_line_from_sound_line(image_line, sound_line):
+    # check if any field already has an image
+    if image_line:
+        return image_line
+
+    data = extract_sound_line_data(sound_line)
+    if not data:
+        log_error(f"extract_sound_line_data returned None.")
+        return ""
+
+    full_source_filename = data.get("full_source_filename")
+    image_collection_path = data.get("image_collection_path")
+    m4b_image_collection_path = data.get("m4b_image_collection_path")
+    image_filename = data.get("image_filename")
+    start_time = data.get("start_time")
+
+    video_source_path = get_source_path_from_full_filename(full_source_filename)
+    if not video_source_path:
+        log_image(f"video source path not found, returning")
+        return ""
+
+
+
+    _, ext = os.path.splitext(video_source_path)
+    video_extension = ext.lower()
+
+    image_path = run_ffmpeg_extract_image_command(
+        video_source_path,
+        start_time,
+        image_collection_path,
+        m4b_image_collection_path
+    )
+
+    log_image(f"No image found, extracting from source: {image_path}")
+
+    if image_path:
+        if video_extension == ".m4b":
+            embed_image = f'<img src="{os.path.basename(m4b_image_collection_path)}">'
+        else:
+            embed_image = f'<img src="{os.path.basename(image_filename)}">'
+
+
+        log_image(f"add image: {embed_image}")
+        return embed_image
+    else:
+        showInfo("Could not add image")
+        return ""
+
+def get_translation_line_from_target_sound_line(target_sound_line):
+    if not target_sound_line:
+        log_error("get_translation_line_from_sound_line received None sound_line.")
+        return ""
+
+    log_filename(f"extracting data from target_sound_line: {target_sound_line}")
+    data = extract_sound_line_data(target_sound_line)
+    if not data:
+        log_error(f"extract_sound_line_data returned None.")
+        return ""
+
+    config = extract_config_data()
+    translation_audio_track = config["translation_audio_track"]
+    translation_language_code = config["translation_language_code"]
+    start_time = data["start_time"]
+    end_time = data["end_time"]
+    full_source_filename = data["full_source_filename"]
+
+
+    translation_subtitle_path = get_subtitle_path_from_full_filename_track_and_code(full_source_filename, translation_audio_track, translation_language_code)
+    overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
+
+    translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
+    translation_line = re.sub(r"\{.*?}", "", translation_line)
+    return translation_line.strip()
+
+def get_translation_sound_line_from_target_sound_line(target_sound_line):
+    if not target_sound_line:
+        log_error(f"received None sound_line. ")
+        return ""
+
+    log_filename(f"extracting data from target_sound_line: {target_sound_line}")
+    data = extract_sound_line_data(target_sound_line)
+    if not data:
+        log_error(f"extract_sound_line_data returned None.")
+        return ""
+
+    config = extract_config_data()
+    translation_audio_track = config["translation_audio_track"]
+    translation_language_code = config["translation_language_code"]
+    filename_base = data["filename_base"]
+    source_file_extension = data["source_file_extension"]
+    full_source_filename = data["full_source_filename"]
+
+
+    translation_subtitle_path = get_subtitle_path_from_full_filename_track_and_code(
+        full_source_filename, translation_audio_track, translation_language_code
+    )
+
+
+
+    overlapping_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(
+        translation_subtitle_path, data["start_time"], data["end_time"]
+    )
+
+    if not overlapping_blocks:
+        log_error("No overlapping translation blocks found.")
+        return ""
+
+    try:
+        first_start = convert_timestamp_dot_to_hmsms(overlapping_blocks[0][1])
+        last_end = convert_timestamp_dot_to_hmsms(overlapping_blocks[-1][2])
+        start_index = overlapping_blocks[0][0]
+        end_index = overlapping_blocks[-1][0]
+
+        config = extract_config_data()
+        audio_ext = config["audio_ext"]
+
+        timestamp = f"{filename_base}{source_file_extension}`{translation_language_code}`{first_start}-{last_end}`{start_index}-{end_index}.{audio_ext}"
+        translation_sound_line = f"[sound:{timestamp}]"
+        log_filename(f"translation sound line: {translation_sound_line}")
+        return translation_sound_line
+    except Exception as e:
+        log_error(f"Error generating translation sound line: {e}")
+        return ""
+
+def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, start_time, end_time):
+
+    if not subtitle_path:
+        print("Subtitle path is None.")
+        return []
+
+    if not os.path.exists(subtitle_path):
+        print(f"Subtitle file not found: {subtitle_path}")
+        return []
+
+    start_ms = time_hmsms_to_milliseconds(start_time)
+    end_ms = time_hmsms_to_milliseconds(end_time)
+
+    if not os.path.exists(subtitle_path):
+        print(f"Subtitle file not found: {subtitle_path}")
+        return []
+
+    with open(subtitle_path, "r", encoding="utf-8") as f:
+        raw_blocks = f.read().strip().split("\n\n")
+
+    formatted_blocks = []
+    for block in raw_blocks:
+        if not block.strip():
+            continue
+        lines = block.strip().splitlines()
+        if len(lines) < 3:
+            continue
+        formatted = format_subtitle_block(block)
+        if formatted:
+            formatted_blocks.append(formatted)
+
+    overlapping_blocks = []
+    for block in formatted_blocks:
+        try:
+            sub_start_ms = time_hmsms_to_milliseconds(block[1])
+            sub_end_ms = time_hmsms_to_milliseconds(block[2])
+        except:
+            continue
+
+        if sub_start_ms > end_ms:
+            break
+
+        if sub_start_ms < end_ms and sub_end_ms > start_ms:
+            overlapping_blocks.append(block)
+
+    return overlapping_blocks
+
+def get_source_path_from_full_filename(full_source_filename) -> str:
+    log_filename(f"received filename: {full_source_filename}")
+    possible_bases = [full_source_filename, full_source_filename.replace("_", " ")]
+
+    for base in possible_bases:
+        path = os.path.join(addon_source_folder, base)
+        log_image(f"searching path for video: {path}")
+        log_command(f"now checking: {path}")
+        if os.path.exists(path):
+            return path
+
+    log_error(f"No source file found for base name: {full_source_filename}")
+    return ""
+
+def get_subtitle_track_number_by_code(source_path, code):
+    _, ffprobe_exe = get_ffmpeg_exe_path()
+    try:
+        cmd = [
+            ffprobe_exe, "-v", "error", "-select_streams", "s",
+            "-show_entries", "stream=index:stream_tags=language",
+            "-of", "json", source_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        streams = json.loads(result.stdout).get("streams", [])
+
+        for i, s in enumerate(streams, 1):
+            if s.get("tags", {}).get("language", "").lower() == code.lower():
+                return i
+
+        log_error(f"No subtitle with code '{code}' found in: {source_path}")
+        return 1 if streams else None
+
+    except Exception as e:
+        log_error(f"ffprobe error: {e}")
+
+    log_error(f"Could not get track number by code: {code}, source_path: {source_path}")
+    return None
+
+def get_subtitle_code_by_track_number(source_path, track_number):
+    _, ffprobe_exe = get_ffmpeg_exe_path()
+    try:
+        cmd = [
+            ffprobe_exe, "-v", "error", "-select_streams", "s",
+            "-show_entries", "stream=index:stream_tags=language",
+            "-of", "json", source_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        streams = json.loads(result.stdout).get("streams", [])
+        if 1 <= track_number <= len(streams):
+            return streams[track_number - 1].get("tags", {}).get("language", "")
+    except Exception as e:
+        log_error(f"ffprobe error: {e}")
+    return None
+
+def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path):
+    with open(subtitle_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    blocks = content.strip().split('\n\n')
+
+    formatted_blocks = []
+    for block in blocks:
+        formatted = format_subtitle_block(block)
+        formatted_blocks.append(formatted)
+
+    if start_index < 0 or end_index >= len(formatted_blocks) or start_index > end_index:
+        print(f"Invalid range: {start_index} to {end_index}, total blocks: {len(formatted_blocks)}")
+        return []
+
+    return formatted_blocks[start_index - 1:end_index]
+
+def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
+    config = extract_config_data()
+    track = config["target_subtitle_track"]
+    code = config["target_language_code"]
+
+    sentence_line = sentence_line or ""
+    normalized_sentence = normalize_text(sentence_line)
+
+    def try_match_subtitles(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+            blocks = content.split('\n\n')
+
+        formatted_blocks = [format_subtitle_block(b) for b in blocks]
+        usable_blocks = [b for b in formatted_blocks if b and len(b) == 4]
+        normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
+
+        for i, norm_line in enumerate(normalized_lines):
+            if norm_line.startswith(normalized_sentence):
+                log_filename(f"returning sub path1: {path}")
+                return usable_blocks[i], path
+
+        for start in range(len(normalized_lines)):
+            joined = ""
+            for end in range(start, len(normalized_lines)):
+                joined += normalized_lines[end]
+                if normalized_sentence in joined:
+                    log_filename(f"returning sub path2: {path}")
+                    return usable_blocks[end], path
+                if len(joined) > len(normalized_sentence) + 50:
+                    break
+
+        return None, None
+
+    checked_bases = set()
+
+    # first pass: already extracted subtitles
+    for filename in os.listdir(addon_source_folder):
+        filename_base, ext = os.path.splitext(filename)
+        ext = ext.lower()
+        if ext in video_exts or ext in audio_exts:
+            subtitle_path = get_subtitle_path_from_full_filename_track_and_code(filename, track, code)
+            if subtitle_path and os.path.exists(subtitle_path):
+                block, path = try_match_subtitles(subtitle_path)
+                if block:
+                    log_filename(f"returning sub path3: {path}")
+                    return block, path
+            checked_bases.add(filename_base)
+
+    # second pass: extract missing subtitles
+    for filename in os.listdir(addon_source_folder):
+        filename_base, ext = os.path.splitext(filename)
+        ext = ext.lower()
+        if (ext in video_exts or ext in audio_exts) and filename_base not in checked_bases:
+            print(f"Extracting subtitles for: {filename}")
+            source_path = get_source_path_from_full_filename(filename)
+            extract_subtitle_files(source_path, track, code)
+            subtitle_path = get_subtitle_path_from_full_filename_track_and_code(filename, track, code)
+            if subtitle_path and os.path.exists(subtitle_path):
+                block, path = try_match_subtitles(subtitle_path)
+                if block:
+                    return block, path
+
+    print("No match found in any subtitle file.")
+    return None, None
 
 def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path):
     if not subtitle_path:
@@ -348,428 +644,6 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path)
         log_error(f"Error parsing timestamp in blocks:\n{blocks}\nError: {e}")
         return None, None
 
-
-def get_translation_line_from_target_sound_line(target_sound_line):
-    if not target_sound_line:
-        log_error("get_translation_line_from_sound_line received None sound_line.")
-        return ""
-
-    log_filename(f"extracting data from target_sound_line: {target_sound_line}")
-    data = extract_sound_line_data(target_sound_line)
-    if not data:
-        log_error(f"extract_sound_line_data returned None.")
-        return ""
-
-    config = extract_config_data()
-    translation_audio_track = config["translation_audio_track"]
-    translation_language_code = config["translation_language_code"]
-    start_time = data["start_time"]
-    end_time = data["end_time"]
-    full_source_filename = data["full_source_filename"]
-
-
-    translation_subtitle_path = get_subtitle_path_from_sound_line(full_source_filename, translation_audio_track, translation_language_code)
-    overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
-
-    translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
-    translation_line = re.sub(r"\{.*?\}", "", translation_line)
-    return translation_line.strip()
-
-def get_translation_sound_line_from_target_sound_line(target_sound_line):
-    if not target_sound_line:
-        log_error(f"received None sound_line. ")
-        return ""
-
-    log_filename(f"extracting data from target_sound_line: {target_sound_line}")
-    data = extract_sound_line_data(target_sound_line)
-    if not data:
-        log_error(f"extract_sound_line_data returned None.")
-        return ""
-
-    config = extract_config_data()
-    translation_audio_track = config["translation_audio_track"]
-    translation_language_code = config["translation_language_code"]
-    filename_base = data["filename_base"]
-    source_file_extension = data["source_file_extension"]
-    full_source_filename = data["full_source_filename"]
-
-
-    translation_subtitle_path = get_subtitle_path_from_sound_line(
-        full_source_filename, translation_audio_track, translation_language_code
-    )
-
-
-
-    overlapping_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(
-        translation_subtitle_path, data["start_time"], data["end_time"]
-    )
-
-    if not overlapping_blocks:
-        log_error("No overlapping translation blocks found.")
-        return ""
-
-    try:
-        first_start = convert_timestamp_dot_to_hmsms(overlapping_blocks[0][1])
-        last_end = convert_timestamp_dot_to_hmsms(overlapping_blocks[-1][2])
-        start_index = overlapping_blocks[0][0]
-        end_index = overlapping_blocks[-1][0]
-
-        config = extract_config_data()
-        audio_ext = config["audio_ext"]
-
-        timestamp = f"{filename_base}{source_file_extension}`{translation_language_code}`{first_start}-{last_end}`{start_index}-{end_index}.{audio_ext}"
-        translation_sound_line = f"[sound:{timestamp}]"
-        log_filename(f"translation sound line: {translation_sound_line}")
-        return translation_sound_line
-    except Exception as e:
-        log_error(f"Error generating translation sound line: {e}")
-        return ""
-
-
-
-def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, start_time, end_time):
-
-    if not subtitle_path:
-        print("Subtitle path is None.")
-        return []
-
-    if not os.path.exists(subtitle_path):
-        print(f"Subtitle file not found: {subtitle_path}")
-        return []
-
-    start_ms = time_hmsms_to_milliseconds(start_time)
-    end_ms = time_hmsms_to_milliseconds(end_time)
-
-    if not os.path.exists(subtitle_path):
-        print(f"Subtitle file not found: {subtitle_path}")
-        return []
-
-    with open(subtitle_path, "r", encoding="utf-8") as f:
-        raw_blocks = f.read().strip().split("\n\n")
-
-    formatted_blocks = []
-    for block in raw_blocks:
-        if not block.strip():
-            continue
-        lines = block.strip().splitlines()
-        if len(lines) < 3:
-            continue
-        formatted = format_subtitle_block(block)
-        if formatted:
-            formatted_blocks.append(formatted)
-
-    overlapping_blocks = []
-    for block in formatted_blocks:
-        try:
-            sub_start_ms = time_hmsms_to_milliseconds(block[1])
-            sub_end_ms = time_hmsms_to_milliseconds(block[2])
-        except:
-            continue
-
-        if sub_start_ms > end_ms:
-            break
-
-        if sub_start_ms < end_ms and sub_end_ms > start_ms:
-            overlapping_blocks.append(block)
-
-    return overlapping_blocks
-
-def check_for_video_source(full_source_filename) -> str:
-    path = os.path.join(addon_source_folder, full_source_filename)
-    log_image(f"searching path for video: {path}")
-    if os.path.exists(path):
-        return path
-    return ""
-
-def get_source_path_from_full_filename(full_source_filename) -> str:
-    log_filename(f"received filename: {full_source_filename}")
-    video_source_path = check_for_video_source(full_source_filename)
-    if video_source_path:
-        return video_source_path
-
-    possible_bases = [full_source_filename, full_source_filename.replace("_", " ")]
-
-    for base in possible_bases:
-        path = os.path.join(addon_source_folder, base)
-        log_command(f"now checking: {path}")
-        if os.path.exists(path):
-            return path
-
-    log_error(f"No source file found for base name: {full_source_filename}")
-    return ""
-
-def get_video_duration_seconds(path):
-    _, ffprobe_path = get_ffmpeg_exe_path()
-    try:
-        result = subprocess.run(
-            [f"{ffprobe_path}", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        return float(result.stdout.strip())
-    except Exception as e:
-        print("Failed to get duration:", e)
-        return 0
-
-def get_image_line_if_empty(image_line, sound_line):
-    # check if any field already has an image
-    if image_line:
-        return image_line
-
-
-    data = extract_sound_line_data(sound_line)
-    if not data:
-        log_error(f"extract_sound_line_data returned None.")
-        return ""
-
-    full_source_filename = data.get("full_source_filename")
-    image_collection_path = data.get("image_collection_path")
-    m4b_image_collection_path = data.get("m4b_image_collection_path")
-    image_filename = data.get("image_filename")
-    start_time = data.get("start_time")
-
-    video_source_path = check_for_video_source(full_source_filename)
-    if not video_source_path:
-        log_image(f"video source path not found, returning")
-        return ""
-
-
-
-    _, ext = os.path.splitext(video_source_path)
-    video_extension = ext.lower()
-
-    image_path = run_ffmpeg_extract_image_command(
-        video_source_path,
-        start_time,
-        image_collection_path,
-        m4b_image_collection_path
-    )
-
-    log_image(f"No image found, extracting from source: {image_path}")
-
-    if image_path:
-        if video_extension == ".m4b":
-            embed_image = f'<img src="{os.path.basename(m4b_image_collection_path)}">'
-        else:
-            embed_image = f'<img src="{os.path.basename(image_filename)}">'
-
-
-        log_image(f"add image: {embed_image}")
-        return embed_image
-    else:
-        showInfo("Could not add image")
-        return ""
-
-
-
-def get_subtitle_track_number_by_code(source_path, code):
-    _, ffprobe_exe = get_ffmpeg_exe_path()
-    try:
-        cmd = [
-            ffprobe_exe, "-v", "error", "-select_streams", "s",
-            "-show_entries", "stream=index:stream_tags=language",
-            "-of", "json", source_path
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        streams = json.loads(result.stdout).get("streams", [])
-
-        for i, s in enumerate(streams, 1):
-            if s.get("tags", {}).get("language", "").lower() == code.lower():
-                return i
-
-        log_error(f"No subtitle with code '{code}' found in: {source_path}")
-        return 1 if streams else None
-
-    except Exception as e:
-        log_error(f"ffprobe error: {e}")
-
-    log_error(f"Could not get track number by code: {code}, source_path: {source_path}")
-    return None
-
-def get_subtitle_code_by_track_number(source_path, track_number):
-    _, ffprobe_exe = get_ffmpeg_exe_path()
-    try:
-        cmd = [
-            ffprobe_exe, "-v", "error", "-select_streams", "s",
-            "-show_entries", "stream=index:stream_tags=language",
-            "-of", "json", source_path
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        streams = json.loads(result.stdout).get("streams", [])
-        if 1 <= track_number <= len(streams):
-            return streams[track_number - 1].get("tags", {}).get("language", "")
-    except Exception as e:
-        log_error(f"ffprobe error: {e}")
-    return None
-
-
-def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path):
-    with open(subtitle_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-
-    blocks = content.strip().split('\n\n')
-
-    formatted_blocks = []
-    for block in blocks:
-        formatted = format_subtitle_block(block)
-        formatted_blocks.append(formatted)
-
-    if start_index < 0 or end_index >= len(formatted_blocks) or start_index > end_index:
-        print(f"Invalid range: {start_index} to {end_index}, total blocks: {len(formatted_blocks)}")
-        return []
-
-    return formatted_blocks[start_index - 1:end_index]
-
-
-def get_valid_sound_line_from_sound_and_sentence_line(sound_line: str, sentence_line: str):
-    block = None
-
-    if not sound_line:
-        block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
-        if not block or not subtitle_path:
-            return None, None, None
-        sound_line, _ = get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path)
-        return sound_line, block, subtitle_path
-
-    format = detect_format(sound_line)
-
-    if format not in ["backtick"]:
-        block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
-        if not block or not subtitle_path:
-            return None, None, None
-        sound_line, _ = get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path)
-
-    log_filename(f"extracting data from sound_line: {sound_line}")
-    data = extract_sound_line_data(sound_line)
-    full_source_filename = data["full_source_filename"]
-    config = extract_config_data()
-    track = config.get("target_subtitle_track")
-    code = config.get("target_language_code")
-    log_command(f"config: {config}")
-    subtitle_path = get_subtitle_path_from_sound_line(full_source_filename, track, code)
-
-    if format == "backtick":
-        block, subtitle_path = get_subtitle_block_from_sound_line_and_sentence_line(sound_line, sentence_line)
-        if not block or not subtitle_path:
-            print(f"no block returned")
-            return None, None, None
-        new_sound_line, _ = get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path)
-        return new_sound_line, block, subtitle_path
-
-    return sound_line, block, subtitle_path
-
-def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line: str):
-    config = extract_config_data()
-    track = config["target_subtitle_track"]
-    code = config["target_language_code"]
-
-    sentence_line = sentence_line or ""
-    normalized_sentence = normalize_text(sentence_line)
-
-    def try_match_subtitles(path):
-        with open(path, 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-            blocks = content.split('\n\n')
-
-        formatted_blocks = [format_subtitle_block(b) for b in blocks]
-        usable_blocks = [b for b in formatted_blocks if b and len(b) == 4]
-        normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
-
-        for i, norm_line in enumerate(normalized_lines):
-            if norm_line.startswith(normalized_sentence):
-                log_filename(f"returning sub path1: {path}")
-                return usable_blocks[i], path
-
-        for start in range(len(normalized_lines)):
-            joined = ""
-            for end in range(start, len(normalized_lines)):
-                joined += normalized_lines[end]
-                if normalized_sentence in joined:
-                    log_filename(f"returning sub path2: {path}")
-                    return usable_blocks[end], path
-                if len(joined) > len(normalized_sentence) + 50:
-                    break
-
-        return None, None
-
-    checked_bases = set()
-
-    # first pass: already extracted subtitles
-    for filename in os.listdir(addon_source_folder):
-        filename_base, ext = os.path.splitext(filename)
-        ext = ext.lower()
-        if ext in video_exts or ext in audio_exts:
-            subtitle_path = get_subtitle_path_from_sound_line(filename, track, code)
-            if subtitle_path and os.path.exists(subtitle_path):
-                block, path = try_match_subtitles(subtitle_path)
-                if block:
-                    log_filename(f"returning sub path3: {path}")
-                    return block, path
-            checked_bases.add(filename_base)
-
-    # second pass: extract missing subtitles
-    for filename in os.listdir(addon_source_folder):
-        filename_base, ext = os.path.splitext(filename)
-        ext = ext.lower()
-        if (ext in video_exts or ext in audio_exts) and filename_base not in checked_bases:
-            print(f"Extracting subtitles for: {filename}")
-            source_path = get_source_path_from_full_filename(filename)
-            extract_subtitle_files(source_path, track, code)
-            subtitle_path = get_subtitle_path_from_sound_line(filename, track, code)
-            if subtitle_path and os.path.exists(subtitle_path):
-                block, path = try_match_subtitles(subtitle_path)
-                if block:
-                    return block, path
-
-    print("No match found in any subtitle file.")
-    return None, None
-
-
-def get_subtitle_block_from_sound_line_and_sentence_line(sound_line: str, sentence_line: str):
-    log_filename(f"extracting data from sound_line: {sound_line}")
-    data = extract_sound_line_data(sound_line)
-    if not data:
-        log_error(f"no data extracted from {sound_line}")
-        return None, None
-
-    full_source_filename = data["full_source_filename"]
-
-    config = extract_config_data()
-    track = config["target_subtitle_track"]
-    code = config["target_language_code"]
-
-    subtitle_path = get_subtitle_path_from_sound_line(full_source_filename, track, code)
-    if not subtitle_path or not os.path.exists(subtitle_path):
-        log_error(f"Subtitle path not found or invalid: {subtitle_path}")
-        log_error(f"get sub block, full source filename: {full_source_filename}")
-        source_path = get_source_path_from_full_filename(full_source_filename)
-        extract_subtitle_files(source_path, track, code)
-        subtitle_path = get_subtitle_path_from_sound_line(full_source_filename, track, code)
-        if not subtitle_path or not os.path.exists(subtitle_path):
-            log_error("Subtitle path still not found after extraction.")
-
-        block, subtitle_path = get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line)
-        if not subtitle_path or not os.path.exists(subtitle_path):
-            log_error("Subtitle path still not found after using sentence line.")
-            return None, None
-        else:
-            print(f"return block: {block}")
-            return block, subtitle_path
-
-    with open(subtitle_path, 'r', encoding='utf-8') as f:
-        blocks = f.read().strip().split('\n\n')
-
-    for block in blocks:
-        formatted_block = format_subtitle_block(block)
-        if formatted_block and len(formatted_block) == 4:
-            subtitle_text = formatted_block[3]
-            if normalize_text(sentence_line) in normalize_text(subtitle_text):
-                return formatted_block, subtitle_path
-
-    return None, subtitle_path
-
 def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line):
     log_filename(f"extracting data from sound_line: {sound_line}")
     data = extract_sound_line_data(sound_line)
@@ -794,7 +668,7 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line):
             if ext.lower() not in video_exts + audio_exts:
                 continue
 
-            subtitle_path = get_subtitle_path_from_sound_line(filename, track, code)
+            subtitle_path = get_subtitle_path_from_full_filename_track_and_code(filename, track, code)
             if not subtitle_path or not os.path.exists(subtitle_path):
                 print(f"Subtitle path not found: {subtitle_path}")
                 continue
@@ -825,9 +699,6 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line):
     # Wraparound pass (from beginning)
     print("Wrapping to start of subtitle files...")
     return search_blocks(after_current=False)
-
-
-
 
 
 
@@ -1048,7 +919,6 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
 
     return cmd
 
-
 def ffmpeg_extract_full_audio(source_file_path) -> str:
     ffmpeg_path, _ = get_ffmpeg_exe_path()
     config = extract_config_data()
@@ -1123,6 +993,8 @@ def create_just_normalize_audio_command(source_path):
     return cmd
 
 
+
+
 # convert and detect
 def convert_timestamp_dot_to_hmsms(ts: str) -> str:
     parts = ts.split('.')
@@ -1131,7 +1003,7 @@ def convert_timestamp_dot_to_hmsms(ts: str) -> str:
     hours, minutes, seconds, milliseconds = parts
     return f"{hours}h{minutes}m{seconds}s{milliseconds}ms"
 
-def detect_format(sound_line: str) -> str:
+def detect_format(sound_line: str):
     if not sound_line:
         return None
 
@@ -1147,8 +1019,22 @@ def is_backtick_format(sound_line: str) -> bool:
 def format_timestamp_for_filename(timestamp: str) -> str:
     return timestamp.replace(':', '.').replace(',', '.')
 
-import html
-import re
+def get_audio_start_time_ms(source_file_path: str) -> int:
+    _, ffprobe_path = get_ffmpeg_exe_path()
+    cmd = [
+        ffprobe_path, "-v", "error",
+        "-select_streams", "a:0",
+        "-show_packets", "-read_intervals", "0%+#5",
+        "-print_format", "compact", source_file_path
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        log_command(f"ffprobe output: {result.stdout.strip()}")
+        match = re.search(r"pts_time=(\d+(?:\.\d+)?)", result.stdout)
+        return round(float(match.group(1)) * 1000) if match else 0
+    except Exception as e:
+        log_error(f"ffprobe failed: {e}")
+        return 0
 
 def normalize_text(s):
     s = html.unescape(s)
@@ -1157,7 +1043,6 @@ def normalize_text(s):
     s = s.replace('\xa0', '')
     s = re.sub(r'[\s\u3000]+', '', s)
     return s
-
 
 def time_srt_to_milliseconds(t):
     h, m, s_ms = t.split(":")
@@ -1181,7 +1066,7 @@ def time_hmsms_to_seconds(t):
     s, ms = (s.split(',') if ',' in s else s.split('.'))
     return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000
 
-def time_hmsms_to_milliseconds(ts: str) -> int:
+def time_hmsms_to_milliseconds(ts: str):
     pattern_hmsms = re.compile(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms")
 
     match = pattern_hmsms.match(ts)
@@ -1194,6 +1079,7 @@ def time_hmsms_to_milliseconds(ts: str) -> int:
         h, m, s, ms = parts
     else:
         print(f"Unrecognized timestamp format: {ts}")
+        return
 
     total_ms = (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
     return total_ms
@@ -1226,7 +1112,7 @@ def format_subtitle_block(subtitle_block):
 
     return [subtitle_index, start_time, end_time, subtitle_text]
 
-def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relative_index) -> dict:
+def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms) -> dict:
     config = extract_config_data()
     normalize_audio = config["normalize_audio"]
     lufs = config["lufs"]
@@ -1241,17 +1127,6 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
 
     start_index = data["start_index"]
     end_index = data["end_index"]
-
-    if relative_index == 1:
-        if lengthen_end_ms > 0:
-            end_index += 1
-        elif lengthen_end_ms < 0:
-            end_index -= 1
-    elif relative_index == -1:
-        if lengthen_start_ms > 0:
-            start_index -= 1
-        elif lengthen_start_ms < 0:
-            start_index += 1
 
     new_start_ms = max(0, orig_start_ms - lengthen_start_ms)
     new_end_ms = max(0, orig_end_ms + lengthen_end_ms)
@@ -1306,7 +1181,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, relat
     }
 
 
-def alter_sound_file_times(altered_data, sound_line) -> str:
+def alter_sound_file_times(altered_data, sound_line):
     if not altered_data:
         log_error("altered data is empty")
         return

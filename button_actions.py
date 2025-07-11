@@ -3,19 +3,13 @@ from PyQt6.QtWidgets import QApplication
 import difflib
 import os
 import re
-import sys
 import html
-import logging
-
 from aqt import mw
 from aqt.utils import showInfo
-from aqt.editor import Editor
 from aqt.sound import play, av_player
 
 import manage_files
 from manage_files import (
-    get_subtitle_block_from_sound_line_and_sentence_line,
-    get_subtitle_block_and_subtitle_path_from_sentence_line,
     get_field_key_from_label,
     log_filename,
     log_error,
@@ -123,12 +117,12 @@ def next_result_button(editor):
 
     # generate file using next sound line
     log_filename(f"getting altered data from2: {next_sound_line}")
-    altered_data = manage_files.get_altered_sound_data(next_sound_line, 0, 0, 0)
+    altered_data = manage_files.get_altered_sound_data(next_sound_line, 0, 0)
     next_sound_line = manage_files.alter_sound_file_times(altered_data, next_sound_line)
 
     if next_sound_line:
-        filename_base = re.sub(r'^\[sound:|\]$', '', next_sound_line.split("`", 1)[0].strip())
-        prev_filename_base = re.sub(r'^\[sound:|\]$', '', sound_line.split("`", 1)[0].strip())
+        filename_base = re.sub(r'^\[sound:|]$', '', next_sound_line.split("`", 1)[0].strip())
+        prev_filename_base = re.sub(r'^\[sound:|]$', '', sound_line.split("`", 1)[0].strip())
 
         filename_base_underscore = filename_base.replace(" ", "_")
         prev_base_underscore = prev_filename_base.replace(" ", "_")
@@ -240,7 +234,7 @@ def generate_and_update_fields(editor, note):
 
     if (not sound_line) or overwrite:
         log_filename(f"getting altered data from3: {new_sound_line}")
-        altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, 0)
+        altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0)
         if new_sound_line != field_obj.fields[sound_idx] and altered_data:
             new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line)
             field_obj.fields[sound_idx] = new_sound_line
@@ -248,14 +242,14 @@ def generate_and_update_fields(editor, note):
 
     if (not translation_sound_line) or overwrite:
         log_filename(f"getting altered data from translation: {new_translation_sound_line}")
-        altered_data = manage_files.get_altered_sound_data(new_translation_sound_line, 0, 0, 0)
+        altered_data = manage_files.get_altered_sound_data(new_translation_sound_line, 0, 0)
         if new_translation_sound_line != field_obj.fields[translation_sound_idx] and altered_data:
             new_translation_sound_line = manage_files.alter_sound_file_times(altered_data, new_translation_sound_line)
             field_obj.fields[translation_sound_idx] = new_translation_sound_line
             updated = True
 
     if (not image_line) or overwrite:
-        generated_img = manage_files.get_image_line_if_empty("", new_sound_line)
+        generated_img = manage_files.generate_image_line_from_sound_line("", new_sound_line)
         log_image(f"new image: {generated_img}")
         if generated_img and isinstance(generated_img, str):
             field_obj.fields[image_idx] = generated_img
@@ -287,7 +281,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         full_source_filename = data["full_source_filename"]
         track = config["target_subtitle_track"]
         code = config["target_language_code"]
-        subtitle_path = manage_files.get_subtitle_path_from_sound_line(full_source_filename, track, code)
+        subtitle_path = manage_files.get_subtitle_path_from_full_filename_track_and_code(full_source_filename, track, code)
         start_index = data["start_index"]
         end_index = data["end_index"]
         blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path)
@@ -316,7 +310,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     print(f"bool: {not image_line and generate_image or overwrite}")
     if not image_line and generate_image or overwrite:
         log_image(f"image line empty, generating new one")
-        new_image_line = manage_files.get_image_line_if_empty(image_line, new_sound_line)
+        new_image_line = manage_files.generate_image_line_from_sound_line(image_line, new_sound_line)
     else:
         new_image_line = image_line
     log_image(f"generated image line: {image_line}")
@@ -368,12 +362,12 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     start_index = data["start_index"]
     end_index = data["end_index"]
     full_source_filename = data["full_source_filename"]
-    subtitle_path = manage_files.get_subtitle_path_from_sound_line(full_source_filename, track, code)
+    subtitle_path = manage_files.get_subtitle_path_from_full_filename_track_and_code(full_source_filename, track, code)
     blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, subtitle_path)
     new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path)
 
     log_filename(f"getting altered data from5: {new_sound_line}")
-    altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, 0)
+    altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0)
     manage_files.alter_sound_file_times(altered_data, new_sound_line)
 
 
@@ -386,13 +380,13 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         translation_line = manage_files.get_translation_line_from_target_sound_line(new_sound_line)
         editor.note.fields[translation_idx] = translation_line
 
-    new_field = re.sub(r"\[sound:.*?\]", new_sound_line, sound_line)
+    new_field = re.sub(r"\[sound:.*?]", new_sound_line, sound_line)
     editor.note.fields[sound_idx] = new_field
     editor.note.fields[sentence_idx] = new_sentence_line
     generate_and_update_fields(editor, None)
 
     def play_after_reload():
-        sound_filename = re.search(r"\[sound:(.*?)\]", new_sound_line)
+        sound_filename = re.search(r"\[sound:(.*?)]", new_sound_line)
         if sound_filename:
             QTimer.singleShot(100, lambda: play(sound_filename.group(1)))
 
@@ -442,7 +436,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
         return
 
     log_filename(f"getting altered data from1: {sound_line}")
-    altered_data = manage_files.get_altered_sound_data(sound_line, -start_delta, end_delta, None)
+    altered_data = manage_files.get_altered_sound_data(sound_line, -start_delta, end_delta)
     log_filename(f"sending data to alter sound file times: {altered_data}")
     new_sound_line = manage_files.alter_sound_file_times(altered_data, sound_line)
 
@@ -565,7 +559,7 @@ def on_note_loaded(editor):
 
         if sound_idx is not None and sound_idx < len(editor.note.fields):
             field_text = editor.note.fields[sound_idx]
-            match = re.search(r"\[sound:([^\]]+)\]", field_text)
+            match = re.search(r"\[sound:([^]]+)]", field_text)
             if match:
                 filename = match.group(1)
                 log_command(f"Playing sound from field {sound_idx}: {filename}")
@@ -658,7 +652,6 @@ def bulk_generate(deck, note_type):
     log_command("Running bulk_generate...")
     log_command("Deck:", current_deck_name)
 
-    deck_id = mw.col.decks.id(current_deck_name)
     note_ids = mw.col.find_notes(f'deck:"{current_deck_name}"')
 
     if not note_ids:

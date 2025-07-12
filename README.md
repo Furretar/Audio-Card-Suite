@@ -7,6 +7,7 @@
 - [ ] remove track menu checkbox and just make it open the settings menu
 - [ ] make it so when you click on a sound line field with auto play on it will play the sound, or some other way to play the translation line
 - [ ] fix audio not playing if you edit the times too quickly in a row
+- [ ] after implementing pre indexing, only extract subs from files with no subtitle files at all, then if it still cant find it, then it can check every file individually
 
 
 

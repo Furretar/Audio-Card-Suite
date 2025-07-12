@@ -21,22 +21,16 @@
   "target_timing_track": 8,
   "translation_timing_track": 8,
   "timing_tracks_enabled": true,
-  "target_timings_code": "chi",
-  "translation_timings_code": "eng",
-  "target_timings_track": 2,
-  "translation_timings_track": 3,
-  "selected_tab_index": 1,
-  "target_timings_language": "Chinese",
-  "translation_timings_language": "English",
+  "target_timing_language": "Chinese",
+  "translation_timing_language": "English",
+  "selected_tab_index": 0,
   "mapped_fields": {
     "1Chinese": {
-      "Expression": "Target Sub Line",
+      "Expression": "Target Subtitle Line",
       "SentenceAudio": "Target Audio",
       "Image": "Image",
-      "Translation": "Translation Sub Line",
+      "Translation": "Translation Subtitle Line",
       "TranslationAudio": "Translation Audio"
     }
-  },
-  "target_timing_language": "Chinese",
-  "translation_timing_language": "English"
+  }
 }

@@ -1,19 +1,8 @@
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QApplication
 from aqt import gui_hooks
-from aqt.sound import play
 from aqt.utils import showInfo
-import re
 from aqt.editor import Editor
-from aqt.sound import av_player
-import os
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
-    QPushButton, QCheckBox
-)
 import os, json
-from aqt.gui_hooks import editor_did_load_note, editor_did_focus_field
 
 
 from PyQt6.QtWidgets import (
@@ -23,6 +12,7 @@ try:
     from . import manage_files
     from . import button_actions
     from . import language_codes
+    from . import constants
 except ImportError:
     import sys
     import os
@@ -30,26 +20,27 @@ except ImportError:
     import manage_files
     import button_actions
     import language_codes
+    import constants
 
-addon_dir = os.path.dirname(os.path.abspath(__file__))
+addon_dir = constants.addon_dir
 
-ms_amount = 50
+CONTAINER_MARGINS = constants.CONTAINER_MARGINS
+CONTAINER_SPACING = constants.CONTAINER_SPACING
 
-CONTAINER_MARGINS = (2, 2, 2, 2)
-CONTAINER_SPACING = 8
+ROW_MARGINS = constants.ROW_MARGINS
+ROW_SPACING = constants.ROW_SPACING
 
-ROW_MARGINS = (0, 0, 0, 0)
-ROW_SPACING = 10
+BUTTON_ROW_MARGINS = constants.BUTTON_ROW_MARGINS
+BUTTON_ROW_SPACING = constants.BUTTON_ROW_SPACING
 
-BUTTON_ROW_MARGINS = (0, 0, 0, 0)
-BUTTON_ROW_SPACING = 12
+LABEL_MIN_WIDTH = constants.LABEL_MIN_WIDTH
+SPINBOX_MIN_WIDTH = constants.SPINBOX_MIN_WIDTH
+CHECKBOX_MIN_WIDTH = constants.CHECKBOX_MIN_WIDTH
 
-LABEL_MIN_WIDTH = 120
-SPINBOX_MIN_WIDTH = 60
-CHECKBOX_MIN_WIDTH = 150
+BUTTON_PADDING = constants.BUTTON_PADDING
+SHIFT_BUTTON_BG_COLOR = constants.SHIFT_BUTTON_BG_COLOR
 
-BUTTON_PADDING = "padding: 1px 4px;"
-SHIFT_BUTTON_BG_COLOR = "#f0d0d0"
+
 
 from aqt import mw
 from aqt.qt import *
@@ -124,8 +115,8 @@ class AudioToolsDialog(QDialog):
             "translation_subtitle_track": 2,
             "target_timing_code": "",
             "translation_timing_code": "",
-            "target_timing_track": 0,
-            "translation_timing_track": 0,
+            "target_timing_track": 3,
+            "translation_timing_track": 3,
             "timing_tracks_enabled": False
         }
 
@@ -426,8 +417,8 @@ class AudioToolsDialog(QDialog):
         combo_keys = [
             "target_language",
             "translation_language",
-            "target_timing_code",
-            "translation_timing_code"
+            "target_timing_language",
+            "translation_timing_language"
         ]
 
         edit_keys = [
@@ -448,13 +439,17 @@ class AudioToolsDialog(QDialog):
             combo.addItems([
                 "None", "Japanese", "Chinese", "English", "Korean", "Cantonese", "German", "Spanish"
             ])
+
             saved_combo_value = self.settings.get(combo_keys[i], "None")
+            print(f"setting language code: {saved_combo_value}")
+            if combo.findText(saved_combo_value) == -1:
+                combo.addItem(saved_combo_value)
             combo.setCurrentText(saved_combo_value)
             self.langCodeCombos.append(combo)
             langGrid.addWidget(combo, i + 1, 1)
 
             edit = QLineEdit()
-            edit.setFixedWidth(30)
+            edit.setFixedWidth(35)
             edit.setStyleSheet("QLineEdit{background: #f4f3f4;}")
             edit.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
             saved_edit_value = self.settings.get(edit_keys[i], "")
@@ -518,6 +513,10 @@ class AudioToolsDialog(QDialog):
         self.trackSpinners[3].setValue(self.settings.get("translation_subtitle_track", 0))
         self.trackSpinners[4].setValue(self.settings.get("target_timing_track", 0))
         self.trackSpinners[5].setValue(self.settings.get("translation_timing_track", 0))
+
+        selected_tab_index = self.settings.get("selected_tab_index", 0)
+        self.tabs.setCurrentIndex(selected_tab_index)
+
         subsLayout.addWidget(self.tabs)
         subsGroup.setLayout(subsLayout)
         codes_label = QLabel()

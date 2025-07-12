@@ -75,6 +75,7 @@ BACKTICK_PATTERN = re.compile(
 
 
 
+
 # get sound_line_data
 def get_ffmpeg_exe_path():
     exe_path = shutil.which("ffmpeg")
@@ -505,12 +506,28 @@ def get_source_path_from_full_filename(full_source_filename) -> str:
     log_filename(f"received filename: {full_source_filename}")
     possible_bases = [full_source_filename, full_source_filename.replace("_", " ")]
 
+    all_exts = audio_exts + video_exts
+
+    def has_extension(filename):
+        return os.path.splitext(filename)[1] != ""
+
+
     for base in possible_bases:
-        path = os.path.join(addon_source_folder, base)
-        log_image(f"searching path for video: {path}")
-        log_command(f"now checking: {path}")
-        if os.path.exists(path):
-            return path
+        if has_extension(base):
+            path = os.path.join(addon_source_folder, base)
+            log_image(f"searching path for video/audio: {path}")
+            log_command(f"now checking: {path}")
+            if os.path.exists(path):
+                return path
+        else:
+            # no extension, try all extensions
+            for ext in all_exts:
+                candidate = base + ext
+                path = os.path.join(addon_source_folder, candidate)
+                log_image(f"searching path for video/audio: {path}")
+                log_command(f"now checking: {path}")
+                if os.path.exists(path):
+                    return path
 
     log_error(f"No source file found for base name: {full_source_filename}")
     return ""
@@ -1166,6 +1183,11 @@ def format_subtitle_block(subtitle_block):
 
     subtitle_index = lines[0]
     time_range = lines[1]
+
+    if '-->' not in time_range:
+        log_error(f"Invalid time range in subtitle block: {time_range}")
+        return None
+
     subtitle_text = "\n".join(line.strip() for line in lines[2:])
 
     start_srt, end_srt = [t.strip() for t in time_range.split('-->')]
@@ -1282,5 +1304,7 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
         log_error(f"Expected output file not found: {altered_data['new_path']}")
         return ""
 
-
+test = "[sound:Mob Psycho 100 - S02E02`00h03m09s680ms-00h03m11s265ms`85-85`-16LUFS.mp3]"
+format = detect_format(test)
+print(format)
 

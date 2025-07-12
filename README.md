@@ -6,6 +6,7 @@
 - [ ] store start and end offset every time its pushed, when user moves the whole line forward or backward it automatically adjusts the offset amount
 - [ ] remove track menu checkbox and just make it open the settings menu
 - [ ] make it so when you click on a sound line field with auto play on it will play the sound, or some other way to play the translation line
+- [ ] fix audio not playing if you edit the times too quickly in a row
 
 
 

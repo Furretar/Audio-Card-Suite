@@ -860,8 +860,19 @@ def add_custom_controls(editor: Editor) -> None:
     generate_btn_layout = QHBoxLayout(generate_btn_row)
     generate_btn_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
     generate_btn_layout.setSpacing(BUTTON_ROW_SPACING)
-    generate_btn_layout.addWidget(make_button("Generate Fields", lambda: button_actions.generate_fields_button(editor)))
-    generate_btn_layout.addWidget(make_button("Next Result", lambda: button_actions.next_result_button(editor)))
+    generate_btn_layout.addWidget(
+        make_button("Generate Fields", lambda: timed_call(button_actions.generate_fields_button, editor)))
+    generate_btn_layout.addWidget(
+        make_button("Next Result", lambda: timed_call(button_actions.next_result_button, editor)))
+
+    import time
+
+    def timed_call(func, *args, **kwargs):
+        start = time.perf_counter()
+        result = func(*args, **kwargs)
+        elapsed = time.perf_counter() - start
+        print(f"{func.__name__} took {elapsed:.4f} seconds")
+        return result
 
     buttons_layout.addWidget(generate_btn_row)
 

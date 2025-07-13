@@ -8,6 +8,7 @@ import re
 from aqt.utils import showInfo
 from send2trash import send2trash
 import constants
+import sqlite3
 
 addon_dir = constants.addon_dir
 addon_source_folder = constants.addon_source_folder
@@ -43,9 +44,6 @@ def log_image(message):
 
 
 
-
-
-
 # constants
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 config_dir = os.path.join(addon_dir, "config.json")
@@ -71,9 +69,6 @@ BACKTICK_PATTERN = re.compile(
     r'\.(?P<sound_file_extension>\w+)]$',
     re.IGNORECASE
 )
-
-
-
 
 
 # get sound_line_data
@@ -1304,7 +1299,81 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
         log_error(f"Expected output file not found: {altered_data['new_path']}")
         return ""
 
-test = "[sound:Mob Psycho 100 - S02E02`00h03m09s680ms-00h03m11s265ms`85-85`-16LUFS.mp3]"
-format = detect_format(test)
-print(format)
 
+import os
+import sqlite3
+import re
+import constants
+
+
+def index_and_print_subtitles():
+    db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
+    conn = sqlite3.connect(db_path)
+    conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')
+
+    folder = os.path.join(constants.addon_dir, constants.addon_source_folder)
+
+    # Get currently indexed filenames as a set
+    cursor = conn.execute('SELECT filename, language, track FROM subtitles')
+    indexed_files = set(f"{row[0]}`track_{row[2]}`{row[1]}.srt" for row in cursor)
+
+    # Get current files in folder matching pattern
+    current_files = set(f for f in os.listdir(folder) if f.endswith('.srt') and '`track_' in f)
+
+    # Remove entries for files no longer existing
+    to_remove = indexed_files - current_files
+    for f in to_remove:
+        parts = f.split('`')
+        if len(parts) == 3:
+            video_file = parts[0]
+            track = parts[1][len('track_'):]
+            language = parts[2][:-4]
+            conn.execute('DELETE FROM subtitles WHERE filename=? AND language=? AND track=?',
+                         (video_file, language, track))
+
+    # Add new files not yet indexed
+    to_add = current_files - indexed_files
+    for f in to_add:
+        parts = f.split('`')
+        if len(parts) == 3:
+            video_file = parts[0]
+            track = parts[1][len('track_'):]
+            language = parts[2][:-4]
+            srt_path = os.path.join(folder, f)
+
+            with open(srt_path, encoding='utf-8') as file:
+                full_text = file.read()
+
+            blocks = full_text.strip().split('\n\n')
+            parsed_blocks = []
+
+            for block in blocks:
+                lines = block.strip().split('\n')
+                if len(lines) >= 3:
+                    srt_index = lines[0].strip()
+                    times = lines[1].strip()
+                    text_lines = lines[2:]
+                    match = re.match(r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})', times)
+                    if match:
+                        start_time, end_time = match.groups()
+                    else:
+                        start_time, end_time = '', ''
+                    text = ' '.join(text_lines).strip()
+                    parsed_blocks.append(f"{srt_index}\t{start_time}\t{end_time}\t{text}")
+
+            content = '\n\n'.join(parsed_blocks)
+            conn.execute('INSERT INTO subtitles VALUES (?, ?, ?, ?)', (video_file, language, track, content))
+
+    conn.commit()
+
+    cursor = conn.execute('SELECT filename, language, track, content FROM subtitles')
+    for video_file, lang, track, content in cursor:
+        subtitle_filename = f"{video_file}`track_{track}`{lang}.srt"
+        first_block = content.split('\n\n')[0]
+        first_text = first_block.split('\t')[3] if len(first_block.split('\t')) > 3 else ''
+        print(f"{subtitle_filename}: {first_text}")
+
+    conn.close()
+
+
+index_and_print_subtitles()

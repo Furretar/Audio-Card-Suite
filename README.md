@@ -9,6 +9,7 @@
 - [ ] fix audio not playing if you edit the times too quickly in a row
 - [ ] after implementing pre indexing, only extract subs from files with no subtitle files at all, then if it still cant find it, then it can check every file individually
 - [ ] run bulk generation in background, have a stop button
+- [ ] make config global, only update when changed
 
 
 

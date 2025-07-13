@@ -1,6 +1,6 @@
-
+import re
 import os
-
+import inspect
 
 # integers
 ms_amount = 50
@@ -20,6 +20,30 @@ translation_subtitle_line_string = "Translation Subtitle Line"
 translation_audio_string = "Translation Audio"
 image_string = "Image"
 
+audio_exts = [
+    ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma", ".opus", ".m4b"
+]
+
+video_exts = [
+    ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".m4b"
+]
+
+BACKTICK_PATTERN = re.compile(
+    r'^\[sound:'
+    r'(?P<filename_base>[^`.]+)'                     # base name before extension
+    r'(?P<source_file_extension>\.[a-z0-9]+)?'        # optional extension (with no backtick)
+    r'(?:`(?P<lang_code>[a-z]{3}))?'                  # optional language code
+    r'(?:`(?P<sha>[A-Za-z0-9]{4}))?'                  # optional sha
+    r'`(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'
+    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'
+    r'(?P<subtitle_range>\d+-\d+)'
+    r'(?:`(?P<normalize_tag>[^`]+))?'
+    r'\.(?P<sound_file_extension>\w+)]$',
+    re.IGNORECASE
+)
+
+
+
 # menu
 CONTAINER_MARGINS = (2, 2, 2, 2)
 CONTAINER_SPACING = 8
@@ -32,3 +56,29 @@ SPINBOX_MIN_WIDTH = 60
 CHECKBOX_MIN_WIDTH = 150
 BUTTON_PADDING = "padding: 1px 4px;"
 SHIFT_BUTTON_BG_COLOR = "#f0d0d0"
+
+# logging functions
+DEBUG_FILENAME = True
+DEBUG_COMMAND = True
+DEBUG_ERROR = True
+DEBUG_IMAGE = False
+
+def log_filename(message):
+    if DEBUG_FILENAME:
+        func = inspect.stack()[1].function
+        print(f"{func}:\n{message.strip()}\n")
+
+def log_command(message):
+    if DEBUG_COMMAND:
+        func = inspect.stack()[1].function
+        print(f"{func}:\n[command] {message.strip()}\n")
+
+def log_error(message):
+    if DEBUG_ERROR:
+        func = inspect.stack()[1].function
+        print(f"{func}:\n[error] {message.strip()}\n")
+
+def log_image(message):
+    if DEBUG_IMAGE:
+        func = inspect.stack()[1].function
+        print(f"{func}:\n[image] {message.strip()}\n")

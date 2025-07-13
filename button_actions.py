@@ -9,11 +9,12 @@ from aqt.utils import showInfo
 from aqt.sound import play, av_player
 from aqt import gui_hooks
 from anki.notes import Note
+import database
 
 import manage_files
+from manage_files import get_field_key_from_label
 import constants
-from manage_files import (
-    get_field_key_from_label,
+from constants import (
     log_filename,
     log_error,
     log_image,
@@ -111,7 +112,8 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     start_index = data["start_index"]
     end_index = data["end_index"]
     full_source_filename = data["full_source_filename"]
-    subtitle_path = manage_files.get_subtitle_path_and_code_from_full_filename_track_and_code(full_source_filename, track, code, config)
+    subtitle_database = database.get_database()
+    subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
     blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, subtitle_path)
     new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, config)
 
@@ -373,6 +375,7 @@ def generate_and_update_fields(editor, note):
 
     updated = False
 
+
     # generate fields using sentence line
     new_result = get_generate_fields_sound_sentence_image_translation(
         sound_line, sentence_line, selected_text, image_line, translation_line, translation_sound_line, overwrite
@@ -464,6 +467,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         log_error(f"sentence field empty")
         return None
 
+
     config = manage_files.extract_config_data()
     log_filename(f"calling extract sound line data: {sound_line}")
     data = manage_files.extract_sound_line_data(sound_line)
@@ -482,7 +486,8 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     # get sound and sentence line
     if data:
         full_source_filename = data["full_source_filename"]
-        subtitle_path = manage_files.get_subtitle_path_and_code_from_full_filename_track_and_code(full_source_filename, track, code, config)
+        subtitle_database = database.get_database()
+        subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
         if not subtitle_path:
             log_error(f"subtitle path null")
             return None
@@ -495,8 +500,9 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
             data = None
 
     # generate sound line if doesn't exist
+    print(f"sentence_line: {sentence_line}")
     if not data:
-        log_error(f"no data extracted from: {sound_line}")
+        log_error(f"no data extracted from sound line: {sound_line}")
         block, subtitle_path = manage_files.get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
         if not subtitle_path:
             log_error(f"subtitle path null")
@@ -513,6 +519,9 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     timing_tracks_enabled = config["timing_tracks_enabled"]
     if timing_tracks_enabled:
         subtitle_data = manage_files.extract_subtitle_path_data(subtitle_path)
+        if not subtitle_data:
+            log_error(f"subtitle_data null")
+            return None
         subtitle_file_code = subtitle_data["code"]
         new_sound_line = manage_files.get_new_timing_sound_line_from_target_sound_line(new_sound_line, config, subtitle_file_code, False)
     else:
@@ -539,6 +548,9 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     # get translation sound line
     if should_generate_translation_sound and ((not translation_sound_line) or overwrite):
         subtitle_data = manage_files.extract_subtitle_path_data(translation_subtitle_path)
+        if not subtitle_data:
+            log_error(f"subtitle_data null")
+            return None
         subtitle_file_code = subtitle_data["code"]
         new_translation_sound_line = manage_files.get_new_timing_sound_line_from_target_sound_line(new_sound_line, config, subtitle_file_code, True)
     else:

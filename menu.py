@@ -3,6 +3,7 @@ from aqt.utils import showInfo
 from aqt.editor import Editor
 from PyQt6.QtCore import Qt
 import os, json
+import time
 
 
 from PyQt6.QtWidgets import (
@@ -783,6 +784,16 @@ def add_audio_tools_menu():
 
 add_audio_tools_menu()
 
+
+
+def timed_call(func, *args, **kwargs):
+    start = time.perf_counter()
+    result = func(*args, **kwargs)
+    elapsed = time.perf_counter() - start
+    print(f"{func.__name__} took {elapsed:.4f} seconds")
+    return result
+
+
 def set_auto_play_audio(editor: Editor, enabled: bool) -> None:
     editor._auto_play_enabled = enabled
     state = "enabled" if enabled else "disabled"
@@ -840,20 +851,34 @@ def add_custom_controls(editor: Editor) -> None:
     timing_btn_layout = QHBoxLayout(timing_btn_row)
     timing_btn_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
     timing_btn_layout.setSpacing(BUTTON_ROW_SPACING)
-    timing_btn_layout.addWidget(make_button("Start +50ms", lambda: button_actions.adjust_sound_tag(editor, -ms_amount, 0)))
-    timing_btn_layout.addWidget(make_button("Start -50ms", lambda: button_actions.adjust_sound_tag(editor, ms_amount, 0), danger=True))
-    timing_btn_layout.addWidget(make_button("End -50ms", lambda: button_actions.adjust_sound_tag(editor, 0, -ms_amount), danger=True))
-    timing_btn_layout.addWidget(make_button("End +50ms", lambda: button_actions.adjust_sound_tag(editor, 0, ms_amount)))
+    timing_btn_layout.addWidget(
+        make_button("Start +50ms", lambda: timed_call(button_actions.adjust_sound_tag, editor, -ms_amount, 0)))
+    timing_btn_layout.addWidget(
+        make_button("Start -50ms", lambda: timed_call(button_actions.adjust_sound_tag, editor, ms_amount, 0),
+                    danger=True))
+    timing_btn_layout.addWidget(
+        make_button("End -50ms", lambda: timed_call(button_actions.adjust_sound_tag, editor, 0, -ms_amount),
+                    danger=True))
+    timing_btn_layout.addWidget(
+        make_button("End +50ms", lambda: timed_call(button_actions.adjust_sound_tag, editor, 0, ms_amount)))
     buttons_layout.addWidget(timing_btn_row)
 
     add_remove_row = QWidget()
     add_remove_layout = QHBoxLayout(add_remove_row)
     add_remove_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
     add_remove_layout.setSpacing(BUTTON_ROW_SPACING)
-    add_remove_layout.addWidget(make_button("Add Previous Line", lambda: button_actions.add_and_remove_edge_lines_update_note(editor, 1, 0)))
-    add_remove_layout.addWidget(make_button("Remove First Line", lambda: button_actions.add_and_remove_edge_lines_update_note(editor, -1, 0), danger=True))
-    add_remove_layout.addWidget(make_button("Remove Last Line", lambda: button_actions.add_and_remove_edge_lines_update_note(editor, 0, -1), danger=True))
-    add_remove_layout.addWidget(make_button("Add Next Line", lambda: button_actions.add_and_remove_edge_lines_update_note(editor, 0, 1)))
+    add_remove_layout.addWidget(make_button("Add Previous Line",
+                                            lambda: timed_call(button_actions.add_and_remove_edge_lines_update_note,
+                                                               editor, 1, 0)))
+    add_remove_layout.addWidget(make_button("Remove First Line",
+                                            lambda: timed_call(button_actions.add_and_remove_edge_lines_update_note,
+                                                               editor, -1, 0), danger=True))
+    add_remove_layout.addWidget(make_button("Remove Last Line",
+                                            lambda: timed_call(button_actions.add_and_remove_edge_lines_update_note,
+                                                               editor, 0, -1), danger=True))
+    add_remove_layout.addWidget(make_button("Add Next Line",
+                                            lambda: timed_call(button_actions.add_and_remove_edge_lines_update_note,
+                                                               editor, 0, 1)))
     buttons_layout.addWidget(add_remove_row)
 
     generate_btn_row = QWidget()
@@ -865,14 +890,6 @@ def add_custom_controls(editor: Editor) -> None:
     generate_btn_layout.addWidget(
         make_button("Next Result", lambda: timed_call(button_actions.next_result_button, editor)))
 
-    import time
-
-    def timed_call(func, *args, **kwargs):
-        start = time.perf_counter()
-        result = func(*args, **kwargs)
-        elapsed = time.perf_counter() - start
-        print(f"{func.__name__} took {elapsed:.4f} seconds")
-        return result
 
     buttons_layout.addWidget(generate_btn_row)
 

@@ -1,6 +1,10 @@
 import re
 import os
 import inspect
+import shutil
+from aqt.utils import showInfo
+import html
+
 
 # integers
 ms_amount = 50
@@ -94,3 +98,29 @@ def log_image(message):
         file = os.path.basename(frame.filename)
         line = frame.lineno
         print(f"{file}:{line} in {func}:\n[image] {message.strip()}\n")
+
+
+
+def get_ffmpeg_exe_path():
+    exe_path = shutil.which("ffmpeg")
+    probe_path = shutil.which("ffprobe")
+    if exe_path:
+        return exe_path, probe_path
+
+    if os.path.exists(temp_ffmpeg_exe):
+        return temp_ffmpeg_exe, temp_ffprobe_exe
+
+    log_error("FFmpeg executable not found in PATH or addon folder.")
+    showInfo("FFmpeg is not installed or could not be found.\n\n"
+             "Either install FFmpeg globally and add it to your system PATH,\n"
+             "or place ffmpeg.exe in the addon folder under: ffmpeg/bin/ffmpeg.exe")
+    return None, None
+
+def format_text(s):
+    if not s:
+        log_error(f"text is null")
+        return None
+
+    s = html.unescape(s)
+    s = re.sub(r'<[^>]+>', '', s)
+    return s.strip()

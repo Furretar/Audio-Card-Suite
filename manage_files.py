@@ -29,20 +29,7 @@ from constants import (
 
 
 # get sound_line_data
-def get_ffmpeg_exe_path():
-    exe_path = shutil.which("ffmpeg")
-    probe_path = shutil.which("ffprobe")
-    if exe_path:
-        return exe_path, probe_path
 
-    if os.path.exists(constants.temp_ffmpeg_exe):
-        return constants.temp_ffmpeg_exe, constants.temp_ffprobe_exe
-
-    log_error("FFmpeg executable not found in PATH or addon folder.")
-    showInfo("FFmpeg is not installed or could not be found.\n\n"
-             "Either install FFmpeg globally and add it to your system PATH,\n"
-             "or place ffmpeg.exe in the addon folder under: ffmpeg/bin/ffmpeg.exe")
-    return None, None
 
 def get_collection_dir():
     from aqt import mw
@@ -178,24 +165,6 @@ def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> s
     if label == "Target Subtitle Line":
         log_error(f"could not find Target Subtitle Line in note_type {note_type_name}, mapped field: {mapped_fields}, mapped fields items {mapped_fields.items()}")
     return ""
-
-def get_video_duration_seconds(path):
-    _, ffprobe_path = get_ffmpeg_exe_path()
-    try:
-        result = subprocess.run(
-            [f"{ffprobe_path}", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        log_command(f"[ffprobe output for {path}]\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
-        return float(result.stdout.strip())
-    except Exception as e:
-        log_command(f"Failed to get duration of {path}: {e}")
-        return 0
-
-import re
 
 def extract_subtitle_path_data(subtitle_path):
     if not subtitle_path:
@@ -426,13 +395,18 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
     end_time = sound_line_data["end_time"]
     full_source_filename = sound_line_data["full_source_filename"]
 
+
     subtitle_database = database.get_database()
     translation_subtitle_path = get_subtitle_file_from_database(full_source_filename, translation_audio_track, translation_language_code, config, subtitle_database)
+
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
 
     translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
     translation_line = re.sub(r"\{.*?}", "", translation_line)
-    return translation_line.strip(), translation_subtitle_path
+    translation_line = constants.format_text(translation_line.strip())
+    log_filename(f"getting translation line: {translation_line}, tl audio track/code: {translation_audio_track}/{translation_language_code}, path from database: {translation_subtitle_path}")
+
+    return translation_line, translation_subtitle_path
 
 def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, audio_language_code, use_translation_data):
     if not target_sound_line:
@@ -500,17 +474,43 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
         log_error("Subtitle path is None.")
         return []
 
+    print(f"[DEBUG] Provided subtitle path: {subtitle_path}")
+
     db = database.get_database()
     base = os.path.basename(subtitle_path)
+    print(f"[DEBUG] Initial basename: {base}")
+
     if '`' in base:
         base = base.split('`')[0]
+        print(f"[DEBUG] Cleaned base filename (before `): {base}")
 
     # Find subtitle entry in DB by filename (loosely matching base name)
-    cursor = db.execute("SELECT content FROM subtitles WHERE filename LIKE ?", (f"%{base}%",))
+    subtitle_data = extract_subtitle_path_data(subtitle_path)
+    track = subtitle_data["track"]
+    track = str(track)
+    code = subtitle_data["code"]
+    print(f"[DEBUG] Querying subtitles with filename={repr(base)}, track={repr(track)}, language={repr(code)}")
+    track = str(track)
+    cursor = db.execute(
+        "SELECT content FROM subtitles WHERE filename=? AND track=? AND language=?",
+        (base, track, code)
+    )
+    print(f"[DEBUG] Checking all subtitle rows with base filename like {repr(base)}")
+    cursor_all = db.execute("SELECT filename, track, language, typeof(track) FROM subtitles WHERE filename LIKE ?",
+                            (f"{base}%",))
+    rows = cursor_all.fetchall()
+    for r in rows:
+        print(f"filename={r[0]!r}, track={r[1]!r} (type={r[3]}), language={r[2]!r}")
+
     row = cursor.fetchone()
+    print("Matching subtitles in DB:")
+    for row in cursor:
+        print(row)
     if not row:
-        log_error(f"No subtitle entry found in DB matching: {base}")
+        log_error(f"No subtitle entry found in DB matching: {base}, track: {track}, language: {code}")
         return []
+
+    print(f"[DEBUG] Found subtitle DB entry for base: {base}, track: {track}, language: {code}")
 
     content_json = row[0]
 
@@ -525,6 +525,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
 
     overlapping_blocks = []
     for block in blocks:
+        print(f"block: {block}")
         if not block or len(block) < 3:
             continue
         try:
@@ -539,6 +540,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
         if sub_start_ms < end_ms and sub_end_ms > start_ms:
             overlapping_blocks.append(block)
 
+    print(f"[DEBUG] Found {len(overlapping_blocks)} overlapping blocks from {subtitle_path}")
     return overlapping_blocks
 
 def get_source_path_from_full_filename(full_source_filename) -> str:
@@ -572,33 +574,20 @@ def get_source_path_from_full_filename(full_source_filename) -> str:
     return ""
 
 def get_subtitle_track_number_by_code(source_path, code):
-    _, ffprobe_exe = get_ffmpeg_exe_path()
-    try:
-        cmd = [
-            ffprobe_exe, "-v", "error", "-select_streams", "s",
-            "-show_entries", "stream=index:stream_tags=language",
-            "-of", "json", source_path
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        log_command(f"[ffprobe subtitle track scan]\ncmd: {' '.join(cmd)}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
-
-        streams = json.loads(result.stdout).get("streams", [])
-
-        for i, s in enumerate(streams, 1):
-            if s.get("tags", {}).get("language", "").lower() == code.lower():
-                return i
-
-        log_error(f"No subtitle with code '{code}' found in: {source_path}")
-        return 1 if streams else None
-
-    except Exception as e:
-        log_error(f"ffprobe error while scanning {source_path}: {e}")
-
-    log_error(f"Could not get track number by code: {code}, source_path: {source_path}")
+    db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
+    conn = database.get_database()
+    filename = os.path.basename(source_path)
+    cursor = conn.execute(
+        "SELECT track FROM media_tracks WHERE filename = ? AND language = ? AND type = 'subtitle' ORDER BY track",
+        (filename, code.lower())
+    )
+    row = cursor.fetchone()
+    if row:
+        return row[0]
     return None
 
 def get_subtitle_code_by_track_number(source_path, track_number):
-    _, ffprobe_exe = get_ffmpeg_exe_path()
+    _, ffprobe_exe = constants.get_ffmpeg_exe_path()
     try:
         cmd = [
             ffprobe_exe, "-v", "error", "-select_streams", "s",
@@ -806,7 +795,7 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
 # commands and files
 def extract_subtitle_files(source_path, track, code, config):
     track = int(track)
-    exe_path, ffprobe_path = get_ffmpeg_exe_path()
+    exe_path, ffprobe_path = constants.get_ffmpeg_exe_path()
 
     def has_subtitle_streams(path):
         cmd = [ffprobe_path, '-v', 'error', '-select_streams', 's', '-show_entries', 'stream=index', '-of', 'json', path]
@@ -880,7 +869,7 @@ def extract_subtitle_files(source_path, track, code, config):
 
 def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collection_path, m4b_image_collection_path) -> str:
     out_dir = os.path.dirname(image_collection_path)
-    ffmpeg_path, _ = get_ffmpeg_exe_path()
+    ffmpeg_path, _ = constants.get_ffmpeg_exe_path()
     os.makedirs(out_dir, exist_ok=True)
     if not os.access(out_dir, os.W_OK):
         log_error(f"Cannot write to directory: {out_dir}")
@@ -941,7 +930,7 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
 
     log_filename(f"Extracting sound_line_data from sound_line: {sound_line}")
 
-    ffmpeg_path, ffprobe_path = get_ffmpeg_exe_path()
+    ffmpeg_path, ffprobe_path = constants.get_ffmpeg_exe_path()
 
     start = convert_hmsms_to_ffmpeg_time_notation(start_time)
     end = convert_hmsms_to_ffmpeg_time_notation(end_time)
@@ -1032,7 +1021,7 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
     return cmd
 
 def ffmpeg_extract_full_audio(source_file_path, config) -> str:
-    ffmpeg_path, _ = get_ffmpeg_exe_path()
+    ffmpeg_path, _ = constants.get_ffmpeg_exe_path()
     audio_ext = config["audio_ext"]
 
     base, _ = os.path.splitext(source_file_path)
@@ -1072,7 +1061,7 @@ def create_just_normalize_audio_command(source_path, config):
     bitrate = config["bitrate"]
 
     print(f"source path test: {source_path}")
-    ffmpeg_path, _ = get_ffmpeg_exe_path()
+    ffmpeg_path, _ = constants.get_ffmpeg_exe_path()
 
     base, file_extension = os.path.splitext(source_path)
     ext_no_dot = file_extension[1:].lower()
@@ -1125,7 +1114,7 @@ def format_timestamp_for_filename(timestamp: str) -> str:
     return timestamp.replace(':', '.').replace(',', '.')
 
 def get_audio_start_time_ms(source_file_path: str) -> int:
-    _, ffprobe_path = get_ffmpeg_exe_path()
+    _, ffprobe_path = constants.get_ffmpeg_exe_path()
     cmd = [
         ffprobe_path, "-v", "error",
         "-select_streams", "a:0",

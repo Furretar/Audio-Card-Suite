@@ -515,7 +515,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     else:
         new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path)
     if new_sentence_line:
-        new_sentence_line = format_text(new_sentence_line)
+        new_sentence_line = constants.format_text(new_sentence_line)
 
     # get timing line from other sound line
     timing_tracks_enabled = config["timing_tracks_enabled"]
@@ -547,7 +547,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         new_data = manage_files.extract_sound_line_data(new_sound_line)
         new_translation_line, translation_subtitle_path = manage_files.get_translation_line_and_subtitle_from_target_sound_line(new_sound_line, config, new_data)
         if new_translation_line:
-            new_translation_line = format_text(new_translation_line)
+            new_translation_line = constants.format_text(new_translation_line)
     else:
         new_translation_line = ""
 
@@ -645,14 +645,6 @@ def get_fields_from_editor(editor):
         "selected_text": selected_text,
     }
 
-def format_text(s):
-    if not s:
-        log_error(f"text is null")
-        return None
-
-    s = html.unescape(s)
-    s = re.sub(r'<[^>]+>', '', s)
-    return s.strip()
 
 def index_of_field(field_name, fields):
     for i, fld in enumerate(fields):

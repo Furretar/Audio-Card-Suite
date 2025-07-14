@@ -217,7 +217,7 @@ def extract_subtitle_path_data(subtitle_path):
     }
 
 def get_subtitle_file_from_database(filename, track, code, config, database):
-    track = str(track)
+    track_str = f"`track_{track}`"
 
     selected_tab_index = config["selected_tab_index"]
     translation_language_code = config["translation_language_code"]
@@ -248,10 +248,11 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
             return tagged_subtitle_path
 
     # try name matching basename
-    log_filename(f"trying matching basename")
+    log_filename(f"trying matching basename, code: {code}, trans code: {translation_language_code}")
     if not code == translation_language_code:
         basename_subtitle_file = f"{filename}.srt"
         basename_subtitle_path = os.path.join(constants.addon_source_folder, basename_subtitle_file)
+        log_filename(f"searching basename: {basename_subtitle_path}")
         if os.path.exists(basename_subtitle_path):
             log_filename(f"basename_subtitle_path: {basename_subtitle_path}")
             return basename_subtitle_path
@@ -270,7 +271,7 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
             log_filename(f"subtitle_path: {subtitle_path}")
             return subtitle_path
     else:
-        track_str = f"`track_{track}`"
+
         query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ?"
         cursor.execute(query, (like_pattern,))
         rows = cursor.fetchall()
@@ -286,7 +287,7 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
             
     log_error(f"No matching subtitle file found for:\n{filename}|{track_str}|{code}")
     if selected_tab_index == 0:
-        showInfo(f"Both the code `{code}` and track {track_str} do not exist for the file: {filename}\nPlease check your settings.")
+        log_error(f"Both the code `{code}` and track {track_str} do not exist for the file: {filename}\nPlease check your settings.")
     return None
 
 
@@ -853,8 +854,7 @@ def extract_subtitle_files(source_path, track, code, config):
 
     code = get_subtitle_code_by_track_number(source_path, track)
     if not code:
-        log_error(f"code {code} not found for track: {track}")
-        showInfo(f"Track {track} does not exist for the file: {filename_base}{file_extension}.\nPlease check your settings.")
+        log_error(f"Track {track} does not exist for the file: {filename_base}{file_extension}.\nPlease check your settings.")
         return
 
     tagged_subtitle_file = f"{filename_base}{file_extension}`track_{track}`{code}.srt"

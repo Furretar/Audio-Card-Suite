@@ -36,7 +36,6 @@ def close_database():
 
 
 
-
 def update_database():
     db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
     conn = sqlite3.connect(db_path)
@@ -93,6 +92,7 @@ def update_database():
 
     conn.commit()
     return conn
+
 
 update_database()
 

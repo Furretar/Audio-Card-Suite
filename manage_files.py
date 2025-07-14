@@ -500,37 +500,37 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
         log_error("Subtitle path is None.")
         return []
 
-    if not os.path.exists(subtitle_path):
-        log_error(f"Subtitle file not found: {subtitle_path}")
+    db = database.get_database()
+    base = os.path.basename(subtitle_path)
+    if '`' in base:
+        base = base.split('`')[0]
+
+    # Find subtitle entry in DB by filename (loosely matching base name)
+    cursor = db.execute("SELECT content FROM subtitles WHERE filename LIKE ?", (f"%{base}%",))
+    row = cursor.fetchone()
+    if not row:
+        log_error(f"No subtitle entry found in DB matching: {base}")
+        return []
+
+    content_json = row[0]
+
+    try:
+        blocks = json.loads(content_json)
+    except Exception as e:
+        log_error(f"Failed to parse subtitle JSON for {base}: {e}")
         return []
 
     start_ms = time_hmsms_to_milliseconds(start_time)
     end_ms = time_hmsms_to_milliseconds(end_time)
 
-    if not os.path.exists(subtitle_path):
-        log_error(f"Subtitle file not found: {subtitle_path}")
-        return []
-
-    with open(subtitle_path, "r", encoding="utf-8") as f:
-        raw_blocks = f.read().strip().split("\n\n")
-
-    formatted_blocks = []
-    for block in raw_blocks:
-        if not block.strip():
-            continue
-        lines = block.strip().splitlines()
-        if len(lines) < 3:
-            continue
-        formatted = format_subtitle_block(block)
-        if formatted:
-            formatted_blocks.append(formatted)
-
     overlapping_blocks = []
-    for block in formatted_blocks:
+    for block in blocks:
+        if not block or len(block) < 3:
+            continue
         try:
             sub_start_ms = time_hmsms_to_milliseconds(block[1])
             sub_end_ms = time_hmsms_to_milliseconds(block[2])
-        except:
+        except Exception:
             continue
 
         if sub_start_ms > end_ms:
@@ -645,70 +645,49 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, confi
     sentence_line = sentence_line or ""
     normalized_sentence = normalize_text(sentence_line)
 
-    def try_match_subtitles(path):
-        log_filename(f"reading from path: {path}")
-        if not path.lower().endswith('.srt'):
-            log_error(f"Not a .srt file: {path}")
-            return None, None
+    subtitle_database = database.get_database()
 
-        with open(path, 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-            blocks = content.split('\n\n')
-
-        formatted_blocks = [format_subtitle_block(b) for b in blocks]
-        usable_blocks = [b for b in formatted_blocks if b and len(b) == 4]
+    def try_match_blocks(blocks, db_filename, track, lang):
+        usable_blocks = [b for b in blocks if b and len(b) == 4]
         normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
 
         for i, norm_line in enumerate(normalized_lines):
             if norm_line.startswith(normalized_sentence):
-                log_filename(f"Matched start of line in: {path}")
-                return usable_blocks[i], path
+                log_filename(f"Matched start of line in DB: {db_filename}")
+                b = usable_blocks[i]
+                return b, f"{db_filename}`track_{track}`{lang}.srt"
 
         for start in range(len(normalized_lines)):
             joined = ""
             for end in range(start, len(normalized_lines)):
                 joined += normalized_lines[end]
                 if normalized_sentence in joined:
-                    log_filename(f"Matched joined block in: {path}")
-                    return usable_blocks[end], path
+                    log_filename(f"Matched joined block in DB: {db_filename}")
+                    b = usable_blocks[end]
+                    return b, f"{db_filename}`track_{track}`{lang}.srt"
                 if len(joined) > len(normalized_sentence) + 50:
                     break
 
         return None, None
 
-    checked_bases = set()
+    cursor = subtitle_database.execute("SELECT filename, language, track, content FROM subtitles")
+    for row in cursor:
+        db_filename, lang, trk, content_json = row
 
-    # First pass: scan already extracted subtitle files
-    subtitle_database = database.get_database()
-    for filename in os.listdir(constants.addon_source_folder):
-        filename_base, ext = os.path.splitext(filename)
-        ext = ext.lower()
-        if ext in constants.video_exts or ext in constants.audio_exts:
-            print(f"checking file: {filename}")
-            print(f"sending data filename: {filename}, track: {track}, code: {code}")
-            subtitle_path = get_subtitle_file_from_database(filename, track, code, config, subtitle_database)
-            print(f"received subtitle path: {subtitle_path}")
-            if subtitle_path and os.path.exists(subtitle_path):
-                block, path = try_match_subtitles(subtitle_path)
-                if block:
-                    return block, path
-            checked_bases.add(filename_base)
+        if str(trk) != str(track) and str(lang) != str(code):
+            continue
 
-    # Second pass: extract subtitle files that were missing
-    for filename in os.listdir(constants.addon_source_folder):
-        filename_base, ext = os.path.splitext(filename)
-        ext = ext.lower()
-        if (ext in constants.video_exts or ext in constants.audio_exts) and filename_base not in checked_bases:
-            log_command(f"Extracting subtitles for: {filename}")
-            source_path = get_source_path_from_full_filename(filename)
-            extract_subtitle_files(source_path, track, code, config)
-            subtitle_path = get_subtitle_file_from_database(filename, track, code, config, subtitle_database)
-            if subtitle_path and os.path.exists(subtitle_path):
-                block, path = try_match_subtitles(subtitle_path)
-                if block:
-                    return block, path
+        try:
+            blocks = json.loads(content_json)
+        except Exception as e:
+            log_error(f"Failed to parse content for {db_filename}: {e}")
+            continue
 
-    log_command("No subtitle match found in any file.")
+        block, pseudo_path = try_match_blocks(blocks, db_filename, trk, lang)
+        if block:
+            return block, os.path.join(constants.addon_source_folder, pseudo_path)
+
+    log_command("No subtitle match found in any database entry.")
     return None, None
 
 def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, config):
@@ -737,8 +716,11 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
     try:
         start_index = blocks[0][0]
         end_index = blocks[-1][0]
+
         start_time = convert_timestamp_dot_to_hmsms(blocks[0][1])
         end_time = convert_timestamp_dot_to_hmsms(blocks[-1][2])
+        print(f"start time: {blocks[0][1]}, end time: {blocks[-1][2]}")
+
 
         audio_ext = config["audio_ext"]
 
@@ -1125,12 +1107,6 @@ def create_just_normalize_audio_command(source_path, config):
 
 
 # convert and detect
-def convert_timestamp_dot_to_hmsms(ts: str) -> str:
-    parts = ts.split('.')
-    if len(parts) != 4:
-        print(f"Invalid timestamp format: {ts}")
-    hours, minutes, seconds, milliseconds = parts
-    return f"{hours}h{minutes}m{seconds}s{milliseconds}ms"
 
 def detect_format(sound_line: str):
     if not sound_line:
@@ -1173,10 +1149,50 @@ def normalize_text(s):
     s = re.sub(r'[\s\u3000]+', '', s)
     return s
 
+def timestamp_to_dot_format(ts: str) -> str:
+    ts = ts.replace(',', '.')
+    parts = ts.split(':')
+    if len(parts) != 3:
+        print(f"Invalid timestamp format for conversion: {ts}")
+        return ts
+    hours = parts[0]
+    minutes = parts[1]
+    sec_millis = parts[2].split('.')
+    if len(sec_millis) != 2:
+        print(f"Invalid seconds.milliseconds format for conversion: {parts[2]}")
+        return ts
+    seconds, milliseconds = sec_millis
+    return f"{hours}.{minutes}.{seconds}.{milliseconds}"
+
+
 def time_srt_to_milliseconds(t):
     h, m, s_ms = t.split(":")
     s, ms = s_ms.split(",")
     return (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
+
+
+def convert_timestamp_dot_to_hmsms(ts: str) -> str:
+    ts = ts.strip()
+    if '.' in ts and ts.count('.') == 3:
+        parts = ts.split('.')
+    elif ':' in ts and ',' in ts:
+        time_part, ms_part = ts.split(',')
+        hms = time_part.split(':')
+        if len(hms) != 3:
+            print(f"Invalid timestamp format: {ts}")
+            return ts
+        parts = [hms[0], hms[1], hms[2], ms_part]
+    else:
+        print(f"Invalid timestamp format: {ts}")
+        return ts
+
+    if len(parts) != 4:
+        print(f"Invalid timestamp format after parsing: {ts}")
+        return ts
+
+    hours, minutes, seconds, milliseconds = parts
+    return f"{hours}h{minutes}m{seconds}s{milliseconds}ms"
+
 
 def convert_hmsms_to_ffmpeg_time_notation(t: str):
     hmsms_match = re.match(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms", t)
@@ -1195,23 +1211,32 @@ def time_hmsms_to_seconds(t):
     s, ms = (s.split(',') if ',' in s else s.split('.'))
     return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000
 
+import re
+
 def time_hmsms_to_milliseconds(ts: str):
     pattern_hmsms = re.compile(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms")
+    pattern_colon = re.compile(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})")
 
     match = pattern_hmsms.match(ts)
     if match:
         h, m, s, ms = match.groups()
-    elif '.' in ts:
-        parts = ts.split('.')
-        if len(parts) != 4:
-            print(f"Unrecognized timestamp format: {ts}")
-        h, m, s, ms = parts
     else:
-        print(f"Unrecognized timestamp format: {ts}")
-        return None
+        match = pattern_colon.match(ts)
+        if match:
+            h, m, s, ms = match.groups()
+        elif '.' in ts:
+            parts = ts.split('.')
+            if len(parts) != 4:
+                print(f"Unrecognized timestamp format: {ts}")
+                return None
+            h, m, s, ms = parts
+        else:
+            print(f"Unrecognized timestamp format: {ts}")
+            return None
 
     total_ms = (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
     return total_ms
+
 
 def milliseconds_to_hmsms_format(ms: int) -> str:
     hours = ms // (3600 * 1000)

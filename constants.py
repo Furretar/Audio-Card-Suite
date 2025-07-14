@@ -65,20 +65,32 @@ DEBUG_IMAGE = False
 
 def log_filename(message):
     if DEBUG_FILENAME:
-        func = inspect.stack()[1].function
-        print(f"{func}:\n{message.strip()}\n")
+        frame = inspect.stack()[1]
+        func = frame.function
+        file = os.path.basename(frame.filename)
+        line = frame.lineno
+        print(f"{file}:{line} in {func}:\n{message.strip()}\n")
 
 def log_command(message):
     if DEBUG_COMMAND:
-        func = inspect.stack()[1].function
-        print(f"{func}:\n[command] {message.strip()}\n")
+        frame = inspect.stack()[1]
+        func = frame.function
+        file = os.path.basename(frame.filename)
+        line = frame.lineno
+        print(f"{file}:{line} in {func}:\n[command] {message.strip()}\n")
 
 def log_error(message):
     if DEBUG_ERROR:
-        func = inspect.stack()[1].function
-        print(f"{func}:\n[error] {message.strip()}\n")
+        frame = inspect.stack()[1]
+        func = frame.function
+        file = os.path.basename(frame.filename)
+        line = frame.lineno
+        print(f"{file}:{line} in {func}:\n[error] {message.strip()}\n")
 
 def log_image(message):
     if DEBUG_IMAGE:
-        func = inspect.stack()[1].function
-        print(f"{func}:\n[image] {message.strip()}\n")
+        frame = inspect.stack()[1]
+        func = frame.function
+        file = os.path.basename(frame.filename)
+        line = frame.lineno
+        print(f"{file}:{line} in {func}:\n[image] {message.strip()}\n")

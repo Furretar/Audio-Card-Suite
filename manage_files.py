@@ -489,28 +489,13 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
     track = subtitle_data["track"]
     track = str(track)
     code = subtitle_data["code"]
-    print(f"[DEBUG] Querying subtitles with filename={repr(base)}, track={repr(track)}, language={repr(code)}")
     track = str(track)
     cursor = db.execute(
         "SELECT content FROM subtitles WHERE filename=? AND track=? AND language=?",
         (base, track, code)
     )
-    print(f"[DEBUG] Checking all subtitle rows with base filename like {repr(base)}")
-    cursor_all = db.execute("SELECT filename, track, language, typeof(track) FROM subtitles WHERE filename LIKE ?",
-                            (f"{base}%",))
-    rows = cursor_all.fetchall()
-    for r in rows:
-        print(f"filename={r[0]!r}, track={r[1]!r} (type={r[3]}), language={r[2]!r}")
 
     row = cursor.fetchone()
-    print("Matching subtitles in DB:")
-    for row in cursor:
-        print(row)
-    if not row:
-        log_error(f"No subtitle entry found in DB matching: {base}, track: {track}, language: {code}")
-        return []
-
-    print(f"[DEBUG] Found subtitle DB entry for base: {base}, track: {track}, language: {code}")
 
     content_json = row[0]
 

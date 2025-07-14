@@ -23,7 +23,7 @@
   "timing_tracks_enabled": true,
   "target_timing_language": "Chinese",
   "translation_timing_language": "English",
-  "selected_tab_index": 0,
+  "selected_tab_index": 1,
   "mapped_fields": {
     "1Chinese": {
       "Expression": "Target Subtitle Line",

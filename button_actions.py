@@ -489,7 +489,8 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         subtitle_database = database.get_database()
         subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
         if not subtitle_path:
-            log_error(f"subtitle path null")
+            log_error(f"subtitle path null1")
+            showInfo(f"Could not find `{sentence_line}` in any subtitle file with the code `{code}` or track `{track}`.")
             return None
         start_index = data["start_index"]
         end_index = data["end_index"]
@@ -505,7 +506,8 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         log_error(f"no data extracted from sound line: {sound_line}")
         block, subtitle_path = manage_files.get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
         if not subtitle_path:
-            log_error(f"subtitle path null")
+            log_error(f"subtitle path null2")
+            showInfo(f"Could not find `{sentence_line}` in any subtitle file with the code `{code}` or track `{track}`.")
             return None
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, config)
     if selected_text:
@@ -536,6 +538,10 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         new_image_line = ""
 
     # get translation line
+    if not new_sound_line:
+        log_error(f"Target Audio not detected, cannot generate Translation or Translation Audio.")
+        showInfo(f"Target Audio not detected, cannot generate Translation or Translation Audio.")
+
     if (should_generate_translation_line and ((not translation_line) or overwrite)) or should_generate_translation_sound:
         log_filename(f"calling extract sound line data: {new_sound_line}")
         new_data = manage_files.extract_sound_line_data(new_sound_line)

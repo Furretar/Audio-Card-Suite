@@ -257,10 +257,11 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
             log_filename(f"basename_subtitle_path: {basename_subtitle_path}")
             return basename_subtitle_path
 
-    # 2. Fallback: match by code or track
     like_pattern = f"{filename}%"
+
+    # Attempt 1: Prioritized by selected_tab_index
     if selected_tab_index == 0:
-        log_filename("looking for code")
+        # Try code match first
         query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ? AND language = ?"
         cursor.execute(query, (like_pattern, code))
         row = cursor.fetchone()
@@ -268,23 +269,35 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
             base_filename, found_track, found_code = row
             subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
             subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-            log_filename(f"subtitle_path: {subtitle_path}")
+            log_filename(f"[tab 0] subtitle_path (by code): {subtitle_path}")
             return subtitle_path
-    else:
 
-        query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ?"
-        cursor.execute(query, (like_pattern,))
-        rows = cursor.fetchall()
-        for db_filename, db_track, db_lang in rows:
-            starts = db_filename.startswith(filename)
-            has_track = f"`track_{track}`" in db_filename
-            log_command(f"checking: {db_filename}, starts with {filename}: {starts}, has_track: {has_track}")
-            if starts and has_track:
-                subtitle_filename = f"{db_filename}`track_{track}`{db_lang}.srt"
-                subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-                log_filename(f"subtitle_path: {subtitle_path}")
-                return subtitle_path
-            
+    # Try track match (fallback for tab 0 or primary for tab 1+)
+    query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ?"
+    cursor.execute(query, (like_pattern,))
+    rows = cursor.fetchall()
+    for db_filename, db_track, db_lang in rows:
+        if db_filename.startswith(filename) and f"`track_{track}`" in db_filename:
+            subtitle_filename = f"{db_filename}`track_{track}`{db_lang}.srt"
+            subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
+            log_filename(f"[tab {selected_tab_index}] subtitle_path (by track): {subtitle_path}")
+            return subtitle_path
+
+    # Fallback to code if we didn't already try it
+    if selected_tab_index != 0:
+        query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ? AND language = ?"
+        cursor.execute(query, (like_pattern, code))
+        row = cursor.fetchone()
+        if row:
+            base_filename, found_track, found_code = row
+            subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
+            subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
+            log_filename(f"[tab 1+] subtitle_path (fallback by code): {subtitle_path}")
+            return subtitle_path
+
+    # Nothing found
+    return None
+
     log_error(f"No matching subtitle file found for:\n{filename}|{track_str}|{code}")
     if selected_tab_index == 0:
         log_error(f"Both the code `{code}` and track {track_str} do not exist for the file: {filename}\nPlease check your settings.")

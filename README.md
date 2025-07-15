@@ -10,6 +10,7 @@
 - [ ] after implementing pre indexing, only extract subs from files with no subtitle files at all, then if it still cant find it, then it can check every file individually
 - [ ] run bulk generation in background, have a stop button
 - [ ] make config global, only update when changed
+- [ ] using different timings files breaks the add/remove next/previous lines, so add a check where if the index and start times dont match the current file, search all of subtitle files with the same basename, and use another one if it matches exactly
 
 
 

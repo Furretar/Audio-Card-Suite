@@ -279,64 +279,6 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
         log_error(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {filename}\nPlease check your settings.")
     return None
 
-
-# def get_subtitle_path_and_code_from_full_filename_track_and_code(filename, track, code, config):
-#     filename_base, _ = os.path.splitext(filename)
-#     selected_tab_index = config["selected_tab_index"]
-#     translation_language_code = config["translation_language_code"]
-#     log_filename(f"received filename: {filename}, track/code: {track}/{code}")
-#     source_path = get_source_path_from_full_filename(filename)
-#
-#     if not os.path.exists(source_path):
-#         log_error(f"Source video not found: {source_path}")
-#         return None
-#
-#     if not code or code.lower() == "none":
-#         log_error(f"Invalid subtitle language code: {code!r}")
-#         return None
-#
-#     extract_subtitle_files(source_path, track, code, config)
-#
-#     # 1. Try exact match
-#     tagged_subtitle_file = f"{filename_base}`track_{track}`{code}.srt"
-#     tagged_subtitle_path = os.path.join(addon_source_folder, tagged_subtitle_file)
-#     if os.path.exists(tagged_subtitle_path):
-#         log_filename(f"tagged_subtitle_path: {tagged_subtitle_path}")
-#         return tagged_subtitle_path
-#
-#     # # try name matching basename
-#     # if not code == translation_language_code:
-#     #     basename_subtitle_file = f"{filename_base}.srt"
-#     #     basename_subtitle_path = os.path.join(addon_source_folder, basename_subtitle_file)
-#     #     if os.path.exists(basename_subtitle_path):
-#     #         log_filename(f"basename_subtitle_path: {basename_subtitle_path}")
-#     #         return basename_subtitle_path
-#
-#     # 2. Fallback: match by code or track
-#     log_command(f"fallback, looking for {code} or {track}")
-#     if selected_tab_index == 0:
-#         for file in os.listdir(addon_source_folder):
-#             if file.startswith(filename_base) and file.endswith(f"{code}.srt"):
-#                 subtitle_path = os.path.join(addon_source_folder, file)
-#                 log_filename(f"subtitle_path: {subtitle_path}")
-#                 return subtitle_path
-#
-#     track_str = f"`track_{track}`"
-#     for file in os.listdir(addon_source_folder):
-#         starts = file.startswith(filename)
-#         has_track = track_str in file
-#         log_command(f"checking: {file}, starts with {filename}: {starts}, has_track: {has_track}")
-#
-#         if file.startswith(filename_base) and track_str in file:
-#             subtitle_path = os.path.join(addon_source_folder, file)
-#             log_filename(f"subtitle_path: {subtitle_path}")
-#             return subtitle_path
-#
-#     log_error(f"No matching subtitle file found for:\n{filename}|{track_str}|{code}")
-#     if selected_tab_index == 0:
-#         showInfo(f"Both the code `{code}` and track {track_str} do not exist for the file: {filename}\nPlease check your settings.")
-#     return None
-
 def generate_image_line_from_sound_line(image_line, sound_line):
     # check if any field already has an image
     if image_line:
@@ -625,8 +567,8 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
 
     return formatted_blocks[start_index - 1:end_index]
 
-def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config):
-    track = config["target_subtitle_track"]
+def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config):
+    track = str(config["target_subtitle_track"])
     code = config["target_language_code"]
 
     sentence_line = sentence_line or ""
@@ -674,7 +616,48 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, confi
         if block:
             return block, os.path.join(constants.addon_source_folder, pseudo_path)
 
-    log_command("No subtitle match found in any database entry.")
+    log_command("Initial subtitle match failed. Trying to extract missing subtitle files...")
+
+    subtitle_dir = constants.addon_source_folder
+
+    all_source_files = [
+        f for f in os.listdir(subtitle_dir)
+        if os.path.splitext(f)[1].lower() in (constants.video_exts + constants.audio_exts)
+    ]
+
+    for filename in all_source_files:
+        source_path = os.path.join(subtitle_dir, filename)
+        extract_subtitle_files(source_path, track, code, config)
+
+    manage_database.update_database()
+
+    # Re-query the database after extraction
+    subtitle_database = manage_database.get_database()
+    cursor = subtitle_database.execute("SELECT filename, language, track, content FROM subtitles")
+    rows = cursor.fetchall()
+
+    for row in rows:
+        db_filename, lang, trk, content_json = row
+
+        if str(trk) != str(track) or str(lang) != str(code):
+            continue
+
+        try:
+            blocks = json.loads(content_json)
+        except Exception as e:
+            log_error(f"Failed to parse content after extraction for {db_filename}: {e}")
+            continue
+
+        block, pseudo_path = try_match_blocks(blocks, db_filename, trk, lang)
+        if block:
+            return block, os.path.join(constants.addon_source_folder, pseudo_path)
+
+    log_command("No subtitle match found in any database entry even after extraction.")
+
+    cursor = subtitle_database.execute("SELECT filename, language, track FROM subtitles")
+    for row in cursor.fetchall():
+        db_filename, lang, trk = row
+        log_filename(f"DB contains: {db_filename} | track: {trk} | lang: {lang}")
     return None, None
 
 def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, config):
@@ -802,7 +785,7 @@ def extract_subtitle_files(source_path, track, code, config):
         return bool(data.get('streams'))
 
     if not has_subtitle_streams(source_path):
-        log_filename("No subtitle streams found, skipping extraction.")
+        log_filename(f"No subtitle streams found for: {source_path}, skipping extraction.")
         return
 
     filename_base, file_extension = os.path.splitext(os.path.basename(source_path))
@@ -1365,4 +1348,3 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
     else:
         log_error(f"Expected output file not found: {altered_data['new_path']}")
         return ""
-

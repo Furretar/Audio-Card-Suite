@@ -55,8 +55,10 @@ def create_default_config():
         "audio_ext": "mp3",
         "bitrate": 192,
         "image_height": 1080,
-        "pad_start": 0,
-        "pad_end": 0,
+        "pad_start_target": 0,
+        "pad_end_target": 0,
+        "pad_start_translation": 0,
+        "pad_end_translation": 0,
         "target_language": "",
         "translation_language": "",
         "target_language_code": "",
@@ -148,8 +150,10 @@ class AudioToolsDialog(QDialog):
     def save_settings(self):
         print("save_settings called")
         self.settings["image_height"] = self.imageHeightEdit.value()
-        self.settings["pad_start"] = self.padStartEdit.value()
-        self.settings["pad_end"] = self.padEndEdit.value()
+        self.settings["pad_start_target"] = self.padStartEditTarget.value()
+        self.settings["pad_end_target"] = self.padEndEditTarget.value()
+        self.settings["pad_start_translation"] = self.padStartEditTranslation.value()
+        self.settings["pad_end_translation"] = self.padEndEditTranslation.value()
         self.settings["audio_ext"] = self.audioExtCombo.currentText()
         self.settings["bitrate"] = self.bitrateEdit.value()
         self.settings["normalize_audio"] = self.normalize_checkbox.isChecked()
@@ -289,33 +293,34 @@ class AudioToolsDialog(QDialog):
             dialog.exec()
 
 
-        self.setWindowTitle('Audio Card Suite')
+        self.setWindowTitle("Audio Card Suite")
         vbox = QVBoxLayout()
-        importGroup = QGroupBox("Import Options")
-        self.modelButton = QPushButton()
-        if mw.col.models.by_name(self.settings["default_model"]):
-            self.modelButton.setText(self.settings["default_model"])
-        else:
-            self.modelButton.setText(mw.col.models.current()['name'])
-        self.modelButton.setAutoDefault(False)
-        self.modelButton.clicked.connect(lambda: None)
-        # self.deckButton = QPushButton(self.settings["default_deck"])
-        # self.deckButton.clicked.connect(lambda: None)
 
-        self.modelFieldsButton = QPushButton()
-        self.modelFieldsButton.setText("⚙️")
+        importGroup = QGroupBox("Import Options")
+
+        self.modelButton = QPushButton()
+        default_model = self.settings.get("default_model")
+        current_model = mw.col.models.current()["name"]
+
+        if mw.col.models.by_name(default_model):
+            self.modelButton.setText(default_model)
+        else:
+            self.modelButton.setText(current_model)
+
+        self.modelButton.setAutoDefault(False)
+
+        # 🔽 Replace old connect with one that opens a menu
+        self.modelButton.clicked.connect(self.show_model_menu)
+
+        self.modelFieldsButton = QPushButton("⚙️")
         self.modelFieldsButton.setFixedWidth(32)
         self.modelFieldsButton.clicked.connect(lambda: self.mapFields(self.modelButton.text()))
-
 
         grid = QGridLayout()
         grid.addWidget(QLabel("Note Type:"), 0, 0)
         grid.addWidget(self.modelButton, 0, 1)
         grid.setColumnStretch(1, 1)
         grid.addWidget(self.modelFieldsButton, 0, 2)
-        # grid.addWidget(QLabel("Deck:"), 0, 3)
-        # grid.addWidget(self.deckButton, 0, 4)
-        # grid.setColumnStretch(4, 1)
 
         importGroup.setLayout(grid)
         vbox.addWidget(importGroup)
@@ -337,8 +342,10 @@ class AudioToolsDialog(QDialog):
         # Pad Timings group (Start and End)
         padGroup = QGroupBox("Pad Timings")
         padLayout = QGridLayout()
-        padLayout.addWidget(QLabel("Start:"), 0, 0)
-        padLayout.addWidget(QLabel("End:"), 1, 0)
+        padLayout.addWidget(QLabel("Target Start:"), 0, 0)
+        padLayout.addWidget(QLabel("Target End:"), 1, 0)
+        padLayout.addWidget(QLabel("Translation Start:"), 2, 0)
+        padLayout.addWidget(QLabel("Translation End:"), 3, 0)
 
         self.padStartEditTarget = QSpinBox()
         self.padStartEditTarget.setRange(-10000000, 10000000)
@@ -597,8 +604,11 @@ class AudioToolsDialog(QDialog):
         for spinner in self.trackSpinners:
             spinner.valueChanged.connect(self.save_settings)
         self.imageHeightEdit.valueChanged.connect(self.save_settings)
-        self.padStartEdit.valueChanged.connect(self.save_settings)
-        self.padEndEdit.valueChanged.connect(self.save_settings)
+        self.padStartEditTarget.valueChanged.connect(self.save_settings)
+        self.padEndEditTarget.valueChanged.connect(self.save_settings)
+        self.padStartEditTranslation.valueChanged.connect(self.save_settings)
+        self.padEndEditTranslation.valueChanged.connect(self.save_settings)
+
         self.normalize_checkbox.stateChanged.connect(self.save_settings)
         self.audioExtCombo.currentTextChanged.connect(self.save_settings)
 
@@ -613,7 +623,20 @@ class AudioToolsDialog(QDialog):
         self.timingTracksCheckbox.stateChanged.connect(self.on_timing_checkbox_changed)
         self.apply_settings_to_ui()
 
+    def select_model(self, model):
+        self.selectedModel = model
+        self.modelButton.setText(model["name"])
+        self.settings["default_model"] = model["name"]
+        self.save_settings()
 
+    def show_model_menu(self):
+        menu = QMenu(self)
+        for model in mw.col.models.all():
+            name = model["name"]
+            action = QAction(name, self)
+            action.triggered.connect(lambda checked=False, m=model: self.select_model(m))
+            menu.addAction(action)
+        menu.exec(self.modelButton.mapToGlobal(self.modelButton.rect().bottomLeft()))
 
     def mapFields(self, model_name):
         fm = FieldMapping(model_name, self.configManager, parent=self)
@@ -628,8 +651,10 @@ class AudioToolsDialog(QDialog):
         # Block signals on widgets that trigger save_settings
         widgets = [
             self.imageHeightEdit,
-            self.padStartEdit,
-            self.padEndEdit,
+            self.padStartEditTarget,
+            self.padEndEditTarget,
+            self.padStartEditTranslation,
+            self.padEndEditTranslation,
             self.audioExtCombo,
             self.bitrateEdit,
             self.normalize_checkbox,
@@ -642,8 +667,10 @@ class AudioToolsDialog(QDialog):
             w.blockSignals(True)
 
         self.imageHeightEdit.setValue(self.settings["image_height"])
-        self.padStartEdit.setValue(self.settings["pad_start_target"])
-        self.padEndEdit.setValue(self.settings["pad_end"])
+        self.padStartEditTarget.setValue(self.settings["pad_start_target"])
+        self.padEndEditTarget.setValue(self.settings["pad_end_target"])
+        self.padStartEditTranslation.setValue(self.settings["pad_start_translation"])
+        self.padEndEditTranslation.setValue(self.settings["pad_end_translation"])
 
         idx = self.audioExtCombo.findText(self.settings["audio_ext"])
         if idx >= 0:
@@ -765,10 +792,6 @@ class FieldMapping(QDialog):
 
         groupBox.setLayout(grid)
         vbox.addWidget(groupBox)
-
-        infoLabel = QLabel("Field mappings each for note type will be saved.")
-        infoLabel.setWordWrap(True)
-        vbox.addWidget(infoLabel)
 
         self.buttonBox = QDialogButtonBox(self)
         self.buttonBox.setStandardButtons(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)

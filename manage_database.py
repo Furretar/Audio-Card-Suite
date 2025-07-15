@@ -1,4 +1,7 @@
-import json
+import sys, os
+sys.path.append(os.path.dirname(__file__))
+import constants
+
 import os
 import sqlite3
 import re
@@ -6,13 +9,7 @@ import constants
 from aqt.utils import showInfo
 import subprocess
 
-from constants import (
-    log_filename,
-    log_error,
-    log_image,
-    log_command,
-    addon_source_folder,
-)
+
 
 conn = None
 

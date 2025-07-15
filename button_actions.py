@@ -371,7 +371,7 @@ def generate_and_update_fields(editor, note):
     else:
         for name, is_present in fields_status.items():
             if not is_present:
-                print(f"❌ Missing: {name}")
+                log_filename(f"Missing: {name}")
 
 
 
@@ -513,10 +513,9 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
             data = None
 
     # generate sound line if doesn't exist
-    print(f"sentence_line: {sentence_line}")
     if not data:
         log_error(f"no data extracted from sound line: {sound_line}")
-        block, subtitle_path = manage_files.get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
+        block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
         if not subtitle_path:
             log_error(f"subtitle path null2")
             showInfo(f"Could not find `{sentence_line}` in any subtitle file with the code `{code}` or track `{track}`.")

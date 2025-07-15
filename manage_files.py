@@ -920,7 +920,14 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
         log_error(f"End time must be after start time: {start}, {end}")
         return []
 
-    delay_ms = get_audio_start_time_ms(source_path)
+    # get or add start time to database
+    conn = manage_database.get_database()
+    filename = os.path.basename(source_path)
+    delay_ms = get_audio_start_time_ms_from_db(filename, conn)
+
+    if delay_ms is None:
+        delay_ms = get_audio_start_time_ms(source_path)
+        set_audio_start_time_ms_in_db(filename, delay_ms, conn)
 
     base, file_extension = os.path.splitext(collection_path)
     ext_no_dot = file_extension[1:].lower()
@@ -972,6 +979,27 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
         log_error(f"Error selecting audio track: {e}")
         audio_track_index = 0
 
+    # --- Retrieve delay_ms for this audio stream from DB ---
+    conn = manage_database.get_database()
+    filename = os.path.basename(source_path)
+
+    cursor = conn.execute(
+        "SELECT delay_ms FROM media_audio_start_times WHERE filename=? AND audio_track=?",
+        (filename, audio_track_index)
+    )
+    row = cursor.fetchone()
+
+    if row:
+        delay_ms = row[0]
+    else:
+        delay_ms = constants.get_audio_start_time_ms_for_track(source_path, audio_track_index)
+        conn.execute(
+            "INSERT OR REPLACE INTO media_audio_start_times (filename, audio_track, delay_ms) VALUES (?, ?, ?)",
+            (filename, audio_track_index, delay_ms)
+        )
+        conn.commit()
+
+    # --- build ffmpeg command using delay_ms ---
     cmd = [
         ffmpeg_path, "-y",
         "-ss", start,
@@ -1000,6 +1028,7 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
 
     log_command(f"[FFmpeg command]\n{' '.join(cmd)}")
     return cmd
+
 
 def ffmpeg_extract_full_audio(source_file_path, config) -> str:
     ffmpeg_path, _ = constants.get_ffmpeg_exe_path()
@@ -1094,6 +1123,23 @@ def is_backtick_format(sound_line: str) -> bool:
 def format_timestamp_for_filename(timestamp: str) -> str:
     return timestamp.replace(':', '.').replace(',', '.')
 
+def get_audio_start_time_ms_from_db(filename, conn):
+    cursor = conn.execute(
+        "SELECT delay_ms FROM media_audio_start_times WHERE filename = ?",
+        (filename,)
+    )
+    row = cursor.fetchone()
+    return row[0] if row else None
+
+def set_audio_start_time_ms_in_db(filename, delay_ms, conn):
+    conn.execute(
+        "INSERT OR REPLACE INTO media_audio_start_times (filename, delay_ms) VALUES (?, ?)",
+        (filename, delay_ms)
+    )
+    conn.commit()
+
+
+# todo deprecate
 def get_audio_start_time_ms(source_file_path: str) -> int:
     _, ffprobe_path = constants.get_ffmpeg_exe_path()
     cmd = [

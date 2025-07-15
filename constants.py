@@ -1,7 +1,10 @@
+import json
 import re
 import os
 import inspect
 import shutil
+import subprocess
+
 from aqt.utils import showInfo
 import html
 
@@ -124,3 +127,33 @@ def format_text(s):
     s = html.unescape(s)
     s = re.sub(r'<[^>]+>', '', s)
     return s.strip()
+
+
+def get_audio_start_time_ms_for_track(source_path, audio_stream_index):
+    try:
+        ffmpeg_path, ffprobe_path = get_ffmpeg_exe_path()
+
+        cmd = [
+            ffprobe_path,
+            "-v", "error",
+            "-select_streams", f"a:{audio_stream_index}",
+            "-show_entries", "stream=start_time",
+            "-of", "json",
+            source_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        info = json.loads(result.stdout)
+
+        streams = info.get("streams", [])
+        if not streams:
+            return 0
+
+        start_time_str = streams[0].get("start_time", "0")
+        start_time_sec = float(start_time_str)
+        delay_ms = int(start_time_sec * 1000)
+
+        return max(delay_ms, 0)
+
+    except Exception as e:
+        log_error(f"Failed to get audio start time for track {audio_stream_index} in {source_path}: {e}")
+        return 0

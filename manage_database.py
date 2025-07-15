@@ -8,7 +8,14 @@ import re
 import constants
 from aqt.utils import showInfo
 import subprocess
+import json
 
+from constants import (
+    log_filename,
+    log_error,
+    log_image,
+    log_command,
+)
 
 
 conn = None
@@ -50,8 +57,18 @@ def run_ffprobe(file_path):
 def update_database():
     db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
     conn = sqlite3.connect(db_path)
+
     conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')
     conn.execute('CREATE TABLE IF NOT EXISTS media_tracks (filename TEXT, track INTEGER, language TEXT, type TEXT, PRIMARY KEY(filename, track, type))')
+
+    conn.execute('''
+    CREATE TABLE IF NOT EXISTS media_audio_start_times (
+        filename TEXT,
+        audio_track INTEGER,
+        delay_ms INTEGER,
+        PRIMARY KEY (filename, audio_track)
+    )
+    ''')
 
     folder = os.path.join(constants.addon_dir, constants.addon_source_folder)
 
@@ -116,6 +133,7 @@ def update_database():
     to_remove_media = indexed_media_files - current_media_files
     for media_file in to_remove_media:
         conn.execute('DELETE FROM media_tracks WHERE filename=?', (media_file,))
+        conn.execute('DELETE FROM media_audio_start_times WHERE filename=?', (media_file,))
 
     to_add_media = current_media_files - indexed_media_files
     for media_file in to_add_media:
@@ -135,6 +153,12 @@ def update_database():
                 language = stream.get('tags', {}).get('language', 'und').lower()
                 conn.execute('INSERT OR REPLACE INTO media_tracks VALUES (?, ?, ?, ?)',
                              (media_file, audio_count, language, 'audio'))
+
+                # Get delay_ms for this audio stream (implement this function accordingly)
+                delay_ms = constants.get_audio_start_time_ms_for_track(full_path, stream["index"])
+                conn.execute('INSERT OR REPLACE INTO media_audio_start_times VALUES (?, ?, ?)',
+                             (media_file, audio_count, delay_ms))
+
             elif codec_type == 'subtitle':
                 subtitle_count += 1
                 language = stream.get('tags', {}).get('language', 'und').lower()
@@ -154,6 +178,4 @@ def update_database():
 
 
 
-
-import json
 

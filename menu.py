@@ -41,7 +41,7 @@ CHECKBOX_MIN_WIDTH = constants.CHECKBOX_MIN_WIDTH
 BUTTON_PADDING = constants.BUTTON_PADDING
 SHIFT_BUTTON_BG_COLOR = constants.SHIFT_BUTTON_BG_COLOR
 
-
+_audio_tools_dialog_instance = None
 
 from aqt import mw
 from aqt.qt import *
@@ -340,18 +340,31 @@ class AudioToolsDialog(QDialog):
         padLayout.addWidget(QLabel("Start:"), 0, 0)
         padLayout.addWidget(QLabel("End:"), 1, 0)
 
-        self.padStartEdit = QSpinBox()
-        self.padStartEdit.setRange(-10000000, 10000000)  # Adjust max as needed
-        self.padStartEdit.setValue(self.settings["pad_start"])
-        self.padStartEdit.setSuffix(" ms")
+        self.padStartEditTarget = QSpinBox()
+        self.padStartEditTarget.setRange(-10000000, 10000000)
+        self.padStartEditTarget.setValue(self.settings["pad_start_target"])
+        self.padStartEditTarget.setSuffix(" ms")
 
-        self.padEndEdit = QSpinBox()
-        self.padEndEdit.setRange(-10000000, 10000000)  # Adjust max as needed
-        self.padEndEdit.setValue(self.settings["pad_end"])
-        self.padEndEdit.setSuffix(" ms")
+        self.padEndEditTarget = QSpinBox()
+        self.padEndEditTarget.setRange(-10000000, 10000000)
+        self.padEndEditTarget.setValue(self.settings["pad_end_target"])
+        self.padEndEditTarget.setSuffix(" ms")
 
-        padLayout.addWidget(self.padStartEdit, 0, 1)
-        padLayout.addWidget(self.padEndEdit, 1, 1)
+        self.padStartEditTranslation = QSpinBox()
+        self.padStartEditTranslation.setRange(-10000000, 10000000)
+        self.padStartEditTranslation.setValue(self.settings["pad_start_translation"])
+        self.padStartEditTranslation.setSuffix(" ms")
+
+        self.padEndEditTranslation = QSpinBox()
+        self.padEndEditTranslation.setRange(-10000000, 10000000)
+        self.padEndEditTranslation.setValue(self.settings["pad_end_translation"])
+        self.padEndEditTranslation.setSuffix(" ms")
+
+        padLayout.addWidget(self.padStartEditTarget, 0, 1)
+        padLayout.addWidget(self.padEndEditTarget, 1, 1)
+        padLayout.addWidget(self.padStartEditTranslation, 2, 1)
+        padLayout.addWidget(self.padEndEditTranslation, 3, 1)
+
         padGroup.setLayout(padLayout)
         hbox.addWidget(padGroup)
 
@@ -629,7 +642,7 @@ class AudioToolsDialog(QDialog):
             w.blockSignals(True)
 
         self.imageHeightEdit.setValue(self.settings["image_height"])
-        self.padStartEdit.setValue(self.settings["pad_start"])
+        self.padStartEdit.setValue(self.settings["pad_start_target"])
         self.padEndEdit.setValue(self.settings["pad_end"])
 
         idx = self.audioExtCombo.findText(self.settings["audio_ext"])
@@ -775,8 +788,27 @@ class FieldMapping(QDialog):
         self.close()
 
 def open_audio_tools_dialog():
+    global _audio_tools_dialog_instance
+
+    # If the dialog is already open and visible, bring it to front
+    if _audio_tools_dialog_instance and _audio_tools_dialog_instance.isVisible():
+        _audio_tools_dialog_instance.raise_()
+        _audio_tools_dialog_instance.activateWindow()
+        return
+
+    # Otherwise, create and show a new one
     dlg = AudioToolsDialog()
+    dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+
+    # Store reference and clear it when the dialog is closed
+    _audio_tools_dialog_instance = dlg
+    dlg.destroyed.connect(lambda: _clear_audio_tools_reference())
+
     dlg.show()
+
+def _clear_audio_tools_reference():
+    global _audio_tools_dialog_instance
+    _audio_tools_dialog_instance = None
 
 def add_audio_tools_menu():
     menu_bar = mw.form.menubar
@@ -909,47 +941,6 @@ def add_custom_controls(editor: Editor) -> None:
     spinboxes_layout.setContentsMargins(*CONTAINER_MARGINS)
     spinboxes_layout.setSpacing(CONTAINER_SPACING)
 
-    # Row 1: Target track spinboxes
-    track_row_1 = QWidget()
-    track_row_1_layout = QHBoxLayout(track_row_1)
-    track_row_1_layout.setContentsMargins(*ROW_MARGINS)
-    track_row_1_layout.setSpacing(ROW_SPACING)
-    for label in ["Target Audio Track Number", "Target Subtitle Track Number"]:
-        widget, spin = make_labeled_spinbox(label, 0, 1000, 0)
-        track_row_1_layout.addWidget(widget)
-        if "Audio" in label:
-            editor._target_audio_track_spinbox = spin
-        elif "Subtitle" in label:
-            editor._target_subtitle_track_spinbox = spin
-
-    # Row 2: Translation track spinboxes
-    track_row_2 = QWidget()
-    track_row_2_layout = QHBoxLayout(track_row_2)
-    track_row_2_layout.setContentsMargins(*ROW_MARGINS)
-    track_row_2_layout.setSpacing(ROW_SPACING)
-    for label in ["Translation Audio Track Number", "Translation Subtitle Track Number"]:
-        widget, spin = make_labeled_spinbox(label, 0, 1000, 0)
-        track_row_2_layout.addWidget(widget)
-        if "Audio" in label:
-            editor._translation_audio_track_spinbox = spin
-        elif "Subtitle" in label:
-            editor._translation_subtitle_track_spinbox = spin
-
-    # Row 3: Offset spinboxes
-    offset_spinboxes_row = QWidget()
-    offset_spinboxes_layout = QHBoxLayout(offset_spinboxes_row)
-    offset_spinboxes_layout.setContentsMargins(*ROW_MARGINS)
-    offset_spinboxes_layout.setSpacing(ROW_SPACING)
-    for label in ["Start offset", "End offset", "Subtitle Offset"]:
-        widget, spin = make_labeled_spinbox(label, -999999, 999999, 0)
-        offset_spinboxes_layout.addWidget(widget)
-        if "Start" in label:
-            editor._start_offset_spinbox = spin
-        elif "End" in label:
-            editor._end_offset_spinbox = spin
-        elif "Subtitle" in label:
-            editor._subtitle_offset_spinbox = spin
-
     # Row 4: Checkboxes row (autoplay + track menu)
     checkboxes_row = QWidget()
     checkboxes_layout = QHBoxLayout(checkboxes_row)
@@ -962,26 +953,18 @@ def add_custom_controls(editor: Editor) -> None:
     autoplay_checkbox.clicked.connect(lambda _: handle_autoplay_checkbox_toggle(_, editor))
     checkboxes_layout.addWidget(autoplay_checkbox)
 
-    show_track_menu_checkbox = QCheckBox("Track Menu")
-    show_track_menu_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
-    checkboxes_layout.addWidget(show_track_menu_checkbox)
+    # Push everything to the left before adding the button on the right
+    checkboxes_layout.addStretch()
 
-    def toggle_track_visibility(state):
-        visible = state == 2
-        track_row_1.setVisible(visible)
-        track_row_2.setVisible(visible)
-        offset_spinboxes_row.setVisible(visible)
+    # Add "Main Menu" button
+    main_menu_button = QPushButton("Main Menu")
+    main_menu_button.clicked.connect(open_audio_tools_dialog)
+    checkboxes_layout.addWidget(main_menu_button)
 
-    show_track_menu_checkbox.stateChanged.connect(toggle_track_visibility)
-    toggle_track_visibility(0)
-
-    spinboxes_layout.addWidget(track_row_1)
-    spinboxes_layout.addWidget(track_row_2)
-    spinboxes_layout.addWidget(offset_spinboxes_row)
+    # Add the row to the layout
     spinboxes_layout.addWidget(checkboxes_row)
     main_layout.addWidget(spinboxes_container)
     editor._custom_controls_container_spinboxes = spinboxes_container
-
 gui_hooks.editor_did_init.append(add_custom_controls)
 
 def on_profile_loaded():

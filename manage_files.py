@@ -7,7 +7,7 @@ import re
 from aqt.utils import showInfo
 from send2trash import send2trash
 import constants
-import database
+import manage_database
 
 from constants import (
     log_filename,
@@ -186,90 +186,97 @@ def extract_subtitle_path_data(subtitle_path):
     }
 
 def get_subtitle_file_from_database(filename, track, code, config, database):
-    track_str = f"`track_{track}`"
+    def find_subtitle():
+        selected_tab_index = config["selected_tab_index"]
+        translation_language_code = config["translation_language_code"]
+        log_filename(f"received filename: {filename}, track/code: {track}/{code}")
+        source_path = get_source_path_from_full_filename(filename)
 
-    selected_tab_index = config["selected_tab_index"]
-    translation_language_code = config["translation_language_code"]
-    log_filename(f"received filename: {filename}, track/code: {track}/{code}")
+        if not os.path.exists(source_path):
+            log_error(f"Source video not found: {source_path}")
+            return None
+
+        if not code or code.lower() == "none":
+            log_error(f"Invalid subtitle language code: {code!r}")
+            return None
+
+        cursor = database.cursor()
+
+        # Try exact match
+        log_filename(f"trying exact match")
+        query = "SELECT 1 FROM subtitles WHERE filename = ? AND track = ? AND language = ? LIMIT 1"
+        cursor.execute(query, (filename, str(track), code))
+        result = cursor.fetchone()
+        if result:
+            tagged_subtitle_file = f"{filename}`track_{track}`{code}.srt"
+            tagged_subtitle_path = os.path.join(constants.addon_source_folder, tagged_subtitle_file)
+            if os.path.exists(tagged_subtitle_path):
+                log_filename(f"tagged_subtitle_path: {tagged_subtitle_path}")
+                return tagged_subtitle_path
+
+        # Try matching basename if translation and target are not same
+        if code != translation_language_code:
+            basename_subtitle_file = f"{filename}.srt"
+            basename_subtitle_path = os.path.join(constants.addon_source_folder, basename_subtitle_file)
+            if os.path.exists(basename_subtitle_path):
+                log_filename(f"basename_subtitle_path: {basename_subtitle_path}")
+                return basename_subtitle_path
+
+        like_pattern = f"{filename}%"
+
+        if selected_tab_index == 0:
+            query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ? AND language = ?"
+            cursor.execute(query, (like_pattern, code))
+            row = cursor.fetchone()
+            if row:
+                base_filename, found_track, found_code = row
+                subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
+                subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
+                log_filename(f"[tab 0] subtitle_path (by code): {subtitle_path}")
+                return subtitle_path
+
+        query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ?"
+        cursor.execute(query, (like_pattern,))
+        rows = cursor.fetchall()
+        for db_filename, db_track, db_lang in rows:
+            if db_filename.startswith(filename) and f"`track_{track}`" in db_filename:
+                subtitle_filename = f"{db_filename}`track_{track}`{db_lang}.srt"
+                subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
+                log_filename(f"[tab {selected_tab_index}] subtitle_path (by track): {subtitle_path}")
+                return subtitle_path
+
+        if selected_tab_index != 0:
+            query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ? AND language = ?"
+            cursor.execute(query, (like_pattern, code))
+            row = cursor.fetchone()
+            if row:
+                base_filename, found_track, found_code = row
+                subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
+                subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
+                log_filename(f"[tab 1+] subtitle_path (fallback by code): {subtitle_path}")
+                return subtitle_path
+
+        return None
+
+    # === Step 1: Try finding subtitle
+    path = find_subtitle()
+    if path:
+        return path
+
+    # === Step 2: Extract subtitle files
+    log_error("Subtitle not found; extracting and retrying...")
     source_path = get_source_path_from_full_filename(filename)
-
-    if not os.path.exists(source_path):
-        log_error(f"Source video not found: {source_path}")
-        return None
-
-    if not code or code.lower() == "none":
-        log_error(f"Invalid subtitle language code: {code!r}")
-        return None
-
     extract_subtitle_files(source_path, track, code, config)
 
-    # 1. Try exact match
-    log_filename(f"trying exact match")
-    cursor = database.cursor()
-    query = "SELECT 1 FROM subtitles WHERE filename = ? AND track = ? AND language = ? LIMIT 1"
-    cursor.execute(query, (filename, str(track), code))
-    result = cursor.fetchone()
-    if result:
-        tagged_subtitle_file = f"{filename}`track_{track}`{code}.srt"
-        tagged_subtitle_path = os.path.join(constants.addon_source_folder, tagged_subtitle_file)
-        if os.path.exists(tagged_subtitle_path):
-            log_filename(f"tagged_subtitle_path: {tagged_subtitle_path}")
-            return tagged_subtitle_path
+    # === Step 3: Update database and retry
+    manage_database.update_database()
+    path = find_subtitle()
+    if path:
+        return path
 
-    # try name matching basename
-    log_filename(f"trying matching basename, code: {code}, trans code: {translation_language_code}")
-    if not code == translation_language_code:
-        basename_subtitle_file = f"{filename}.srt"
-        basename_subtitle_path = os.path.join(constants.addon_source_folder, basename_subtitle_file)
-        log_filename(f"searching basename: {basename_subtitle_path}")
-        if os.path.exists(basename_subtitle_path):
-            log_filename(f"basename_subtitle_path: {basename_subtitle_path}")
-            return basename_subtitle_path
-
-    like_pattern = f"{filename}%"
-
-    # Attempt 1: Prioritized by selected_tab_index
-    if selected_tab_index == 0:
-        # Try code match first
-        query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ? AND language = ?"
-        cursor.execute(query, (like_pattern, code))
-        row = cursor.fetchone()
-        if row:
-            base_filename, found_track, found_code = row
-            subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
-            subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-            log_filename(f"[tab 0] subtitle_path (by code): {subtitle_path}")
-            return subtitle_path
-
-    # Try track match (fallback for tab 0 or primary for tab 1+)
-    query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ?"
-    cursor.execute(query, (like_pattern,))
-    rows = cursor.fetchall()
-    for db_filename, db_track, db_lang in rows:
-        if db_filename.startswith(filename) and f"`track_{track}`" in db_filename:
-            subtitle_filename = f"{db_filename}`track_{track}`{db_lang}.srt"
-            subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-            log_filename(f"[tab {selected_tab_index}] subtitle_path (by track): {subtitle_path}")
-            return subtitle_path
-
-    # Fallback to code if we didn't already try it
-    if selected_tab_index != 0:
-        query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ? AND language = ?"
-        cursor.execute(query, (like_pattern, code))
-        row = cursor.fetchone()
-        if row:
-            base_filename, found_track, found_code = row
-            subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
-            subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-            log_filename(f"[tab 1+] subtitle_path (fallback by code): {subtitle_path}")
-            return subtitle_path
-
-    # Nothing found
-    return None
-
-    log_error(f"No matching subtitle file found for:\n{filename}|{track_str}|{code}")
-    if selected_tab_index == 0:
-        log_error(f"Both the code `{code}` and track {track_str} do not exist for the file: {filename}\nPlease check your settings.")
+    log_error(f"No matching subtitle file found for:\n{filename}|`track_{track}`|{code}")
+    if config["selected_tab_index"] == 0:
+        log_error(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {filename}\nPlease check your settings.")
     return None
 
 
@@ -396,7 +403,7 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
     full_source_filename = sound_line_data["full_source_filename"]
 
 
-    subtitle_database = database.get_database()
+    subtitle_database = manage_database.get_database()
     translation_subtitle_path = get_subtitle_file_from_database(full_source_filename, translation_audio_track, translation_language_code, config, subtitle_database)
 
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
@@ -441,7 +448,7 @@ def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, 
     source_file_extension = sound_line_data["source_file_extension"]
     full_source_filename = sound_line_data["full_source_filename"]
 
-    subtitle_database = database.get_database()
+    subtitle_database = manage_database.get_database()
     timing_subtitle_path = get_subtitle_file_from_database(
         full_source_filename, timing_audio_track, timing_language_code, config, subtitle_database)
 
@@ -476,7 +483,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
 
     print(f"[DEBUG] Provided subtitle path: {subtitle_path}")
 
-    db = database.get_database()
+    db = manage_database.get_database()
     base = os.path.basename(subtitle_path)
     print(f"[DEBUG] Initial basename: {base}")
 
@@ -510,13 +517,16 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
 
     overlapping_blocks = []
     for block in blocks:
-        print(f"block: {block}")
         if not block or len(block) < 3:
             continue
         try:
             sub_start_ms = time_hmsms_to_milliseconds(block[1])
             sub_end_ms = time_hmsms_to_milliseconds(block[2])
         except Exception:
+            continue
+
+        if sub_start_ms is None or sub_end_ms is None:
+            log_error(f"Unrecognized timestamp format: {block}")
             continue
 
         if sub_start_ms > end_ms:
@@ -560,7 +570,7 @@ def get_source_path_from_full_filename(full_source_filename) -> str:
 
 def get_subtitle_track_number_by_code(source_path, code):
     db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
-    conn = database.get_database()
+    conn = manage_database.get_database()
     filename = os.path.basename(source_path)
     cursor = conn.execute(
         "SELECT track FROM media_tracks WHERE filename = ? AND language = ? AND type = 'subtitle' ORDER BY track",
@@ -596,6 +606,9 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
         log_error(f"subtitle path is none")
         return ""
 
+    if not os.path.exists(subtitle_path):
+        log_error(f"subtitle path {subtitle_path} does not exist")
+
     with open(subtitle_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
@@ -619,7 +632,7 @@ def get_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, confi
     sentence_line = sentence_line or ""
     normalized_sentence = normalize_text(sentence_line)
 
-    subtitle_database = database.get_database()
+    subtitle_database = manage_database.get_database()
 
     def try_match_blocks(blocks, db_filename, track, lang):
         usable_blocks = [b for b in blocks if b and len(b) == 4]
@@ -741,7 +754,7 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
             if ext.lower() not in constants.video_exts + constants.audio_exts:
                 continue
 
-            subtitle_database = database.get_database()
+            subtitle_database = manage_database.get_database()
             subtitle_path = get_subtitle_file_from_database(filename, track, code, config, subtitle_database)
 
             if not subtitle_path or not os.path.exists(subtitle_path):

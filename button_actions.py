@@ -9,7 +9,7 @@ from aqt.utils import showInfo
 from aqt.sound import play, av_player
 from aqt import gui_hooks
 from anki.notes import Note
-import database
+import manage_database
 
 import manage_files
 from manage_files import get_field_key_from_label
@@ -112,8 +112,10 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     start_index = data["start_index"]
     end_index = data["end_index"]
     full_source_filename = data["full_source_filename"]
-    subtitle_database = database.get_database()
+    subtitle_database = manage_database.get_database()
     subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
+
+
     blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, subtitle_path)
     new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, config)
 
@@ -486,12 +488,22 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     # get sound and sentence line
     if data:
         full_source_filename = data["full_source_filename"]
-        subtitle_database = database.get_database()
+        subtitle_database = manage_database.get_database()
         subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
+
         if not subtitle_path:
             log_error(f"subtitle path null1")
             showInfo(f"Could not find `{sentence_line}` in any subtitle file with the code `{code}` or track `{track}`.")
             return None
+
+        # if not os.path.exists(subtitle_path):
+        #     log_error(f"subtitle path {subtitle_path} does not exist")
+        #     source_path = manage_files.get_source_path_from_full_filename(full_source_filename)
+        #     subtitle_data = manage_files.extract_subtitle_path_data(subtitle_path)
+        #     track = subtitle_data["track"]
+        #     code = subtitle_data["code"]
+        #     manage_files.extract_subtitle_files(source_path, track, code, config)
+
         start_index = data["start_index"]
         end_index = data["end_index"]
         blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path)

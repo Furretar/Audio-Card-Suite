@@ -46,6 +46,39 @@ SHIFT_BUTTON_BG_COLOR = constants.SHIFT_BUTTON_BG_COLOR
 from aqt import mw
 from aqt.qt import *
 
+
+def create_default_config():
+    config_file_path = os.path.join(addon_dir, "config.json")
+    default_settings = {
+        "default_model": "Basic",
+        "default_deck": "Default",
+        "audio_ext": "mp3",
+        "bitrate": 192,
+        "image_height": 1080,
+        "pad_start": 0,
+        "pad_end": 0,
+        "target_language": "",
+        "translation_language": "",
+        "target_language_code": "",
+        "translation_language_code": "",
+        "normalize_audio": False,
+        "lufs": -16,
+        "target_audio_track": 1,
+        "target_subtitle_track": 1,
+        "translation_audio_track": 2,
+        "translation_subtitle_track": 2,
+        "target_timing_code": "",
+        "translation_timing_code": "",
+        "target_timing_track": 3,
+        "translation_timing_track": 3,
+        "timing_tracks_enabled": False,
+        "selected_tab_index": 0
+    }
+    if not os.path.exists(config_file_path):
+        with open(config_file_path, "w", encoding="utf-8") as f:
+            json.dump(default_settings, f, indent=2)
+    return default_settings
+
 class ConfigManager:
     def __init__(self, config_path):
         self.config_path = config_path
@@ -90,55 +123,27 @@ class AudioToolsDialog(QDialog):
         self.tabs.currentChanged.connect(self.on_tab_changed)
         self.setMinimumSize(546, 746)
 
+
+
     def load_settings(self):
-        self.settings = self.configManager.load()
-        print("Loaded settings from config:")
-        print(json.dumps(self.settings, indent=2))
         config_file_path = os.path.join(addon_dir, "config.json")
-
-        default_settings = {
-            "default_model": "Basic",
-            "default_deck": "Default",
-            "audio_ext": "mp3",
-            "bitrate": 192,
-            "image_height": 1080,
-            "pad_start": 0,
-            "pad_end": 0,
-            "target_language": "",
-            "translation_language": "",
-            "target_language_code": "",
-            "translation_language_code": "",
-            "normalize_audio": False,
-            "lufs": -16,
-            "target_audio_track": 1,
-            "target_subtitle_track": 1,
-            "translation_audio_track": 2,
-            "translation_subtitle_track": 2,
-            "target_timing_code": "",
-            "translation_timing_code": "",
-            "target_timing_track": 3,
-            "translation_timing_track": 3,
-            "timing_tracks_enabled": False
-        }
-
-        if os.path.exists(config_file_path):
+        if not os.path.exists(config_file_path):
+            print("No config.json found, creating default config.")
+            config = create_default_config()
+        else:
             try:
                 with open(config_file_path, "r", encoding="utf-8") as f:
                     config = json.load(f)
             except Exception as e:
                 print(f"Invalid config.json, resetting to defaults. Error: {e}")
-                config = default_settings.copy()
-                with open(config_file_path, "w", encoding="utf-8") as f:
-                    json.dump(config, f, indent=2)
-        else:
-            print("No config.json found, creating default config.")
-            config = default_settings.copy()
-            with open(config_file_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
+                config = create_default_config()
 
+        default_settings = create_default_config()
         self.settings = default_settings.copy()
         self.settings.update(config)
-        print(f"normalize_audio in settings: " + str(config["normalize_audio"]))
+        print("Loaded settings from config:")
+        print(json.dumps(self.settings, indent=2))
+        print(f"normalize_audio in settings: {self.settings.get('normalize_audio')}")
 
     def save_settings(self):
         print("save_settings called")
@@ -824,6 +829,8 @@ def add_custom_controls(editor: Editor) -> None:
         btn.setStyleSheet(style)
         btn.clicked.connect(on_click)
         return btn
+
+    create_default_config()
 
     def make_labeled_spinbox(text, min_val, max_val, default):
         w = QWidget()

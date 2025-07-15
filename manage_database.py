@@ -154,87 +154,9 @@ def update_database():
     return conn
 
 
-update_database()
+
 
 
 
 import json
 
-def print_subtitle_previews_from_database():
-    conn = get_database()
-    cursor = conn.cursor()
-    cursor.execute("SELECT filename, language, track, content FROM subtitles ORDER BY filename, track, language")
-
-    for filename, language, track, content_json in cursor.fetchall():
-        subtitle_id = f"{filename}`track_{track}`{language}.srt"
-        print(f"--- {subtitle_id} ---")
-
-        try:
-            blocks = json.loads(content_json)
-        except Exception as e:
-            print(f"Error parsing JSON: {e}")
-            continue
-
-        lines = []
-        for block in blocks:
-            text = block[3] if len(block) > 3 else ''
-            for line in text.splitlines():
-                if line.strip():
-                    lines.append(line.strip())
-                if len(lines) >= 3:
-                    break
-            if len(lines) >= 3:
-                break
-
-        for line in lines[:3]:
-            print(line)
-        print()
-
-print_subtitle_previews_from_database()
-
-import time
-def timed_call(func, *args, **kwargs):
-    start = time.perf_counter()
-    result = func(*args, **kwargs)
-    elapsed = time.perf_counter() - start
-    print(f"{func.__name__} took {elapsed:.4f} seconds")
-    return result
-
-# timed_call(lambda: print_first_subtitle_line(index_subtitles(), "53.mkv`track_2`jpn.srt"))
-# timed_call(lambda: print("（コニー）お… おい"))
-# timed_call(lambda: index_subtitles())
-
-
-
-
-
-conn = get_database()
-cursor = conn.execute("SELECT filename, track, language FROM subtitles WHERE filename=?", ("Sousou no Frieren - 01.mkv",))
-for row in cursor:
-    print(f"Indexed DB row: {row}")
-
-
-def print_all_subtitle_files():
-    conn = get_database()
-    cursor = conn.execute("SELECT filename, track, language FROM subtitles")
-    for filename, track, language in cursor:
-        print(f"{filename}`track_{track}`{language}.srt")
-
-
-def check_subtitle_entries(base_filename):
-    conn = get_database()
-    cursor = conn.execute(
-        "SELECT filename, language, track FROM subtitles WHERE filename LIKE ?",
-        (f"%{base_filename}%",)
-    )
-    rows = cursor.fetchall()
-    if not rows:
-        print(f"No subtitle entries found matching base filename pattern: {base_filename}")
-        return
-
-    print(f"Subtitle entries found for base filename pattern '{base_filename}':")
-    for filename, language, track in rows:
-        print(f"  filename: {filename} | language: {language} | track: {track}")
-
-
-check_subtitle_entries(f"Solo Leveling - S02E01")

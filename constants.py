@@ -15,7 +15,8 @@ ms_amount = 50
 # files
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 config_dir = os.path.join(addon_dir, "config.json")
-addon_source_folder = os.path.join(addon_dir, "Sources")
+
+
 temp_ffmpeg_folder = os.path.join(addon_dir, "ffmpeg")
 temp_ffmpeg_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffmpeg.exe")
 temp_ffprobe_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffprobe.exe")
@@ -50,6 +51,37 @@ BACKTICK_PATTERN = re.compile(
 )
 
 
+addon_dir = addon_dir
+default_source_dir = os.path.join(addon_dir, "Sources")
+
+default_settings = {
+    "default_model": "Please Select a Note Type",
+    "source_folder": f"{default_source_dir}",
+    "default_deck": "Default",
+    "audio_ext": "mp3",
+    "bitrate": 192,
+    "image_height": 1080,
+    "pad_start_target": 0,
+    "pad_end_target": 0,
+    "pad_start_translation": 0,
+    "pad_end_translation": 0,
+    "target_language": "",
+    "translation_language": "",
+    "target_language_code": "",
+    "translation_language_code": "",
+    "normalize_audio": False,
+    "lufs": -16,
+    "target_audio_track": 1,
+    "target_subtitle_track": 1,
+    "translation_audio_track": 2,
+    "translation_subtitle_track": 2,
+    "target_timing_code": "",
+    "translation_timing_code": "",
+    "target_timing_track": 3,
+    "translation_timing_track": 3,
+    "timing_tracks_enabled": False,
+    "selected_tab_index": 0
+}
 
 # menu
 CONTAINER_MARGINS = (2, 2, 2, 2)
@@ -157,3 +189,28 @@ def get_audio_start_time_ms_for_track(source_path, audio_stream_index):
     except Exception as e:
         log_error(f"Failed to get audio start time for track {audio_stream_index} in {source_path}: {e}")
         return 0
+
+def extract_config_data():
+    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+
+    if not os.path.exists(config_path):
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(default_settings, f, indent=2)
+        config = default_settings.copy()
+    else:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+    # Fill in any missing keys with defaults
+    for key, value in default_settings.items():
+        if key not in config:
+            config[key] = value
+
+    # Save back any missing defaults to file
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+
+    return config
+
+config = extract_config_data()
+addon_source_folder = config["source_folder"]

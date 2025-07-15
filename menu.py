@@ -4,7 +4,9 @@ from aqt.editor import Editor
 from PyQt6.QtCore import Qt
 import os, json
 import time
-
+from PyQt6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QSizePolicy
+from PyQt6.QtCore import QUrl
+from PyQt6.QtGui import QDesktopServices
 
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
@@ -23,7 +25,6 @@ except ImportError:
     import language_codes
     import constants
 
-addon_dir = constants.addon_dir
 
 CONTAINER_MARGINS = constants.CONTAINER_MARGINS
 CONTAINER_SPACING = constants.CONTAINER_SPACING
@@ -48,38 +49,12 @@ from aqt.qt import *
 
 
 def create_default_config():
-    config_file_path = os.path.join(addon_dir, "config.json")
-    default_settings = {
-        "default_model": "Basic",
-        "default_deck": "Default",
-        "audio_ext": "mp3",
-        "bitrate": 192,
-        "image_height": 1080,
-        "pad_start_target": 0,
-        "pad_end_target": 0,
-        "pad_start_translation": 0,
-        "pad_end_translation": 0,
-        "target_language": "",
-        "translation_language": "",
-        "target_language_code": "",
-        "translation_language_code": "",
-        "normalize_audio": False,
-        "lufs": -16,
-        "target_audio_track": 1,
-        "target_subtitle_track": 1,
-        "translation_audio_track": 2,
-        "translation_subtitle_track": 2,
-        "target_timing_code": "",
-        "translation_timing_code": "",
-        "target_timing_track": 3,
-        "translation_timing_track": 3,
-        "timing_tracks_enabled": False,
-        "selected_tab_index": 0
-    }
+    config_file_path = os.path.join(constants.addon_dir, "config.json")
+
     if not os.path.exists(config_file_path):
         with open(config_file_path, "w", encoding="utf-8") as f:
-            json.dump(default_settings, f, indent=2)
-    return default_settings
+            json.dump(constants.default_settings, f, indent=2)
+    return constants.default_settings
 
 class ConfigManager:
     def __init__(self, config_path):
@@ -115,7 +90,7 @@ class AudioToolsDialog(QDialog):
     def __init__(self):
         super().__init__()
         self.addon_id = "Audio-Card-Suite"
-        config_file_path = os.path.join(addon_dir, "config.json")
+        config_file_path = os.path.join(constants.addon_dir, "config.json")
         self.configManager = ConfigManager(config_file_path)
         print("loading settings")
         self.settings = self.configManager.load()
@@ -128,7 +103,7 @@ class AudioToolsDialog(QDialog):
 
 
     def load_settings(self):
-        config_file_path = os.path.join(addon_dir, "config.json")
+        config_file_path = os.path.join(constants.addon_dir, "config.json")
         if not os.path.exists(config_file_path):
             print("No config.json found, creating default config.")
             config = create_default_config()
@@ -158,6 +133,7 @@ class AudioToolsDialog(QDialog):
         self.settings["bitrate"] = self.bitrateEdit.value()
         self.settings["normalize_audio"] = self.normalize_checkbox.isChecked()
         self.settings["lufs"] = self.lufsSpinner.value()
+        self.settings["source_folder"] = self.sourceDirEdit.text()
 
         for i, key in enumerate([
             "target_audio_track",
@@ -181,7 +157,7 @@ class AudioToolsDialog(QDialog):
             else:
                 self.langCodeCombos[i].setCurrentText("None")
 
-        config_path = os.path.join(addon_dir, "config.json")
+        config_path = os.path.join(constants.addon_dir, "config.json")
         try:
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(self.settings, f, indent=2)
@@ -302,10 +278,8 @@ class AudioToolsDialog(QDialog):
         default_model = self.settings.get("default_model")
         current_model = mw.col.models.current()["name"]
 
-        if mw.col.models.by_name(default_model):
-            self.modelButton.setText(default_model)
-        else:
-            self.modelButton.setText(current_model)
+        self.modelButton.setText(default_model)
+
 
         self.modelButton.setAutoDefault(False)
 
@@ -554,21 +528,30 @@ class AudioToolsDialog(QDialog):
         subsLayout.addWidget(codes_label)
         vbox.addWidget(subsGroup)
 
-        # source folder
-        addon_source_folder = os.path.join(addon_dir, "Sources")
         sourceGroup = QGroupBox("Source")
         sourceLayout = QVBoxLayout()
         sourceGroup.setLayout(sourceLayout)
         sourceDirLayout = QHBoxLayout()
+
+        # Load from config or fallback
+        initial_source_folder = self.settings.get("source_folder", os.path.join(constants.addon_dir, "Sources"))
+
         self.sourceDirEdit = QLineEdit()
         self.sourceDirEdit.setPlaceholderText("Select source directory")
-        self.sourceDirEdit.setText(addon_source_folder)
+        self.sourceDirEdit.setText(initial_source_folder)
         policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.sourceDirEdit.setSizePolicy(policy)
-        browseBtn = QPushButton("Browse")
+
+        # Save on text change
+        self.sourceDirEdit.textChanged.connect(lambda text: self.settings.update({"source_folder": text}))
+
+        browseBtn = QPushButton("Open Folder")
+        browseBtn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self.sourceDirEdit.text())))
+
         sourceDirLayout.addWidget(self.sourceDirEdit)
         sourceDirLayout.addWidget(browseBtn)
         sourceLayout.addLayout(sourceDirLayout)
+
 
         # Convert button with confirmation dialog
         convertBtn = QPushButton("Convert Source Videos to Audio")
@@ -598,6 +581,7 @@ class AudioToolsDialog(QDialog):
 
 
         # save settings anytime a change is made
+        self.sourceDirEdit.textChanged.connect(self.save_settings)
         self.imageHeightEdit.valueChanged.connect(self.save_settings)
         self.bitrateEdit.valueChanged.connect(self.save_settings)
         self.lufsSpinner.valueChanged.connect(self.save_settings)
@@ -810,7 +794,7 @@ class FieldMapping(QDialog):
         self.configManager.updateMapping(self.name, m)
         self.close()
 
-def open_audio_tools_dialog():
+def open_audio_tools_dialog(isEditor):
     global _audio_tools_dialog_instance
 
     # If the dialog is already open and visible, bring it to front
@@ -821,7 +805,8 @@ def open_audio_tools_dialog():
 
     # Otherwise, create and show a new one
     dlg = AudioToolsDialog()
-    dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+    if isEditor:
+        dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
 
     # Store reference and clear it when the dialog is closed
     _audio_tools_dialog_instance = dlg
@@ -839,7 +824,7 @@ def add_audio_tools_menu():
         if action.text() == "Audio Tools":
             return
     action = QAction("Audio Tools", mw)
-    action.triggered.connect(open_audio_tools_dialog)
+    action.triggered.connect(lambda: open_audio_tools_dialog(False))
     menu_bar.addAction(action)
 
 add_audio_tools_menu()
@@ -980,9 +965,9 @@ def add_custom_controls(editor: Editor) -> None:
     checkboxes_layout.addStretch()
 
     # Add "Main Menu" button
-    main_menu_button = QPushButton("Main Menu")
-    main_menu_button.clicked.connect(open_audio_tools_dialog)
-    checkboxes_layout.addWidget(main_menu_button)
+    settings_menu_button = QPushButton("Settings")
+    settings_menu_button.clicked.connect(lambda: open_audio_tools_dialog(True))
+    checkboxes_layout.addWidget(settings_menu_button)
 
     # Add the row to the layout
     spinboxes_layout.addWidget(checkboxes_row)

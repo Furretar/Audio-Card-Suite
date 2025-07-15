@@ -36,7 +36,7 @@ image_string = constants.image_string
 
 # manipulate and update fields
 def next_result_button(editor):
-    config = manage_files.extract_config_data()
+    config = constants.extract_config_data()
     fields = get_fields_from_editor(editor)
     sentence_idx = fields["sentence_idx"]
     sound_idx = fields["sound_idx"]
@@ -89,7 +89,7 @@ def next_result_button(editor):
 
 def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     fields = get_fields_from_editor(editor)
-    config = manage_files.extract_config_data()
+    config = constants.extract_config_data()
     modifiers = QApplication.keyboardModifiers()
     alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
     if alt_pressed:
@@ -148,7 +148,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     QTimer.singleShot(50, play_after_reload)
 
 def new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, relative_start, relative_end):
-    config = manage_files.extract_config_data()
+    config = constants.extract_config_data()
     log_filename(f"calling extract sound line data: {sound_line}")
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
@@ -164,7 +164,7 @@ def new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, 
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     # check for modifier keys
-    config = manage_files.extract_config_data()
+    config = constants.extract_config_data()
     modifiers = QApplication.keyboardModifiers()
     if modifiers & Qt.KeyboardModifier.ShiftModifier:
         start_delta //= 2
@@ -311,7 +311,7 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
     return new_sound_line, new_sentence_line
 
 def generate_and_update_fields(editor, note):
-    config = manage_files.extract_config_data()
+    config = constants.extract_config_data()
     if note:
         mapped_fields = config["mapped_fields"]
         note_type_name = list(mapped_fields.keys())[0]
@@ -470,7 +470,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         return None
 
 
-    config = manage_files.extract_config_data()
+    config = constants.extract_config_data()
     log_filename(f"calling extract sound line data: {sound_line}")
     data = manage_files.extract_sound_line_data(sound_line)
     subtitle_path = ""
@@ -499,7 +499,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         # if not os.path.exists(subtitle_path):
         #     log_error(f"subtitle path {subtitle_path} does not exist")
         #     source_path = manage_files.get_source_path_from_full_filename(full_source_filename)
-        #     subtitle_data = manage_files.extract_subtitle_path_data(subtitle_path)
+        #     subtitle_data = constants.extract_subtitle_path_data(subtitle_path)
         #     track = subtitle_data["track"]
         #     code = subtitle_data["code"]
         #     manage_files.extract_subtitle_files(source_path, track, code, config)
@@ -531,7 +531,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     # get timing line from other sound line
     timing_tracks_enabled = config["timing_tracks_enabled"]
     if timing_tracks_enabled:
-        subtitle_data = manage_files.extract_subtitle_path_data(subtitle_path)
+        subtitle_data = constants.extract_subtitle_path_data(subtitle_path)
         if not subtitle_data:
             log_error(f"subtitle_data null")
             return None
@@ -564,7 +564,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
 
     # get translation sound line
     if should_generate_translation_sound and ((not translation_sound_line) or overwrite):
-        subtitle_data = manage_files.extract_subtitle_path_data(translation_subtitle_path)
+        subtitle_data = constants.extract_subtitle_path_data(translation_subtitle_path)
         if not subtitle_data:
             log_error(f"subtitle_data null")
             return None
@@ -588,18 +588,33 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
 
 # get and format data
 def get_fields_from_editor(editor):
-    config = manage_files.extract_config_data()
+    config = constants.extract_config_data()
     if config is None:
         log_error("Config missing required fields, cannot proceed.")
         return {}
 
     mapped_fields = config.get("mapped_fields", {})
     if not mapped_fields:
-        showInfo("fields not mapped")
+        print("mapped_fields is empty or missing")
+        showInfo("No fields are mapped")
         return {}
 
-    note_type_name = list(mapped_fields.keys())[0]
     note_type = editor.note.note_type()
+    note_type_name = list(mapped_fields.keys())[0]
+    field_map = mapped_fields[note_type_name]
+
+    required_labels = [
+        target_subtitle_line_string,
+        target_audio_string,
+        image_string,
+        translation_subtitle_line_string,
+        translation_audio_string,
+    ]
+    missing = [label for label in required_labels if not field_map.get(label)]
+    if missing:
+        log_error(f"Missing mapped fields: {missing} for note type: {note_type_name}")
+        showInfo(f"The following fields are not mapped for note type: {note_type_name}:\n" + "\n".join(missing))
+        return {}
 
     fields = note_type["flds"]
 
@@ -620,11 +635,6 @@ def get_fields_from_editor(editor):
 
     image_field = manage_files.get_field_key_from_label(note_type_name, f"{image_string}", config)
     image_idx = index_of_field(image_field, fields) if image_field else -1
-
-
-
-
-
 
 
     sound_line = editor.note.fields[sound_idx] if 0 <= sound_idx < len(editor.note.fields) else ""
@@ -668,7 +678,7 @@ def get_idx(label, note_type_name, config, fields):
     return index_of_field(field_key, fields) if field_key else -1
 
 def get_fields_from_note(note):
-    config = manage_files.extract_config_data()
+    config = constants.extract_config_data()
     mapped_fields = config.get("mapped_fields", {})
 
     note_type_name = note.model()["name"]

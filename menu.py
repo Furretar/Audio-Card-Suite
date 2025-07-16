@@ -277,13 +277,11 @@ class AudioToolsDialog(QDialog):
         self.modelButton = QPushButton()
         default_model = self.settings.get("default_model")
         current_model = mw.col.models.current()["name"]
-
         self.modelButton.setText(default_model)
 
 
         self.modelButton.setAutoDefault(False)
 
-        # 🔽 Replace old connect with one that opens a menu
         self.modelButton.clicked.connect(self.show_model_menu)
 
         self.modelFieldsButton = QPushButton("⚙️")
@@ -622,6 +620,23 @@ class AudioToolsDialog(QDialog):
             menu.addAction(action)
         menu.exec(self.modelButton.mapToGlobal(self.modelButton.rect().bottomLeft()))
 
+    def show_model_menu(self):
+        menu = QMenu(self)
+        for m in mw.col.models.all():
+            name = m["name"]
+            action = QAction(name, menu)
+            # capture `name` in the default‐arg of the lambda
+            action.triggered.connect(lambda checked, nm=name: self.select_model(nm))
+            menu.addAction(action)
+        menu.exec(self.modelButton.mapToGlobal(self.modelButton.rect().bottomLeft()))
+
+    def select_model(self, model_name: str):
+        self.modelButton.setText(model_name)
+
+        self.settings["default_model"] = model_name
+
+        self.save_settings()
+
     def mapFields(self, model_name):
         fm = FieldMapping(model_name, self.configManager, parent=self)
         fm.exec()
@@ -741,6 +756,7 @@ class FieldMapping(QDialog):
         QDialog.__init__(self, parent)
         self.configManager = configManager
         self.mappedFields = self.configManager.getMappedFields(name)
+        print(f"self.configManager.getMappedFields({name}): {self.configManager.getMappedFields(name)}")
         self.name = name
         self.initUI()
 
@@ -871,22 +887,6 @@ def add_custom_controls(editor: Editor) -> None:
         return btn
 
     create_default_config()
-
-    def make_labeled_spinbox(text, min_val, max_val, default):
-        w = QWidget()
-        layout = QHBoxLayout(w)
-        layout.setContentsMargins(*ROW_MARGINS)
-        layout.setSpacing(4)
-        label = QLabel(text)
-        label.setMinimumWidth(LABEL_MIN_WIDTH)
-        spin = QSpinBox()
-        spin.setMinimum(min_val)
-        spin.setMaximum(max_val)
-        spin.setValue(default)
-        spin.setMinimumWidth(SPINBOX_MIN_WIDTH)
-        layout.addWidget(label)
-        layout.addWidget(spin)
-        return w, spin
 
     # === BUTTONS ===
     buttons_container = QWidget()

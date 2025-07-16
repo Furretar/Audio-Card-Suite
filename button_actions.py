@@ -18,7 +18,7 @@ from constants import (
     log_filename,
     log_error,
     log_image,
-    log_command,
+    log_command, addon_source_folder,
 )
 
 # constants
@@ -493,13 +493,13 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
 
         if not subtitle_path:
             log_error(f"subtitle path null1")
-            showInfo(f"Could not find `{sentence_line}` in any subtitle file with the code `{code}` or track `{track}`.")
+            showInfo(f"Could not find `{sentence_line}` in any subtitle file with the code `{code}` or track `{track}` in {addon_source_folder}.")
             return None
 
         # if not os.path.exists(subtitle_path):
         #     log_error(f"subtitle path {subtitle_path} does not exist")
         #     source_path = manage_files.get_source_path_from_full_filename(full_source_filename)
-        #     subtitle_data = constants.extract_subtitle_path_data(subtitle_path)
+        #     subtitle_data = manage_files.extract_subtitle_path_data(subtitle_path)
         #     track = subtitle_data["track"]
         #     code = subtitle_data["code"]
         #     manage_files.extract_subtitle_files(source_path, track, code, config)
@@ -531,7 +531,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     # get timing line from other sound line
     timing_tracks_enabled = config["timing_tracks_enabled"]
     if timing_tracks_enabled:
-        subtitle_data = constants.extract_subtitle_path_data(subtitle_path)
+        subtitle_data = manage_files.extract_subtitle_path_data(subtitle_path)
         if not subtitle_data:
             log_error(f"subtitle_data null")
             return None
@@ -564,7 +564,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
 
     # get translation sound line
     if should_generate_translation_sound and ((not translation_sound_line) or overwrite):
-        subtitle_data = constants.extract_subtitle_path_data(translation_subtitle_path)
+        subtitle_data = manage_files.extract_subtitle_path_data(translation_subtitle_path)
         if not subtitle_data:
             log_error(f"subtitle_data null")
             return None
@@ -610,11 +610,26 @@ def get_fields_from_editor(editor):
         translation_subtitle_line_string,
         translation_audio_string,
     ]
-    missing = [label for label in required_labels if not field_map.get(label)]
+
+
+    lookup = {}
+    missing = []
+    for lbl in required_labels:
+        # find the field whose mapped label equals lbl
+        fld = next((f for f, lab in field_map.items() if lab == lbl), None)
+        log_error(f"looking for '{lbl}' → field: {fld!r}")
+        if fld:
+            lookup[lbl] = fld
+        else:
+            missing.append(lbl)
+
     if missing:
-        log_error(f"Missing mapped fields: {missing} for note type: {note_type_name}")
-        showInfo(f"The following fields are not mapped for note type: {note_type_name}:\n" + "\n".join(missing))
+        showInfo(
+            f"The following labels are not mapped for note type '{note_type_name}':\n"
+            + "\n".join(missing)
+        )
         return {}
+
 
     fields = note_type["flds"]
 

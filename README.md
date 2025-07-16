@@ -8,6 +8,7 @@
 - [ ] make config global, only update when changed
 - [ ] using different timings files breaks the add/remove next/previous lines, so add a check where if the index and start times dont match the current file, search all of subtitle files with the same basename, and use another one if it matches exactly
 - [ ] make it so you can add the langauge code manually for your own subtitles
+- [ ] only add media file info to database when used and not on startup?
 
 
 

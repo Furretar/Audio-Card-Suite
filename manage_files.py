@@ -8,7 +8,7 @@ from aqt.utils import showInfo
 from send2trash import send2trash
 import constants
 import manage_database
-
+from typing import Tuple, Optional, List
 from constants import (
     log_filename,
     log_error,
@@ -25,18 +25,16 @@ from constants import (
 
 
 
-
-
-
-# get sound_line_data
-
-
+# returns collection directory
 def get_collection_dir():
     from aqt import mw
     if not mw or not mw.col:
         print("Collection is not loaded yet.")
     return mw.col.media.dir()
 
+# todo: implement 4 character sha hash to disambiguate files with the same name and extension
+# extracts all data in a sound line and returns it as a dict
+# performs only string operations
 def extract_sound_line_data(sound_line):
     format_type = detect_format(sound_line)
 
@@ -50,31 +48,27 @@ def extract_sound_line_data(sound_line):
         filename_base = groups["filename_base"]
         source_file_extension = groups.get("source_file_extension") or ""
         lang_code = groups.get("lang_code") or ""
-        sha = groups.get("sha") or ""
         start_time = groups["start_time"]
         end_time = groups["end_time"]
         subtitle_range = groups["subtitle_range"]
         sound_file_extension = groups["sound_file_extension"]
         normalize_tag = groups.get("normalize_tag") or ""
-
         start_index, end_index = map(int, subtitle_range.split("-"))
         full_source_filename = f"{filename_base}{source_file_extension}"
         meta_parts = [full_source_filename]
 
         if lang_code:
             meta_parts.append(lang_code)
-        if sha:
-            meta_parts.append(sha)
+
         meta_parts.append(f"{start_time}-{end_time}")
         meta_parts.append(subtitle_range)
+
         if normalize_tag:
             meta_parts.append(normalize_tag)
 
         timestamp_filename = "`".join(meta_parts) + f".{sound_file_extension}"
         timestamp_filename_no_normalize = "`".join(meta_parts[:-1 if normalize_tag else None])
-
         audio_collection_path = os.path.join(get_collection_dir(), timestamp_filename)
-
         m4b_image_filename = f"{filename_base}.{sound_file_extension}.jpg"
         image_filename = f"{filename_base}.{sound_file_extension}`{start_time}.jpg"
         image_collection_path = os.path.join(get_collection_dir(), image_filename)
@@ -86,13 +80,13 @@ def extract_sound_line_data(sound_line):
             f"full_source_filename: {full_source_filename}\n"
             f"timestamp filename: {timestamp_filename}\n"
         )
+
         log_image(f"image collection path: {image_collection_path}")
 
         return {
             "filename_base": filename_base,
             "source_file_extension": source_file_extension,
             "lang_code": lang_code,
-            "sha": sha,
             "start_time": start_time,
             "end_time": end_time,
             "start_index": start_index,
@@ -109,17 +103,19 @@ def extract_sound_line_data(sound_line):
             "m4b_image_collection_path": m4b_image_collection_path,
         }
 
-    # fallback if not backtick
+    # fallback if not a recognized pattern
     if not sound_line:
         log_error("extract_sound_line_data received None or empty string")
         return None
-
     return None
 
-def extract_config_data():
+# returns all current config values as a dict
+def get_config():
     config_path = os.path.join(os.path.dirname(__file__), "config.json")
+
     if not os.path.exists(config_path):
         print(f"Config file not found at {config_path}")
+        return None
 
     with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
@@ -135,28 +131,26 @@ def extract_config_data():
         "timing_tracks_enabled", "mapped_fields", "selected_tab_index"
     ]
 
-    values = [config.get(k) for k in keys]
-    missing = [k for k, v in zip(keys, values) if v is None]
-
+    missing = [k for k in keys if k not in config]
     if missing:
-        log_error(f"Warning: Missing required config field(s): {missing}")
-        showInfo("Please assign fields to your note type in the menu.\n\nMissing fields:\n" + "\n".join(missing))
+        log_error(f"Missing required config fields: {missing}")
+        showInfo("Missing config fields:\n" + "\n".join(missing))
         return None
 
-    # Warn specifically if any track values are set to 0
-    track_keys = [
+    zero_tracks = [k for k in [
         "target_audio_track", "target_subtitle_track",
         "translation_audio_track", "translation_subtitle_track",
         "target_timing_track", "translation_timing_track"
-    ]
-    zero_tracks = [k for k in track_keys if config.get(k) == 0]
+    ] if config.get(k) == 0]
     if zero_tracks:
-        showInfo("Please set a valid track number.\n" + "\n".join(zero_tracks))
         log_error(f"Track fields set to 0: {zero_tracks}")
+        showInfo("Please set a valid track number:\n" + "\n".join(zero_tracks))
         return None
 
-    return dict(zip(keys, values))
+    return config
 
+# returns the name of the users field that is set to use a label
+# ex. "Target Subtitle Line" might return "Expression" field
 def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> str:
     mapped_fields = config["mapped_fields"][note_type_name]
     for field_key, mapped_label in mapped_fields.items():
@@ -166,6 +160,7 @@ def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> s
         log_error(f"could not find Target Subtitle Line in note_type {note_type_name}, mapped field: {mapped_fields}, mapped fields items {mapped_fields.items()}")
     return ""
 
+# gets data from a subtitle path string and returns as a dict
 def extract_subtitle_path_data(subtitle_path):
     if not subtitle_path:
         log_error("subtitle_path is None")
@@ -185,15 +180,17 @@ def extract_subtitle_path_data(subtitle_path):
         "extension": extension.lower()
     }
 
+# todo: add another section to subtitle file names so the method knows which pattern to search for
+# searches all possible name patterns using the base filename, track, and code
 def get_subtitle_file_from_database(filename, track, code, config, database):
     def find_subtitle():
         selected_tab_index = config["selected_tab_index"]
         translation_language_code = config["translation_language_code"]
         log_filename(f"received filename: {filename}, track/code: {track}/{code}")
-        source_path = get_source_path_from_full_filename(filename)
+        sub_source_path = get_source_path_from_full_filename(filename)
 
-        if not os.path.exists(source_path):
-            log_error(f"Source video not found: {source_path}")
+        if not os.path.exists(sub_source_path):
+            log_error(f"Source file not found: {sub_source_path}")
             return None
 
         if not code or code.lower() == "none":
@@ -202,7 +199,7 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
 
         cursor = database.cursor()
 
-        # Try exact match
+        # try exact match
         log_filename(f"trying exact match")
         query = "SELECT 1 FROM subtitles WHERE filename = ? AND track = ? AND language = ? LIMIT 1"
         cursor.execute(query, (filename, str(track), code))
@@ -214,7 +211,7 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
                 log_filename(f"tagged_subtitle_path: {tagged_subtitle_path}")
                 return tagged_subtitle_path
 
-        # Try matching basename if translation and target are not same
+        # try matching basename if translation and target are not same (user placed file)
         if code != translation_language_code:
             basename_subtitle_file = f"{filename}.srt"
             basename_subtitle_path = os.path.join(constants.addon_source_folder, basename_subtitle_file)
@@ -222,8 +219,8 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
                 log_filename(f"basename_subtitle_path: {basename_subtitle_path}")
                 return basename_subtitle_path
 
+        # prioritize finding the code if that tab is selected
         like_pattern = f"{filename}%"
-
         if selected_tab_index == 0:
             query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ? AND language = ?"
             cursor.execute(query, (like_pattern, code))
@@ -235,6 +232,7 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
                 log_filename(f"[tab 0] subtitle_path (by code): {subtitle_path}")
                 return subtitle_path
 
+        # search for track
         query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ?"
         cursor.execute(query, (like_pattern,))
         rows = cursor.fetchall()
@@ -245,6 +243,7 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
                 log_filename(f"[tab {selected_tab_index}] subtitle_path (by track): {subtitle_path}")
                 return subtitle_path
 
+        # search for code as a fallback if track was not found
         if selected_tab_index != 0:
             query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ? AND language = ?"
             cursor.execute(query, (like_pattern, code))
@@ -258,17 +257,15 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
 
         return None
 
-    # === Step 1: Try finding subtitle
+    # try finding subtitle
     path = find_subtitle()
     if path:
         return path
 
-    # === Step 2: Extract subtitle files
+    # extract subtitle files and update database if not found
     log_error("Subtitle not found; extracting and retrying...")
     source_path = get_source_path_from_full_filename(filename)
     extract_subtitle_files(source_path, track, code, config)
-
-    # === Step 3: Update database and retry
     manage_database.update_database()
     path = find_subtitle()
     if path:
@@ -279,7 +276,8 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
         log_error(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {filename}\nPlease check your settings.")
     return None
 
-def generate_image_line_from_sound_line(image_line, sound_line):
+# returns newly generated formatted image line if image field is empty, otherwise returns current image
+def get_image_line_from_sound_line(image_line, sound_line):
     # check if any field already has an image
     if image_line:
         return image_line
@@ -301,11 +299,10 @@ def generate_image_line_from_sound_line(image_line, sound_line):
         log_image(f"video source path not found, returning")
         return ""
 
-
-
     _, ext = os.path.splitext(video_source_path)
     video_extension = ext.lower()
 
+    # generate image and get its path
     image_path = run_ffmpeg_extract_image_command(
         video_source_path,
         start_time,
@@ -315,12 +312,12 @@ def generate_image_line_from_sound_line(image_line, sound_line):
 
     log_image(f"No image found, extracting from source: {image_path}")
 
+    # add formatting to image
     if image_path:
         if video_extension == ".m4b":
             embed_image = f'<img src="{os.path.basename(m4b_image_collection_path)}">'
         else:
             embed_image = f'<img src="{os.path.basename(image_filename)}">'
-
 
         log_image(f"add image: {embed_image}")
         return embed_image
@@ -328,6 +325,7 @@ def generate_image_line_from_sound_line(image_line, sound_line):
         showInfo("Could not add image")
         return ""
 
+# returns a translation line based on overlapping timings from the target's sound line, also returns the translation subtitle file
 def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, config, sound_line_data):
     if not target_sound_line:
         log_error("get_translation_line_from_sound_line received None sound_line.")
@@ -343,13 +341,13 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
     start_time = sound_line_data["start_time"]
     end_time = sound_line_data["end_time"]
     full_source_filename = sound_line_data["full_source_filename"]
-
-
     subtitle_database = manage_database.get_database()
-    translation_subtitle_path = get_subtitle_file_from_database(full_source_filename, translation_audio_track, translation_language_code, config, subtitle_database)
 
+    # get translation subtitle file and the subtitle blocks that overlap timings with the sound line
+    translation_subtitle_path = get_subtitle_file_from_database(full_source_filename, translation_audio_track, translation_language_code, config, subtitle_database)
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
 
+    # adds text from each block and formats it, remove curly braces, html formatting, etc.
     translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
     translation_line = re.sub(r"\{.*?}", "", translation_line)
     translation_line = constants.format_text(translation_line.strip())
@@ -484,7 +482,7 @@ def get_source_path_from_full_filename(full_source_filename) -> str:
     log_filename(f"received filename: {full_source_filename}")
     possible_bases = [full_source_filename, full_source_filename.replace("_", " ")]
 
-    all_exts = constants.audio_exts + constants.video_exts
+    all_exts = constants.audio_extensions + constants.video_extensions
 
     def has_extension(filename):
         return os.path.splitext(filename)[1] != ""
@@ -622,7 +620,7 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
 
     all_source_files = [
         f for f in os.listdir(subtitle_dir)
-        if os.path.splitext(f)[1].lower() in (constants.video_exts + constants.audio_exts)
+        if os.path.splitext(f)[1].lower() in (constants.video_extensions + constants.audio_extensions)
     ]
 
     for filename in all_source_files:
@@ -715,26 +713,30 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
         log_error(f"Error parsing timestamp in blocks:\n{blocks}\nError: {e}")
         return None, None
 
-def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, config, sound_line_data):
+# todo: make more efficient by only searching files after the current file
+# finds the location of the current sentence field, then uses the selected text to find the next line that
+# contains the selection and re-generates every field
+def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, config, sound_line_data) -> Tuple[Optional[List[str]], Optional[str]]:
     log_filename(f"extracting sound_line_data from sound_line: {sound_line}")
+
     if not sound_line_data:
         print(f"no sound_line_data extracted from {sound_line}")
         return None, None
 
     target_index = sound_line_data["start_index"]
     filename_base = sound_line_data["filename_base"]
-
     track = config["target_subtitle_track"]
     code = config["target_language_code"]
 
     normalized_target_text = normalize_text(selected_text or sentence_line)
     print(f"Searching for: {normalized_target_text}")
 
+    # finds the current subtitle line again, then returns the next result that matches the selected text
     def search_blocks(after_current=True):
         found_current = not after_current
         for filename in os.listdir(constants.addon_source_folder):
             base_candidate, ext = os.path.splitext(filename)
-            if ext.lower() not in constants.video_exts + constants.audio_exts:
+            if ext.lower() not in constants.video_extensions + constants.audio_extensions:
                 continue
 
             subtitle_database = manage_database.get_database()
@@ -762,12 +764,12 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
                     return b, subtitle_path
         return None, None
 
-    # Try first pass (after current)
+    # try first pass (after current)
     result, path = search_blocks(after_current=True)
     if result:
         return result, path
 
-    # Wraparound pass (from beginning)
+    # wraparound pass (from beginning)
     print("Wrapping to start of subtitle files...")
     return search_blocks(after_current=False)
 

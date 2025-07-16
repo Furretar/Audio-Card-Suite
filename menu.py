@@ -227,7 +227,7 @@ class AudioToolsDialog(QDialog):
                 print("User cancelled conversion.")
 
         def confirm_bulk_generate():
-            config = manage_files.extract_config_data()
+            config = manage_files.get_config()
 
             deck_id = mw.col.decks.get_current_id()
             deck = mw.col.decks.get(deck_id)
@@ -779,9 +779,9 @@ class FieldMapping(QDialog):
             comboBox.addItem("None")
             comboBox.addItem("Target Subtitle Line")
             comboBox.addItem("Target Audio")
+            comboBox.addItem("Image")
             comboBox.addItem("Translation Subtitle Line")
             comboBox.addItem("Translation Audio")
-            comboBox.addItem("Image")
             if field in self.mappedFields:
                 comboBox.setCurrentIndex(comboBox.findText(self.mappedFields[field]))
             else:

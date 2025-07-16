@@ -35,6 +35,9 @@ image_string = constants.image_string
 
 
 # manipulate and update fields
+
+# finds the location of the current sentence field, then uses the selected text to find the next line that
+# contains the selection and re-generates every field
 def next_result_button(editor):
     config = constants.extract_config_data()
     fields = get_fields_from_editor(editor)
@@ -43,7 +46,6 @@ def next_result_button(editor):
     image_idx = fields["image_idx"]
     translation_idx = fields["translation_idx"]
     translation_sound_idx = fields["translation_sound_idx"]
-
     sentence_line = fields["sentence_line"]
     sound_line = fields["sound_line"]
     selected_text = fields["selected_text"]
@@ -51,22 +53,29 @@ def next_result_button(editor):
     if not sentence_line and not selected_text:
         log_error(f"no text to search")
         return
+
     log_filename(f"calling extract sound line data: {sound_line}")
     data = manage_files.extract_sound_line_data(sound_line)
+
+    # gets next matching subtitle block using selected text and current fields
     block, subtitle_path = manage_files.get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, config, data)
+
     if not block or not subtitle_path:
-        log_error(f"didnt find another result")
+        log_error(f"didn't find another result")
         return
 
+    # generate new sound and sentence line using the block just retrieved
     next_sound_line, next_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, config)
 
-    # generate file using next sound line
+    # generate sound file using next sound line
     log_filename(f"calling extract sound line data: {next_sound_line}")
     new_data = manage_files.extract_sound_line_data(next_sound_line)
     altered_data = manage_files.get_altered_sound_data(next_sound_line, 0, 0, config, new_data)
     next_sound_line = manage_files.alter_sound_file_times(altered_data, next_sound_line, config, False)
 
+
     if next_sound_line:
+        # add tag and remove any previous tags
         filename_base = re.sub(r'^\[sound:|]$', '', next_sound_line.split("`", 1)[0].strip())
         prev_filename_base = re.sub(r'^\[sound:|]$', '', sound_line.split("`", 1)[0].strip())
 
@@ -79,6 +88,7 @@ def next_result_button(editor):
         if filename_base_underscore not in editor.note.tags:
             editor.note.add_tag(filename_base_underscore)
 
+    # set new values empty other fields to let generate_fields generate the rest
     editor.note.fields[sentence_idx] = next_sentence_line
     editor.note.fields[sound_idx] = next_sound_line
     editor.note.fields[image_idx] = ""
@@ -443,7 +453,7 @@ def generate_and_update_fields(editor, note):
 
     # update image line
     if should_generate_image_line and ((not image_line) or overwrite):
-        generated_img = manage_files.generate_image_line_from_sound_line("", new_sound_line)
+        generated_img = manage_files.get_image_line_from_sound_line("", new_sound_line)
         log_image(f"new image: {generated_img}")
         if generated_img and isinstance(generated_img, str):
             field_obj.fields[image_idx] = generated_img
@@ -543,7 +553,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     # get image line
     if should_generate_image and ((not image_line) or overwrite):
         log_image(f"image line empty, generating new one")
-        new_image_line = manage_files.generate_image_line_from_sound_line(image_line, new_sound_line)
+        new_image_line = manage_files.get_image_line_from_sound_line(image_line, new_sound_line)
         log_image(f"generated image line: {new_image_line}")
     else:
         new_image_line = ""

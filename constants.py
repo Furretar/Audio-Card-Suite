@@ -28,20 +28,19 @@ translation_subtitle_line_string = "Translation Subtitle Line"
 translation_audio_string = "Translation Audio"
 image_string = "Image"
 
-audio_exts = [
+audio_extensions = [
     ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma", ".opus", ".m4b"
 ]
 
-video_exts = [
+video_extensions = [
     ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".m4b"
 ]
 
 BACKTICK_PATTERN = re.compile(
     r'^\[sound:'
-    r'(?P<filename_base>[^`.]+)'                     # base name before extension
-    r'(?P<source_file_extension>\.[a-z0-9]+)?'        # optional extension (with no backtick)
-    r'(?:`(?P<lang_code>[a-z]{3}))?'                  # optional language code
-    r'(?:`(?P<sha>[A-Za-z0-9]{4}))?'                  # optional sha
+    r'(?P<filename_base>[^`.]+)' # base name before extension
+    r'(?P<source_file_extension>\.[a-z0-9]+)?' # optional extension
+    r'(?:`(?P<lang_code>[a-z]{3}))?' # optional language code
     r'`(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'
     r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'
     r'(?P<subtitle_range>\d+-\d+)'

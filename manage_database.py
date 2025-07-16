@@ -1,12 +1,9 @@
 import sys, os
 sys.path.append(os.path.dirname(__file__))
-import constants
-
 import os
 import sqlite3
 import re
 import constants
-from aqt.utils import showInfo
 import subprocess
 import json
 
@@ -35,8 +32,8 @@ def close_database():
         conn = None
 
 
-audio_exts = constants.audio_exts
-video_exts = constants.video_exts
+audio_exts = constants.audio_extensions
+video_exts = constants.video_extensions
 
 
 

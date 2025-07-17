@@ -559,9 +559,14 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
         formatted = format_subtitle_block(block)
         formatted_blocks.append(formatted)
 
-    if start_index < 0 or end_index >= len(formatted_blocks) or start_index > end_index:
-        print(f"Invalid range: {start_index} to {end_index}, total blocks: {len(formatted_blocks)}")
+    log_filename(f"start index: {start_index}, end index: {end_index}, total blocks: {len(formatted_blocks)}")
+    if start_index <= 0:
+        showInfo(f"You've reached the first subtitle line.")
         return []
+    if end_index > len(formatted_blocks):
+        showInfo(f"You've reached the last subtitle line.")
+    if start_index > end_index:
+        showInfo(f"Start index cannot be after end index: {start_index}-{end_index}.")
 
     return formatted_blocks[start_index - 1:end_index]
 
@@ -1315,7 +1320,8 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
     new_end_ms = max(0, orig_end_ms + lengthen_end_ms)
 
     if new_end_ms <= new_start_ms:
-        log_error(f"Invalid time range for {sound_line}: {new_start_ms}-{new_end_ms}")
+        log_error(f"Invalid time range: {milliseconds_to_hmsms_format(new_start_ms)}-{milliseconds_to_hmsms_format(new_end_ms)}")
+        showInfo(f"Invalid time range: {milliseconds_to_hmsms_format(new_start_ms)}-{milliseconds_to_hmsms_format(new_end_ms)}\nCheck your padded timings.")
         return {}
 
     new_start_time = milliseconds_to_hmsms_format(new_start_ms)

@@ -16,8 +16,10 @@ low priority, might do after initial release
 - [ ]  add/subtract 1db for each audio
 - [ ]  open menu while bulk generating to show user logs
 
+```
 Generate Fields:
 None - Generates all set fields if empty, plays target audio if full
 Alt - Generates all set fields if empty, plays translation audio if full
 Ctrl - Generates all set fields based on the target sentence, overwrites current fields
 Ctrl + Alt - Regenerates translation fields, used when editing sound line after initial generation
+```

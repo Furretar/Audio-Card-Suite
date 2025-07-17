@@ -68,7 +68,7 @@ default_settings = {
     "translation_language": "",
     "target_language_code": "",
     "translation_language_code": "",
-    "normalize_audio": False,
+    "normalize_audio": True,
     "lufs": -16,
     "target_audio_track": 1,
     "target_subtitle_track": 1,

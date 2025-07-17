@@ -7,6 +7,7 @@
 - [ ] fix add/remove next line breaking using timing files, change name to be like jpn-eng to know which to take audio from
 - [ ] make it so you can add the langauge code manually for your own subtitles
 - [ ] only add media file info to database when used and not on startup
+- [ ] make context aware generation update sentence line
 
 
 low priority, might do after initial release

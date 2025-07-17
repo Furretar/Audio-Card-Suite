@@ -8,7 +8,6 @@
 - [ ] make it so you can add the langauge code manually for your own subtitles
 - [ ] only add media file info to database when used and not on startup
 
-Controls
 
 low priority, might do after initial release
 - [ ] implement 4 character sha code for file disambiguation, use few kilobytes from audio track for hash, add hash to subtitle files to link them to file, this will allow files with the same name to remain unchanged, allowing torrent seeding etc

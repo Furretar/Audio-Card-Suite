@@ -1,7 +1,8 @@
 
 - [ ] button to open source folder
 - [ ] read every sub folder in source folder, add folder it will ignore for easy management
-- [ ] allow removing from end start times even without backtick filename
+- [ ] allow removing from end start times and batch normalization even without source files
+- [ ] use showinfo when any button returns null
 - [ ] store start and end offset every time its pushed, when user moves the whole line forward or backward it automatically adjusts the offset amount
 - [ ] fix audio not playing if you edit the times too quickly in a row
 - [ ] run bulk generation in background, have a stop button

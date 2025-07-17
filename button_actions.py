@@ -200,7 +200,7 @@ def new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, 
     new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, config)
     return new_sound_line, new_sentence_line
 
-def adjust_sound_tag(editor, start_delta: int, end_delta: int):
+def  adjust_sound_tag(editor, start_delta: int, end_delta: int):
     # check for modifier keys
     config = constants.extract_config_data()
     modifiers = QApplication.keyboardModifiers()
@@ -243,11 +243,11 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
         if not new_sound_line:
             log_error(f"nothing found from sentence line {sentence_line}, returning")
 
-    editor.note.fields[sound_idx] = new_sound
+    editor.note.fields[sound_idx] = new_sound_line
     editor.loadNote()
 
-    if new_sound.startswith("[sound:") and new_sound.endswith("]"):
-        filename = new_sound[len("[sound:"):-1]
+    if new_sound_line.startswith("[sound:") and new_sound_line.endswith("]"):
+        filename = new_sound_line[len("[sound:"):-1]
         media_path = os.path.join(mw.col.media.dir(), filename)
 
         def wait_and_play():

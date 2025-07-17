@@ -899,6 +899,10 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
     return image_collection_path
 
 def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, collection_path, sound_line, config, sound_line_data, use_translation_data) -> list:
+    if not source_path:
+        log_error(f"source path is null")
+        return []
+
     log_command(f"FFmpeg source path: {source_path}")
     log_command(f"FFmpeg sound line: {sound_line}")
 
@@ -963,6 +967,10 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
         log_command(f"[ffprobe audio stream scan]\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
         info = json.loads(result.stdout)
         streams = info.get("streams", [])
+
+        if not info:
+            log_error(f"no info from file: {source_path}")
+            return []
 
         if selected_tab_index == 0:
             for stream in streams:
@@ -1370,6 +1378,9 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
     full_source_filename = altered_data["full_source_filename"]
     log_filename(f"full source filename: {full_source_filename}")
     source_path = get_source_path_from_full_filename(full_source_filename)
+    if not source_path:
+        log_error(f"source not found for: {full_source_filename}")
+        return None
 
     cmd = create_ffmpeg_extract_audio_command(
         source_path,
@@ -1378,6 +1389,10 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
         altered_data["new_path"],
         sound_line, config, extract_sound_line_data(altered_data["new_sound_line"]), use_translation_data
     )
+
+    if not cmd:
+        log_error(f"command was not generated")
+        return None
 
     try:
         log_filename(f"generating new sound file: {altered_data['new_path']}")

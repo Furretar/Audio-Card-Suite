@@ -113,7 +113,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
 
     if not data:
         log_error(f"no data from sound line: {sound_line}, generating fields")
-        generate_and_update_fields(editor, None)
+        generate_and_update_fields(editor, None, True)
 
         if alt_pressed:
             sound_line = fields["translation_sound_line"]
@@ -129,6 +129,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     if alt_pressed:
         sound_line = fields["translation_sound_line"]
         sound_idx = fields["translation_sound_idx"]
+        sentence_line = fields["translation_line"]
         sentence_idx = fields["translation_idx"]
         translation_idx = ""
         track = config.get("translation_subtitle_track")
@@ -136,6 +137,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     else:
         sound_line = fields["sound_line"]
         sound_idx = fields["sound_idx"]
+        sentence_line = fields["sentence_line"]
         sentence_idx = fields["sentence_idx"]
         translation_idx = fields["translation_idx"]
         track = config.get("target_subtitle_track")
@@ -152,15 +154,18 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, subtitle_path)
     new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, config)
 
+    if not new_sound_line or not new_sentence_line:
+        log_error("No new sound line or sentence text returned.")
+        block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
+        new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, config)
+        if not new_sound_line:
+            log_error(f"nothing found from sentence line {sentence_line}, returning")
+            return
+
     log_filename(f"getting sound line data from5: {new_sound_line}")
     new_data = manage_files.extract_sound_line_data(new_sound_line)
     altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, config, new_data)
     manage_files.alter_sound_file_times(altered_data, new_sound_line, config, alt_pressed)
-
-
-    if not new_sound_line or not new_sentence_line:
-        log_error("No new sound line or sentence text returned.")
-        return
 
     # generate new translation line
     if not alt_pressed:
@@ -170,7 +175,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     new_field = re.sub(r"\[sound:.*?]", new_sound_line, sound_line)
     editor.note.fields[sound_idx] = new_field
     editor.note.fields[sentence_idx] = new_sentence_line
-    generate_and_update_fields(editor, None)
+    generate_and_update_fields(editor, None, False)
 
     def play_after_reload():
         sound_filename = re.search(r"\[sound:(.*?)]", new_sound_line)
@@ -195,7 +200,7 @@ def new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, 
     new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, config)
     return new_sound_line, new_sentence_line
 
-def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
+def adjust_sound_tag(editor, start_delta: int, end_delta: int):
     # check for modifier keys
     config = constants.extract_config_data()
     modifiers = QApplication.keyboardModifiers()
@@ -211,15 +216,18 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     if alt_pressed:
         sound_line = fields["translation_sound_line"]
         sound_idx = fields["translation_sound_idx"]
+        sentence_line = fields["translation_line"]
     else:
         sound_line = fields["sound_line"]
         sound_idx = fields["sound_idx"]
+        sentence_line = fields["sentence_line"]
+
 
     log_filename(f"calling extract sound line data: {sound_line}")
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
         log_error(f"no valid sound line detected")
-        generate_and_update_fields(editor, None)
+        generate_and_update_fields(editor, None, True)
         return
 
     log_filename(f"getting altered data from1: {sound_line}")
@@ -227,29 +235,30 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int) -> None:
     log_filename(f"sending data to alter sound file times: {altered_data}")
     new_sound_line = manage_files.alter_sound_file_times(altered_data, sound_line, config, alt_pressed)
 
+    # generate a new sound line if first try failed
+    if not new_sound_line:
+        log_error("No new sound tag returned, checking database.")
+        block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
+        new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, config)
+        if not new_sound_line:
+            log_error(f"nothing found from sentence line {sentence_line}, returning")
 
-    if new_sound_line:
-        editor.note.fields[sound_idx] = new_sound_line
-        editor.loadNote()
+    editor.note.fields[sound_idx] = new_sound
+    editor.loadNote()
 
+    if new_sound.startswith("[sound:") and new_sound.endswith("]"):
+        filename = new_sound[len("[sound:"):-1]
+        media_path = os.path.join(mw.col.media.dir(), filename)
 
-        if new_sound_line.startswith("[sound:") and new_sound_line.endswith("]"):
-            filename = new_sound_line[len("[sound:"):-1]
-            media_path = os.path.join(mw.col.media.dir(), filename)
+        def wait_and_play():
+            if os.path.exists(media_path) and os.path.getsize(media_path) > 0:
+                log_command(f"Playing sound from field {sound_idx}: {filename}")
+                play(filename)
+            else:
+                log_error("File not ready, retrying...")
+                QTimer.singleShot(50, wait_and_play)
 
-            def wait_and_play():
-                if os.path.exists(media_path) and os.path.getsize(media_path) > 0:
-                    log_command(f"Playing sound from field {sound_idx}: {filename}")
-                    play(filename)
-                else:
-                    log_error("File not ready, retrying...")
-                    QTimer.singleShot(50, wait_and_play)
-
-            QTimer.singleShot(50, wait_and_play)
-
-    else:
-        log_error("No new sound tag returned, field not updated.")
-    return
+        QTimer.singleShot(50, wait_and_play)
 
 def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path):
     if sentence_line == new_sentence_line:
@@ -343,7 +352,7 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
 
     return new_sound_line, new_sentence_line
 
-def generate_and_update_fields(editor, note):
+def generate_and_update_fields(editor, note, should_overwrite):
     config = constants.extract_config_data()
     if note:
         mapped_fields = config["mapped_fields"]
@@ -380,7 +389,7 @@ def generate_and_update_fields(editor, note):
         field_obj = editor.note
 
     modifiers = QApplication.keyboardModifiers()
-    overwrite = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
+    overwrite = bool(modifiers & Qt.KeyboardModifier.ControlModifier) or should_overwrite
     alt_pressed = bool(modifiers & Qt.KeyboardModifier.AltModifier)
 
     fields_status = {
@@ -413,7 +422,7 @@ def generate_and_update_fields(editor, note):
 
     # generate fields using sentence line
     new_result = get_generate_fields_sound_sentence_image_translation(
-        sound_line, sentence_line, selected_text, image_line, translation_line, translation_sound_line, overwrite
+        sound_line, sentence_line, selected_text, image_line, translation_line, translation_sound_line, overwrite, alt_pressed
     )
 
     log_filename(f"new result: {new_result}")
@@ -496,11 +505,15 @@ def generate_and_update_fields(editor, note):
     match = re.search(r"\[sound:(.*?)]", current_sound_line)
     return match.group(1) if match else None
 
-def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_line, selected_text, image_line, translation_line, translation_sound_line, overwrite):
+def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_line, selected_text, image_line, translation_line, translation_sound_line, overwrite, alt_pressed):
     # checks each field, generating and updating if needed. Returns each field, empty if not needed
     if not sentence_line:
         log_error(f"sentence field empty")
         return None
+
+    if overwrite:
+        if not alt_pressed:
+            sound_line = ""
 
 
     config = constants.extract_config_data()
@@ -774,7 +787,7 @@ def is_normalized(sound_line):
 
 # play sound hooks and buttons
 def generate_fields_button(editor):
-    sound_filename = generate_and_update_fields(editor, None)
+    sound_filename = generate_and_update_fields(editor, None, False)
     if sound_filename:
         log_command(f"Playing sound filename: {sound_filename}")
         QTimer.singleShot(100, lambda: play(sound_filename))
@@ -836,7 +849,7 @@ def bulk_generate(deck, note_type):
         log_command(f"note ids: {note_ids}")
         for note_id in note_ids:
             note = mw.col.get_note(note_id)
-            generate_and_update_fields(None, note)
+            generate_and_update_fields(None, note, False)
     finally:
         aqt.utils.showInfo = original_showInfo
 

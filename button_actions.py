@@ -5,11 +5,12 @@ import os
 import re
 import html
 from aqt import mw
-from aqt.utils import showInfo
+import aqt
 from aqt.sound import play, av_player
 from aqt import gui_hooks
 from anki.notes import Note
 import manage_database
+
 
 import manage_files
 from manage_files import get_field_key_from_label
@@ -102,6 +103,29 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     config = constants.extract_config_data()
     modifiers = QApplication.keyboardModifiers()
     alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
+
+    if alt_pressed:
+        sound_line = fields["translation_sound_line"]
+    else:
+        sound_line = fields["sound_line"]
+
+    data = manage_files.extract_sound_line_data(sound_line)
+
+    if not data:
+        log_error(f"no data from sound line: {sound_line}, generating fields")
+        generate_and_update_fields(editor, None)
+
+        if alt_pressed:
+            sound_line = fields["translation_sound_line"]
+        else:
+            sound_line = fields["sound_line"]
+
+        data = manage_files.extract_sound_line_data(sound_line)
+
+    if not data:
+        log_error(f"still no data from sound line: {sound_line}, returning")
+        return
+
     if alt_pressed:
         sound_line = fields["translation_sound_line"]
         sound_idx = fields["translation_sound_idx"]
@@ -117,8 +141,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         track = config.get("target_subtitle_track")
         code = config.get("target_language_code")
 
-    log_filename(f"calling extract sound line data: {sound_line}")
-    data = manage_files.extract_sound_line_data(sound_line)
+
     start_index = data["start_index"]
     end_index = data["end_index"]
     full_source_filename = data["full_source_filename"]
@@ -433,7 +456,7 @@ def generate_and_update_fields(editor, note):
     # update sound line
     log_filename(f"calling extract sound line data: {new_sound_line}")
     data = manage_files.extract_sound_line_data(new_sound_line)
-    if should_generate_sound_line and ((not sound_line) or overwrite):
+    if should_generate_sound_line:
         log_filename(f"getting altered data from3: {new_sound_line}")
         altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, config, data)
         if new_sound_line != field_obj.fields[sound_idx] and altered_data:
@@ -503,16 +526,8 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
 
         if not subtitle_path:
             log_error(f"subtitle path null1")
-            showInfo(f"Could not find `{sentence_line}` in any subtitle file with the code `{code}` or track `{track}` in {addon_source_folder}.")
+            aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file with the code `{code}` or track `{track}` in {addon_source_folder}.")
             return None
-
-        # if not os.path.exists(subtitle_path):
-        #     log_error(f"subtitle path {subtitle_path} does not exist")
-        #     source_path = manage_files.get_source_path_from_full_filename(full_source_filename)
-        #     subtitle_data = manage_files.extract_subtitle_path_data(subtitle_path)
-        #     track = subtitle_data["track"]
-        #     code = subtitle_data["code"]
-        #     manage_files.extract_subtitle_files(source_path, track, code, config)
 
         start_index = data["start_index"]
         end_index = data["end_index"]
@@ -528,7 +543,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
         if not subtitle_path:
             log_error(f"subtitle path null2")
-            showInfo(f"Could not find `{sentence_line}` in any subtitle file with the code `{code}` or track `{track}`.")
+            aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file with the code `{code}` or track `{track}`.")
             return None
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, config)
     if selected_text:
@@ -561,7 +576,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     # get translation line
     if not new_sound_line:
         log_error(f"Target Audio not detected, cannot generate Translation or Translation Audio.")
-        showInfo(f"Target Audio not detected, cannot generate Translation or Translation Audio.")
+        aqt.utils.showInfo(f"Target Audio not detected, cannot generate Translation or Translation Audio.")
 
     if (should_generate_translation_line and ((not translation_line) or overwrite)) or should_generate_translation_sound:
         log_filename(f"calling extract sound line data: {new_sound_line}")
@@ -594,7 +609,9 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     return new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line
 
 
-
+def show_info_msg(msg):
+    import aqt
+    aqt.utils.showInfo(msg)
 
 # get and format data
 def get_fields_from_editor(editor):
@@ -606,7 +623,7 @@ def get_fields_from_editor(editor):
     mapped_fields = config.get("mapped_fields", {})
     if not mapped_fields:
         print("mapped_fields is empty or missing")
-        showInfo("No fields are mapped")
+        aqt.utils.showInfo(f"No fields are mapped")
         return {}
 
     note_type = editor.note.note_type()
@@ -634,10 +651,8 @@ def get_fields_from_editor(editor):
             missing.append(lbl)
 
     if missing:
-        showInfo(
-            f"The following labels are not mapped for note type '{note_type_name}':\n"
-            + "\n".join(missing)
-        )
+        aqt.utils.showInfo(f"The following labels are not mapped for note type '{note_type_name}':\n" + "\n".join(missing))
+
         return {}
 
 
@@ -792,32 +807,36 @@ gui_hooks.editor_did_focus_field.append(on_editor_field_focused_minimal)
 
 
 # bulk generation
+def suppress_showInfo(*args, **kwargs):
+    pass
+
 def bulk_generate(deck, note_type):
-    current_deck_name = deck["name"]
+    original_showInfo = aqt.utils.showInfo
+    aqt.utils.showInfo = suppress_showInfo
+    try:
+        current_deck_name = deck["name"]
 
-    log_command("Running bulk_generate...")
-    log_command(f"Deck: {current_deck_name}")
+        log_command("Running bulk_generate...")
+        log_command(f"Deck: {current_deck_name}")
 
-    note_ids = mw.col.find_notes(f'deck:"{current_deck_name}"')
+        note_ids = mw.col.find_notes(f'deck:"{current_deck_name}"')
 
-    if not note_ids:
-        all_decks = [d["name"] for d in mw.col.decks.all()]
-        log_command(f"Available decks: {all_decks}")
+        if not note_ids:
+            all_decks = [d["name"] for d in mw.col.decks.all()]
+            log_command(f"Available decks: {all_decks}")
 
-        log_command("Available decks:")
-        for deck in mw.col.decks.all():
-            log_command(f"  ID: {deck['id']}, Name: {deck['name']}")
+            log_command("Available decks:")
+            for deck in mw.col.decks.all():
+                log_command(f"  ID: {deck['id']}, Name: {deck['name']}")
 
-        # Print all note types
-        log_command("\nAvailable note types:")
-        for model in mw.col.models.all():
-            log_command(f"  Name: {model['name']}, ID: {model['id']}")
+            log_command("\nAvailable note types:")
+            for model in mw.col.models.all():
+                log_command(f"  Name: {model['name']}, ID: {model['id']}")
 
-    log_command(f"note ids: {note_ids}")
-    for note_id in note_ids:
-        note = mw.col.get_note(note_id)
-        generate_and_update_fields(None, note)
-
-
-
+        log_command(f"note ids: {note_ids}")
+        for note_id in note_ids:
+            note = mw.col.get_note(note_id)
+            generate_and_update_fields(None, note)
+    finally:
+        aqt.utils.showInfo = original_showInfo
 

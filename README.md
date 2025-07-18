@@ -2,11 +2,10 @@
 - [ ] read every sub folder in source folder, add folder it will ignore for easy management
 - [ ] allow removing from end start times and batch normalization even without source files
 - [ ] use showinfo when any button returns null
-- [ ] fix audio not playing if you edit the times too quickly in a row
-- [ ] run bulk generation in background, have a stop button
+- [ ] run bulk generation in background, have a stop button, display info
 - [ ] fix add/remove next line breaking using timing files, change name to be like jpn-eng to know which to take audio from
 - [ ] make it so you can add the langauge code manually for your own subtitles
-- [ ] only add media file info to database when used and not on startup
+- [ ] only add media file info to database when used, and not on startup
 - [ ] make context aware generation update sentence line
 
 
@@ -15,7 +14,6 @@ low priority
 - [ ] add next and previous lines without a source file, for just text sentence cards
 - [ ] open mpv option
 - [ ]  add/subtract 1db for each audio
-- [ ]  open menu while bulk generating to show user logs
 - [ ]  generate waveform
 - [ ]  allow square brackets in filenames
 

@@ -263,6 +263,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, config)
         if not new_sound_line:
             log_error(f"nothing found from sentence line {sentence_line}, returning")
+            return
 
     editor.note.fields[sound_idx] = new_sound_line
 

@@ -10,12 +10,13 @@
 - [ ] make context aware generation update sentence line
 
 
-low priority, might do after initial release
+low priority
 - [ ] implement 4 character sha code for file disambiguation, use few kilobytes from audio track for hash, add hash to subtitle files to link them to file, this will allow files with the same name to remain unchanged, allowing torrent seeding etc
 - [ ] add next and previous lines without a source file, for just text sentence cards
 - [ ] open mpv option
 - [ ]  add/subtract 1db for each audio
 - [ ]  open menu while bulk generating to show user logs
+- [ ]  generate waveform
 
 ```
 Generate Fields:

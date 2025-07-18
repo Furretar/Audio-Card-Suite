@@ -704,10 +704,9 @@ def get_fields_from_editor(editor):
         else:
             missing.append(lbl)
 
-    if missing:
-        aqt.utils.showInfo(f"The following labels are not mapped for note type '{note_type_name}':\n" + "\n".join(missing))
-
-        return {}
+    # if missing:
+    #     aqt.utils.showInfo(f"The following labels are not mapped for note type '{note_type_name}':\n" + "\n".join(missing))
+    #     return {}
 
 
     fields = note_type["flds"]

@@ -57,7 +57,6 @@ def update_database():
 
     conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')
     conn.execute('CREATE TABLE IF NOT EXISTS media_tracks (filename TEXT, track INTEGER, language TEXT, type TEXT, PRIMARY KEY(filename, track, type))')
-
     conn.execute('''
     CREATE TABLE IF NOT EXISTS media_audio_start_times (
         filename TEXT,
@@ -68,111 +67,81 @@ def update_database():
     ''')
 
     folder = os.path.join(constants.addon_dir, constants.addon_source_folder)
+    audio_exts = constants.audio_extensions
+    video_exts = constants.video_extensions
 
-    # Get currently indexed subtitles filenames in the format: "video`track_X`lang.srt"
+    # indexed vs on‑disk subtitles
     cursor = conn.execute('SELECT filename, language, track FROM subtitles')
-    indexed_subtitle_files = set(f"{row[0]}`track_{row[2]}`{row[1]}.srt" for row in cursor)
+    indexed_subs = {f"{r[0]}`track_{r[2]}`{r[1]}.srt" for r in cursor}
+    current_subs = {f for f in os.listdir(folder) if f.endswith('.srt') and '`track_' in f}
 
-    # Get current subtitle files on disk
-    current_subtitle_files = set(f for f in os.listdir(folder) if f.endswith('.srt') and '`track_' in f)
+    # remove missing subtitles
+    for f in sorted(indexed_subs - current_subs):
+        vid, tpart, lang_s = f.split('`')
+        track = tpart[len('track_'):]
+        lang = lang_s[:-4]
+        conn.execute('DELETE FROM subtitles WHERE filename=? AND language=? AND track=?',
+                     (vid, lang, track))
+        print(f"Removed subtitle: file={vid}, track={track}, lang={lang}")
 
-    # Get currently indexed media files from media_tracks table
+    # add new subtitles
+    for f in sorted(current_subs - indexed_subs):
+        vid, tpart, lang_s = f.split('`')
+        track = tpart[len('track_'):]
+        lang = lang_s[:-4]
+        path = os.path.join(folder, f)
+        with open(path, encoding='utf-8') as fp:
+            text = fp.read().strip()
+        blocks = text.split('\n\n')
+        parsed = []
+        for blk in blocks:
+            lines = blk.split('\n')
+            if len(lines) < 3: continue
+            idx = lines[0]
+            m = re.match(r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})', lines[1])
+            start, end = m.groups() if m else ('','')
+            content = ' '.join(lines[2:]).strip()
+            parsed.append([idx, start, end, content])
+        conn.execute('INSERT INTO subtitles VALUES(?,?,?,?)',
+                     (vid, lang, track, json.dumps(parsed, ensure_ascii=False)))
+        print(f"Added subtitle: {f}")
+
+    # indexed vs on‑disk media
     cursor = conn.execute('SELECT DISTINCT filename FROM media_tracks')
-    indexed_media_files = set(row[0] for row in cursor)
+    indexed_media = {r[0] for r in cursor}
+    current_media = {f for f in os.listdir(folder)
+                     if os.path.splitext(f)[1].lower() in audio_exts + video_exts}
 
-    # Get current media files on disk
-    current_media_files = set(f for f in os.listdir(folder) if os.path.splitext(f)[1].lower() in audio_exts + video_exts)
+    # remove missing media
+    for mf in sorted(indexed_media - current_media):
+        conn.execute('DELETE FROM media_tracks WHERE filename=?', (mf,))
+        conn.execute('DELETE FROM media_audio_start_times WHERE filename=?', (mf,))
+        print(f"Removed media entries for: {mf}")
 
-    # Process subtitle files: add new and remove deleted
-    to_remove_subtitles = indexed_subtitle_files - current_subtitle_files
-    for f in to_remove_subtitles:
-        parts = f.split('`')
-        if len(parts) == 3:
-            video_file = parts[0]
-            track = parts[1][len('track_'):]
-            language = parts[2][:-4]
-            conn.execute('DELETE FROM subtitles WHERE filename=? AND language=? AND track=?',
-                         (video_file, language, track))
-
-    to_add_subtitles = current_subtitle_files - indexed_subtitle_files
-    for f in to_add_subtitles:
-        parts = f.split('`')
-        if len(parts) == 3:
-            video_file = parts[0]
-            track = parts[1][len('track_'):]
-            language = parts[2][:-4]
-            srt_path = os.path.join(folder, f)
-
-            with open(srt_path, encoding='utf-8') as file:
-                full_text = file.read()
-
-            blocks = full_text.strip().split('\n\n')
-            parsed_blocks = []
-
-            for block in blocks:
-                lines = block.strip().split('\n')
-                if len(lines) >= 3:
-                    srt_index = lines[0].strip()
-                    times = lines[1].strip()
-                    text_lines = lines[2:]
-                    match = re.match(r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})', times)
-                    if match:
-                        start_time, end_time = match.groups()
-                    else:
-                        start_time, end_time = '', ''
-                    text = ' '.join(text_lines).strip()
-                    parsed_blocks.append([srt_index, start_time, end_time, text])
-
-            content_json = json.dumps(parsed_blocks, ensure_ascii=False)
-            conn.execute('INSERT INTO subtitles VALUES (?, ?, ?, ?)', (video_file, language, track, content_json))
-
-    # Process media files: add new and remove deleted
-    to_remove_media = indexed_media_files - current_media_files
-    for media_file in to_remove_media:
-        conn.execute('DELETE FROM media_tracks WHERE filename=?', (media_file,))
-        conn.execute('DELETE FROM media_audio_start_times WHERE filename=?', (media_file,))
-
-    to_add_media = current_media_files - indexed_media_files
-    for media_file in to_add_media:
-        full_path = os.path.join(folder, media_file)
-        probe_data = run_ffprobe(full_path)
-        if not probe_data:
-            continue
-        streams = probe_data.get('streams', [])
-
-        audio_count = 0
-        subtitle_count = 0
-
-        for stream in streams:
-            codec_type = stream.get('codec_type')
-            if codec_type == 'audio':
-                audio_count += 1
-                language = stream.get('tags', {}).get('language', 'und').lower()
-                conn.execute('INSERT OR REPLACE INTO media_tracks VALUES (?, ?, ?, ?)',
-                             (media_file, audio_count, language, 'audio'))
-
-                # Get delay_ms for this audio stream (implement this function accordingly)
-                delay_ms = constants.get_audio_start_time_ms_for_track(full_path, stream["index"])
-                conn.execute('INSERT OR REPLACE INTO media_audio_start_times VALUES (?, ?, ?)',
-                             (media_file, audio_count, delay_ms))
-
-            elif codec_type == 'subtitle':
-                subtitle_count += 1
-                language = stream.get('tags', {}).get('language', 'und').lower()
-                conn.execute('INSERT OR REPLACE INTO media_tracks VALUES (?, ?, ?, ?)',
-                             (media_file, subtitle_count, language, 'subtitle'))
-
-        cursor = conn.execute('SELECT track, language, type FROM media_tracks WHERE filename=? ORDER BY type, track', (media_file,))
-        print(f"Added media file: {media_file}")
-        for row in cursor:
-            print(f"  Track {row[0]} | Language: {row[1]} | Type: {row[2]}")
+    # add new media
+    for mf in sorted(current_media - indexed_media):
+        path = os.path.join(folder, mf)
+        data = run_ffprobe(path)
+        if not data: continue
+        a_count = 0; s_count = 0
+        for st in data.get('streams', []):
+            ct = st.get('codec_type')
+            lang = st.get('tags', {}).get('language','und').lower()
+            if ct == 'audio':
+                a_count += 1
+                conn.execute('INSERT OR REPLACE INTO media_tracks VALUES(?,?,?,?)',
+                             (mf, a_count, lang, 'audio'))
+                dm = constants.get_audio_start_time_ms_for_track(path, st['index'])
+                conn.execute('INSERT OR REPLACE INTO media_audio_start_times VALUES(?,?,?)',
+                             (mf, a_count, dm))
+            elif ct == 'subtitle':
+                s_count += 1
+                conn.execute('INSERT OR REPLACE INTO media_tracks VALUES(?,?,?,?)',
+                             (mf, s_count, lang, 'subtitle'))
+        print(f"Added media file: {mf}")
+        for r in conn.execute('SELECT track,language,type FROM media_tracks WHERE filename=? ORDER BY type,track',(mf,)):
+            print(f"  Track {r[0]} | {r[2]} | {r[1]}")
         print()
 
     conn.commit()
     return conn
-
-
-
-
-
-

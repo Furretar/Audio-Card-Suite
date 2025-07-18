@@ -4,6 +4,7 @@
 - [ ] use showinfo when any button returns null
 - [ ] run bulk generation in background, have a stop button, display info
 - [ ] fix add/remove next line breaking using timing files, change name to be like jpn-eng to know which to take audio from
+- [ ] add track to sound line so it doesnt have to search for the subtitle file
 - [ ] make it so you can add the langauge code manually for your own subtitles
 - [ ] only add media file info to database when used, and not on startup
 - [ ] make context aware generation update sentence line

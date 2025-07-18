@@ -17,6 +17,7 @@ low priority
 - [ ]  add/subtract 1db for each audio
 - [ ]  open menu while bulk generating to show user logs
 - [ ]  generate waveform
+- [ ]  allow square brackets in filenames
 
 ```
 Generate Fields:

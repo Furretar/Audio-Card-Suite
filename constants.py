@@ -79,7 +79,8 @@ default_settings = {
     "target_timing_track": 3,
     "translation_timing_track": 3,
     "timing_tracks_enabled": False,
-    "selected_tab_index": 0
+    "selected_tab_index": 0,
+    "autoplay": False,
 }
 
 # menu

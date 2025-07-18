@@ -955,10 +955,12 @@ def add_custom_controls(editor: Editor) -> None:
     checkboxes_layout.setContentsMargins(*ROW_MARGINS)
     checkboxes_layout.setSpacing(ROW_SPACING)
 
+    config = constants.extract_config_data()
     autoplay_checkbox = QCheckBox("Autoplay")
     autoplay_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
-    autoplay_checkbox.setChecked(getattr(editor, "_auto_play_enabled", False))
-    autoplay_checkbox.clicked.connect(lambda _: handle_autoplay_checkbox_toggle(_, editor))
+    autoplay_checkbox.setChecked(config["autoplay"])
+    set_auto_play_audio(editor, config.get("autoplay", False))
+    autoplay_checkbox.clicked.connect(lambda _: handle_autoplay_toggle_and_save(editor))
     checkboxes_layout.addWidget(autoplay_checkbox)
 
     # Push everything to the left before adding the button on the right
@@ -977,3 +979,18 @@ gui_hooks.editor_did_init.append(add_custom_controls)
 
 def on_profile_loaded():
     gui_hooks.editor_did_load_note.append(button_actions.on_note_loaded)
+
+def save_config(cfg: dict) -> None:
+    path = os.path.join(constants.addon_dir, "config.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+
+def handle_autoplay_toggle_and_save(editor: Editor):
+    # flip editor state
+    new_state = not getattr(editor, "_auto_play_enabled", False)
+    set_auto_play_audio(editor, new_state)
+
+    # persist
+    cfg = constants.extract_config_data()
+    cfg["autoplay"] = new_state
+    save_config(cfg)

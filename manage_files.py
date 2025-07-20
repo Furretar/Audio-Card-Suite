@@ -669,7 +669,8 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
         log_filename(f"DB contains: {db_filename} | track: {trk} | lang: {lang}")
     return None, None
 
-def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, config):
+# option to provide codes to choose what's displayed in the sentence line
+def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, sentence_code, timing_code, config):
     if not subtitle_path:
         log_error("Error: subtitle_path is None")
         return None, None
@@ -695,17 +696,12 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
     try:
         start_index = blocks[0][0]
         end_index = blocks[-1][0]
-
         start_time = convert_timestamp_dot_to_hmsms(blocks[0][1])
         end_time = convert_timestamp_dot_to_hmsms(blocks[-1][2])
         print(f"start time: {blocks[0][1]}, end time: {blocks[-1][2]}")
 
-
         audio_ext = config["audio_ext"]
-
         subtitle_data = extract_subtitle_path_data(subtitle_path)
-        code = subtitle_data["code"]
-
 
         normalize_audio = config["normalize_audio"]
         if normalize_audio:
@@ -713,7 +709,13 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
         else:
             lufs = None
 
-        timestamp, new_sound_line = build_file_and_sound_line(filename_base, file_extension, code, None, start_time, end_time, start_index, end_index, lufs, audio_ext)
+        if sentence_code and timing_code:
+            code = sentence_code
+        else:
+            code = subtitle_data["code"]
+            timing_code = None
+
+        timestamp, new_sound_line = build_file_and_sound_line(filename_base, file_extension, code, timing_code, start_time, end_time, start_index, end_index, lufs, audio_ext)
 
         combined_text = "\n\n".join(b[3].strip() for b in blocks if len(b) > 3)
 

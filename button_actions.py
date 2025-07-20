@@ -14,7 +14,7 @@ import manage_database
 
 import manage_files
 from manage_files import get_field_key_from_label, alter_sound_file_times, get_altered_sound_data, \
-    extract_sound_line_data
+    extract_sound_line_data, extract_subtitle_path_data
 import constants
 from constants import (
     log_filename,
@@ -67,7 +67,7 @@ def next_result_button(editor):
         return
 
     # generate new sound and sentence line using the block just retrieved
-    next_sound_line, next_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, config)
+    next_sound_line, next_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
 
     # generate sound file using next sound line
     log_filename(f"calling extract sound line data: {next_sound_line}")
@@ -127,6 +127,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         log_error(f"still no data from sound line: {sound_line}, returning")
         return
 
+
     if alt_pressed:
         sound_line = fields["translation_sound_line"]
         sound_idx = fields["translation_sound_idx"]
@@ -135,6 +136,9 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         translation_idx = ""
         track = config.get("translation_subtitle_track")
         code = config.get("translation_language_code")
+        pad_start = config["pad_start_translation"]
+        pad_end = config["pad_end_translation"]
+
     else:
         sound_line = fields["sound_line"]
         sound_idx = fields["sound_idx"]
@@ -143,45 +147,75 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         translation_idx = fields["translation_idx"]
         track = config.get("target_subtitle_track")
         code = config.get("target_language_code")
+        pad_start = config["pad_start_target"]
+        pad_end = config["pad_end_target"]
+
+    if add_to_start == 0:
+        pad_start = 0
+    if add_to_end == 0:
+        pad_end = 0
 
     translation_sound_idx = fields["translation_sound_idx"]
     start_index = data["start_index"]
     end_index = data["end_index"]
-
-
-
-
+    timing_code = data["timing_lang_code"]
     full_source_filename = data["full_source_filename"]
     subtitle_database = manage_database.get_database()
-    subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
 
-    blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, subtitle_path)
-    if not blocks:
-        log_error(f"no blocks returned")
+    # get blocks for sound line timings
+    if timing_code:
+        timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database)
+    else:
+        timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
+
+    timing_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, timing_subtitle_path)
+    if not timing_blocks:
+        log_error(f"no timing blocks returned")
         return
 
-    new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, config)
+    # get blocks for sentence line
+    sentence_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
+    sentence_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, sentence_subtitle_path)
+    if not sentence_blocks:
+        log_error(f"no sentence blocks returned")
+        return
 
-    if not new_sound_line or not new_sentence_line:
-        log_error("No new sound line or sentence text returned.")
-        block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
-        new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, config)
-        if not new_sound_line:
-            log_error(f"nothing found from sentence line {sentence_line}, returning")
-            return
+    # generate sound and sentence lines from blocks
+    sentence_data = extract_subtitle_path_data(sentence_subtitle_path)
+    sentence_code = sentence_data["code"]
 
-    log_filename(f"getting sound line data from5: {new_sound_line}")
-    new_data = manage_files.extract_sound_line_data(new_sound_line)
-    altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, config, new_data)
-    manage_files.alter_sound_file_times(altered_data, new_sound_line, config, alt_pressed)
+    if timing_code:
+        new_timing_sound_line, _ = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(timing_blocks, timing_subtitle_path, sentence_code, timing_code, config)
+    else:
+        new_timing_sound_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, None, None, config)
+
+    new_data = manage_files.extract_sound_line_data(new_timing_sound_line)
+    raw_sentence, _ = manage_files.get_translation_line_and_subtitle_from_target_sound_line(new_timing_sound_line, config, new_data)
+    new_sentence_line = constants.format_text(raw_sentence)
+
+    # pad sound line if applicable
+    pad_target_timings = (pad_start != 0 or pad_end != 0)
+    if pad_target_timings:
+        log_filename(f"padding timings for context line, pad start: {pad_start} | pad end: {pad_end}")
+        data = manage_files.extract_sound_line_data(new_timing_sound_line)
+        altered_data = get_altered_sound_data(new_timing_sound_line, pad_start, pad_end, config, data)
+        if not altered_data:
+            log_error(f"padded sound line is empty")
+            return None
+        new_timing_sound_line = altered_data["new_sound_line"]
+
+    log_filename(f"getting sound line data from5: {new_timing_sound_line}")
+    new_data = manage_files.extract_sound_line_data(new_timing_sound_line)
+    altered_data = manage_files.get_altered_sound_data(new_timing_sound_line, 0, 0, config, new_data)
+    manage_files.alter_sound_file_times(altered_data, new_timing_sound_line, config, alt_pressed)
 
     # generate new translation line
     if not alt_pressed:
-        translation_line, _ = manage_files.get_translation_line_and_subtitle_from_target_sound_line(new_sound_line, config, new_data)
+        translation_line, _ = manage_files.get_translation_line_and_subtitle_from_target_sound_line(new_timing_sound_line, config, new_data)
         editor.note.fields[translation_idx] = str(translation_line or "")
 
     # update sound field with new sound line
-    new_field = re.sub(r"\[sound:.*?]", new_sound_line, sound_line)
+    new_field = re.sub(r"\[sound:.*?]", new_timing_sound_line, sound_line)
     editor.note.fields[sound_idx] = str(new_field)
     editor.note.fields[sentence_idx] = str(new_sentence_line)
 
@@ -205,7 +239,6 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     if not autoplay:
         QTimer.singleShot(0, play_after_reload)
 
-
 def new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, relative_start, relative_end):
     config = constants.extract_config_data()
     log_filename(f"calling extract sound line data: {sound_line}")
@@ -218,7 +251,7 @@ def new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, 
 
     blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - relative_start, end_index + relative_end, subtitle_path)
     log_filename(f"blocks: {blocks}")
-    new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, config)
+    new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, None, None, config)
     return new_sound_line, new_sentence_line
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int):
@@ -260,7 +293,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
     if not new_sound_line:
         log_error("No new sound tag returned, checking database.")
         block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
-        new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, config)
+        new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
         if not new_sound_line:
             log_error(f"nothing found from sentence line {sentence_line}, returning")
             return
@@ -285,8 +318,6 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
     autoplay = config["autoplay"]
     if not autoplay:
         QTimer.singleShot(0, play_after_reload)
-
-
 
 def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path):
     if sentence_line == new_sentence_line:
@@ -592,7 +623,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         end_index = data["end_index"]
         blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path)
         if blocks:
-            new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, config)
+            new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, None, None, config)
         else:
             data = None
 
@@ -604,7 +635,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
             log_error(f"subtitle path null2")
             aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file with the code `{code}` or track `{track}`.")
             return None
-        new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, config)
+        new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
     if selected_text:
         new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, selected_text, new_sound_line, subtitle_path)
     else:
@@ -635,8 +666,6 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
             return None
         new_sound_line = altered_data["new_sound_line"]
     log_filename(f"sound after after padding: {new_sound_line}")
-
-
 
     # get image line
     if should_generate_image and ((not image_line) or overwrite):
@@ -695,7 +724,6 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
                           f"new_translation_sound_line: {new_translation_sound_line}\n")
 
     return new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line
-
 
 def show_info_msg(msg):
     import aqt
@@ -793,7 +821,6 @@ def get_fields_from_editor(editor):
         "selected_text": selected_text,
     }
 
-
 def index_of_field(field_name, fields):
     for i, fld in enumerate(fields):
         if fld["name"] == field_name:
@@ -858,14 +885,12 @@ def get_fields_from_note(note):
 def is_normalized(sound_line):
     return bool(re.search(r'`-\d+LUFS\.\w+$', sound_line))
 
-
 # play sound hooks and buttons
 def generate_fields_button(editor):
     sound_filename, updated = generate_and_update_fields(editor, None, False)
     if sound_filename and not updated:
         log_command(f"Playing sound filename: {sound_filename}")
         QTimer.singleShot(0, lambda: play(sound_filename))
-
 
 def on_note_loaded(editor):
     editor.web.eval("window.getSelection().removeAllRanges();")

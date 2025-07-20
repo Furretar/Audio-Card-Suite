@@ -48,6 +48,7 @@ def extract_sound_line_data(sound_line):
         filename_base = groups["filename_base"]
         source_file_extension = groups.get("source_file_extension") or ""
         lang_code = groups.get("lang_code") or ""
+        timing_lang_code = groups.get("timing_lang_code") or ""
         start_time = groups["start_time"]
         end_time = groups["end_time"]
         subtitle_range = groups["subtitle_range"]
@@ -58,7 +59,11 @@ def extract_sound_line_data(sound_line):
         meta_parts = [full_source_filename]
 
         if lang_code:
-            meta_parts.append(lang_code)
+            codes = lang_code
+            if timing_lang_code:
+                codes += f"-{timing_lang_code}"
+            meta_parts.append(codes)
+
 
         meta_parts.append(f"{start_time}-{end_time}")
         meta_parts.append(subtitle_range)
@@ -67,7 +72,6 @@ def extract_sound_line_data(sound_line):
             meta_parts.append(normalize_tag)
 
         timestamp_filename = "`".join(meta_parts) + f".{sound_file_extension}"
-        timestamp_filename_no_normalize = "`".join(meta_parts[:-1 if normalize_tag else None])
         audio_collection_path = os.path.join(get_collection_dir(), timestamp_filename)
         m4b_image_filename = f"{filename_base}.{sound_file_extension}.jpg"
         image_filename = f"{filename_base}.{sound_file_extension}`{start_time}.jpg"
@@ -87,6 +91,7 @@ def extract_sound_line_data(sound_line):
             "filename_base": filename_base,
             "source_file_extension": source_file_extension,
             "lang_code": lang_code,
+            "timing_lang_code": timing_lang_code,
             "start_time": start_time,
             "end_time": end_time,
             "start_index": start_index,
@@ -94,8 +99,6 @@ def extract_sound_line_data(sound_line):
             "normalize_tag": normalize_tag,
             "sound_file_extension": sound_file_extension,
             "full_source_filename": full_source_filename,
-            "timestamp_filename": timestamp_filename,
-            "timestamp_filename_no_normalize": timestamp_filename_no_normalize,
             "collection_path": audio_collection_path,
             "image_filename": image_filename,
             "m4b_image_filename": m4b_image_filename,
@@ -407,10 +410,13 @@ def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, 
         start_index = overlapping_blocks[0][0]
         end_index = overlapping_blocks[-1][0]
         audio_ext = config["audio_ext"]
+        subtitle_data = extract_subtitle_path_data(timing_subtitle_path)
+        timing_language_code = subtitle_data["code"]
 
-        timestamp = f"{filename_base}{source_file_extension}`{audio_language_code}`{first_start}-{last_end}`{start_index}-{end_index}.{audio_ext}"
-        sound_line = f"[sound:{timestamp}]"
-        log_filename(f"sound line: {sound_line}")
+        timestamp, sound_line = build_file_and_sound_line(filename_base, source_file_extension, audio_language_code, timing_language_code, first_start, last_end, start_index, end_index, None, audio_ext)
+
+
+        log_filename(f"timing sound line: {sound_line}")
         return sound_line
     except Exception as e:
         log_error(f"Error generating sound line: {e}")
@@ -699,15 +705,16 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
 
         subtitle_data = extract_subtitle_path_data(subtitle_path)
         code = subtitle_data["code"]
-        timestamp = f"{filename_base}.{file_extension}`{code}`{start_time}-{end_time}`{start_index}-{end_index}"
+
 
         normalize_audio = config["normalize_audio"]
         if normalize_audio:
             lufs = config["lufs"]
-            timestamp += f"`{lufs}LUFS"
+        else:
+            lufs = None
 
-        timestamp += f".{audio_ext}"
-        new_sound_line = f"[sound:{timestamp}]"
+        timestamp, new_sound_line = build_file_and_sound_line(filename_base, file_extension, code, None, start_time, end_time, start_index, end_index, lufs, audio_ext)
+
         combined_text = "\n\n".join(b[3].strip() for b in blocks if len(b) > 3)
 
         log_filename(f"generated sound_line: {new_sound_line}\nsentence line: {combined_text}")
@@ -1302,9 +1309,31 @@ def format_subtitle_block(subtitle_block):
 
     return [subtitle_index, start_time, end_time, subtitle_text]
 
+def build_file_and_sound_line(filename_base, source_file_extension, audio_code, timing_code, first_start, last_end, start_index, end_index, lufs, audio_ext):
+    if not "." in source_file_extension:
+        source_file_extension = f".{source_file_extension}"
+
+    # don't add both codes if they're the same
+    if audio_code == timing_code:
+        timing_code = None
+
+    if timing_code:
+        timestamp = f"{filename_base}{source_file_extension}`{audio_code}-{timing_code}`{first_start}-{last_end}`{start_index}-{end_index}"
+    else:
+        timestamp = f"{filename_base}{source_file_extension}`{audio_code}`{first_start}-{last_end}`{start_index}-{end_index}"
+
+    if lufs:
+        timestamp += f"`{lufs}LUFS.{audio_ext}"
+    else:
+        timestamp += f".{audio_ext}"
+
+    sound_line = f"[sound:{timestamp}]"
+
+    return timestamp, sound_line
+
+
 def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, config, sound_line_data) -> dict:
     normalize_audio = config["normalize_audio"]
-    lufs = config["lufs"]
 
     log_filename(f"extracting sound_line_data from sound_line: {sound_line}")
     if not sound_line_data:
@@ -1326,29 +1355,21 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
 
     new_start_time = milliseconds_to_hmsms_format(new_start_ms)
     new_end_time = milliseconds_to_hmsms_format(new_end_ms)
-
-    time_range = f"{new_start_time}-{new_end_time}"
     filename_base = sound_line_data["filename_base"]
     full_source_filename = sound_line_data["full_source_filename"]
-
-    source_file_extension = "."
-    source_file_extension += sound_line_data["source_file_extension"]
-    filename_parts = [full_source_filename]
-
+    source_file_extension = sound_line_data["source_file_extension"]
     lang_code = sound_line_data.get("lang_code")
-    if lang_code:
-        filename_parts.append(lang_code)
-
-    filename_parts.append(time_range)
-
-    subtitle_range = f"{start_index}-{end_index}" if start_index is not None and end_index is not None else ""
-    if subtitle_range:
-        filename_parts.append(subtitle_range)
 
     if normalize_audio:
-        filename_parts.append(f"{lufs}LUFS")
+        lufs = config["lufs"]
+    else:
+        lufs = None
 
-    new_filename = "`".join(filename_parts) + f".{sound_line_data['sound_file_extension']}"
+    sound_file_extension = sound_line_data["sound_file_extension"]
+    timing_lang_code = sound_line_data["timing_lang_code"]
+
+    new_filename, _ = build_file_and_sound_line(filename_base, source_file_extension, lang_code, timing_lang_code, new_start_time, new_end_time, start_index, end_index, lufs, sound_file_extension)
+
     new_path = os.path.join(get_collection_dir(), new_filename)
     new_sound_line = f"[sound:{new_filename}]"
     old_path = sound_line_data["collection_path"]

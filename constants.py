@@ -38,9 +38,9 @@ video_extensions = [
 
 BACKTICK_PATTERN = re.compile(
     r'^\[sound:'
-    r'(?P<filename_base>[^`.]+)' # base name before extension
-    r'(?P<source_file_extension>\.[a-z0-9]+)?' # optional extension
-    r'(?:`(?P<lang_code>[a-z]{3}))?' # optional language code
+    r'(?P<filename_base>[^`.]+)'
+    r'(?P<source_file_extension>\.[a-z0-9]+)?'
+    r'(?:`(?P<lang_code>[a-z]{3})(?:-(?P<timing_lang_code>[a-z]{3}))?)?'
     r'`(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'
     r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'
     r'(?P<subtitle_range>\d+-\d+)'

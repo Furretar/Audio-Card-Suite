@@ -634,6 +634,7 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
             log_error(f"padded sound line is empty")
             return None
         new_sound_line = altered_data["new_sound_line"]
+    log_filename(f"sound after after padding: {new_sound_line}")
 
 
 

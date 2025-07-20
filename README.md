@@ -9,6 +9,7 @@
 - [ ] make it so you can add the langauge code manually for your own subtitles
 - [ ] only add media file info to database when used, and not on startup
 - [ ] make context aware generation update sentence line
+- [ ] only store subtitles in the database so you can overwrite them with files in the source folder
 
 
 low priority

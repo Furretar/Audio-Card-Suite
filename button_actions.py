@@ -269,7 +269,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
 
     def play_after_reload():
         if alt_pressed:
-            translation_sound_index = fields["translation_sound_index"]
+            translation_sound_idx = fields["translation_sound_idx"]
             play_sound = editor.note.fields[translation_sound_idx]
         else:
             play_sound = editor.note.fields[sound_idx]
@@ -870,9 +870,16 @@ def generate_fields_button(editor):
 def on_note_loaded(editor):
     editor.web.eval("window.getSelection().removeAllRanges();")
     av_player.stop_and_clear_queue()
+
+    modifiers = QApplication.keyboardModifiers()
+    alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
+
     if getattr(editor, "_auto_play_enabled", False):
         fields = get_fields_from_editor(editor)
-        sound_idx = fields.get("sound_idx")
+        if alt_pressed:
+            sound_idx = fields["translation_sound_idx"]
+        else:
+            sound_idx = fields.get("sound_idx")
 
         if sound_idx is not None and sound_idx < len(editor.note.fields):
             field_text = editor.note.fields[sound_idx]

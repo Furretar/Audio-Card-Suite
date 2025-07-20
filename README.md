@@ -10,6 +10,7 @@
 - [ ] only add media file info to database when used, and not on startup
 - [ ] make context aware generation update sentence line
 - [ ] only store subtitles in the database so you can overwrite them with files in the source folder
+- [ ] make translation sound line more accurate by using timings on original sentnece instead of timings from translation sentence?
 
 
 low priority

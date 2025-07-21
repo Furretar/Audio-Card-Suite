@@ -268,7 +268,7 @@ def get_subtitle_file_from_database(filename, track, code, config, database):
     # extract subtitle files and update database if not found
     log_error("Subtitle not found; extracting and retrying...")
     source_path = get_source_path_from_full_filename(filename)
-    extract_subtitle_files(source_path, track, code, config)
+    # extract_subtitle_files(source_path, track, code, config)
     manage_database.update_database()
     path = find_subtitle()
     if path:
@@ -637,7 +637,7 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
 
     for filename in all_source_files:
         source_path = os.path.join(subtitle_dir, filename)
-        extract_subtitle_files(source_path, track, code, config)
+        # extract_subtitle_files(source_path, track, code, config)
 
     manage_database.update_database()
 
@@ -791,78 +791,78 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
 
 
 # commands and files
-def extract_subtitle_files(source_path, track, code, config):
-    track = int(track)
-    exe_path, ffprobe_path = constants.get_ffmpeg_exe_path()
-
-    def has_subtitle_streams(path):
-        cmd = [ffprobe_path, '-v', 'error', '-select_streams', 's', '-show_entries', 'stream=index', '-of', 'json', path]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        data = json.loads(proc.stdout)
-        return bool(data.get('streams'))
-
-    if not has_subtitle_streams(source_path):
-        log_filename(f"No subtitle streams found for: {source_path}, skipping extraction.")
-        return
-
-    filename_base, file_extension = os.path.splitext(os.path.basename(source_path))
-    log_filename(f"extension from sub source path: {file_extension}, from: {source_path}")
-
-    tagged_subtitle_file = f"{filename_base}{file_extension}`track_{track}`{code}.srt"
-    log_filename(f"tagged subtitle file: {tagged_subtitle_file}")
-    tagged_subtitle_path = os.path.join(constants.addon_source_folder, tagged_subtitle_file)
-    basename_subtitle_file = f"{filename_base}`.srt"
-    basename_subtitle_path = os.path.join(constants.addon_source_folder, basename_subtitle_file)
-
-    if os.path.exists(tagged_subtitle_path) or os.path.exists(basename_subtitle_path):
-        return
-
-    selected_tab_index = config.get("selected_tab_index", 0)
-
-    track_by_code = get_subtitle_track_number_by_code(source_path, code)
-    if track_by_code is None:
-        log_error(f"track_by_code not found for code {code}")
-        track_by_code = track
-    log_filename(f"track by code: {track_by_code}")
-
-    if track_by_code != track:
-        log_filename(f"track_by_code ({track_by_code}) != set track ({track}), tab index: {selected_tab_index}")
-
-        if selected_tab_index == 0 and track_by_code:
-            log_filename("Prioritizing language code")
-            track = track_by_code
-        else:
-            log_filename("Prioritizing set track")
-
-    code = get_subtitle_code_by_track_number(source_path, track)
-    if not code:
-        log_error(f"Track {track} does not exist for the file: {filename_base}{file_extension}.\nPlease check your settings.")
-        return
-
-    tagged_subtitle_file = f"{filename_base}{file_extension}`track_{track}`{code}.srt"
-    log_filename(f"tagged_subtitle_file: {tagged_subtitle_file}")
-    tagged_subtitle_path = os.path.join(constants.addon_source_folder, tagged_subtitle_file)
-
-    if track and track > 0 and not os.path.exists(tagged_subtitle_path):
-        try:
-            log_filename(f"Extracting subtitle track {track} from {source_path}")
-            result = subprocess.run(
-                [
-                    exe_path,
-                    "-y",
-                    "-i", source_path,
-                    "-map", f"0:s:{track - 1}",
-                    tagged_subtitle_path
-                ],
-                capture_output=True,
-                text=True
-            )
-            if result.returncode != 0:
-                log_error(f"Subtitle extraction failed with code {result.returncode}:\n{result.stderr} for:\n{source_path}|{track}|{code}")
-            else:
-                log_command(f"Subtitle extraction succeeded:\n{result.stdout}")
-        except Exception as e:
-            log_error(f"Subtitle extraction crashed: {e}")
+# def extract_subtitle_files(source_path, track, code, config):
+#     track = int(track)
+#     exe_path, ffprobe_path = constants.get_ffmpeg_exe_path()
+#
+#     def has_subtitle_streams(path):
+#         cmd = [ffprobe_path, '-v', 'error', '-select_streams', 's', '-show_entries', 'stream=index', '-of', 'json', path]
+#         proc = subprocess.run(cmd, capture_output=True, text=True)
+#         data = json.loads(proc.stdout)
+#         return bool(data.get('streams'))
+#
+#     if not has_subtitle_streams(source_path):
+#         log_filename(f"No subtitle streams found for: {source_path}, skipping extraction.")
+#         return
+#
+#     filename_base, file_extension = os.path.splitext(os.path.basename(source_path))
+#     log_filename(f"extension from sub source path: {file_extension}, from: {source_path}")
+#
+#     tagged_subtitle_file = f"{filename_base}{file_extension}`track_{track}`{code}.srt"
+#     log_filename(f"tagged subtitle file: {tagged_subtitle_file}")
+#     tagged_subtitle_path = os.path.join(constants.addon_source_folder, tagged_subtitle_file)
+#     basename_subtitle_file = f"{filename_base}`.srt"
+#     basename_subtitle_path = os.path.join(constants.addon_source_folder, basename_subtitle_file)
+#
+#     if os.path.exists(tagged_subtitle_path) or os.path.exists(basename_subtitle_path):
+#         return
+#
+#     selected_tab_index = config.get("selected_tab_index", 0)
+#
+#     track_by_code = get_subtitle_track_number_by_code(source_path, code)
+#     if track_by_code is None:
+#         log_error(f"track_by_code not found for code {code}")
+#         track_by_code = track
+#     log_filename(f"track by code: {track_by_code}")
+#
+#     if track_by_code != track:
+#         log_filename(f"track_by_code ({track_by_code}) != set track ({track}), tab index: {selected_tab_index}")
+#
+#         if selected_tab_index == 0 and track_by_code:
+#             log_filename("Prioritizing language code")
+#             track = track_by_code
+#         else:
+#             log_filename("Prioritizing set track")
+#
+#     code = get_subtitle_code_by_track_number(source_path, track)
+#     if not code:
+#         log_error(f"Track {track} does not exist for the file: {filename_base}{file_extension}.\nPlease check your settings.")
+#         return
+#
+#     tagged_subtitle_file = f"{filename_base}{file_extension}`track_{track}`{code}.srt"
+#     log_filename(f"tagged_subtitle_file: {tagged_subtitle_file}")
+#     tagged_subtitle_path = os.path.join(constants.addon_source_folder, tagged_subtitle_file)
+#
+#     if track and track > 0 and not os.path.exists(tagged_subtitle_path):
+#         try:
+#             log_filename(f"Extracting subtitle track {track} from {source_path}")
+#             result = subprocess.run(
+#                 [
+#                     exe_path,
+#                     "-y",
+#                     "-i", source_path,
+#                     "-map", f"0:s:{track - 1}",
+#                     tagged_subtitle_path
+#                 ],
+#                 capture_output=True,
+#                 text=True
+#             )
+#             if result.returncode != 0:
+#                 log_error(f"Subtitle extraction failed with code {result.returncode}:\n{result.stderr} for:\n{source_path}|{track}|{code}")
+#             else:
+#                 log_command(f"Subtitle extraction succeeded:\n{result.stdout}")
+#         except Exception as e:
+#             log_error(f"Subtitle extraction crashed: {e}")
 
 
 def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collection_path, m4b_image_collection_path) -> str:

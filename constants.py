@@ -8,6 +8,11 @@ import subprocess
 from aqt.utils import showInfo
 import html
 
+# logging functions
+DEBUG_FILENAME = False
+DEBUG_COMMAND = True
+DEBUG_ERROR = True
+DEBUG_IMAGE = False
 
 # integers
 ms_amount = 50
@@ -96,11 +101,7 @@ CHECKBOX_MIN_WIDTH = 150
 BUTTON_PADDING = "padding: 1px 4px;"
 SHIFT_BUTTON_BG_COLOR = "#f0d0d0"
 
-# logging functions
-DEBUG_FILENAME = True
-DEBUG_COMMAND = True
-DEBUG_ERROR = True
-DEBUG_IMAGE = False
+
 
 def log_filename(message):
     if DEBUG_FILENAME:
@@ -214,3 +215,30 @@ def extract_config_data():
 
 config = extract_config_data()
 addon_source_folder = config["source_folder"]
+
+def format_subtitle_block(subtitle_block):
+    if not subtitle_block:
+        log_error("No subtitle block")
+        return []
+    lines = subtitle_block.strip().splitlines()
+
+    if len(lines) < 3:
+        return []
+
+    subtitle_index = lines[0]
+    time_range = lines[1]
+
+    if '-->' not in time_range:
+        log_error(f"Invalid time range in subtitle block: {time_range}")
+        return None
+
+    subtitle_text = "\n".join(line.strip() for line in lines[2:])
+
+    start_srt, end_srt = [t.strip() for t in time_range.split('-->')]
+    start_time = format_timestamp_for_filename(start_srt)
+    end_time = format_timestamp_for_filename(end_srt)
+
+    return [subtitle_index, start_time, end_time, subtitle_text]
+
+def format_timestamp_for_filename(timestamp: str) -> str:
+    return timestamp.replace(':', '.').replace(',', '.')

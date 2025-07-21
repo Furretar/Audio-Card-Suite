@@ -28,7 +28,6 @@ def get_database():
 def close_database():
     global conn
     if conn is not None:
-        conn.close()
         conn = None
 
 
@@ -52,6 +51,7 @@ def run_ffprobe(file_path):
     return json.loads(result.stdout)
 
 def update_database():
+    log_filename(f"update database called")
     db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
     conn = sqlite3.connect(db_path)
 
@@ -89,15 +89,61 @@ def update_database():
                          (vid, lang, track))
             print(f"Removed subtitle: file={vid}, track={track}, lang={lang}")
 
-    extract_all_subtitle_tracks_and_update_db()
+    extract_all_subtitle_tracks_and_update_db(conn)
 
-    # indexed vs on‑disk media
-    cursor = conn.execute('SELECT DISTINCT filename FROM media_tracks')
-    indexed_media = {r[0] for r in cursor}
-    current_media = {f for f in os.listdir(folder)
-                     if os.path.splitext(f)[1].lower() in audio_exts + video_exts}
+
+    # Add user‑placed subtitles (same format as embedded/external tracks, but no language or track)
+    current_media = {
+        f for f in os.listdir(folder)
+        if os.path.splitext(f)[1].lower() in audio_exts + video_exts
+    }
+    media_basenames = {os.path.splitext(f)[0] for f in current_media}
+
+    current_subtitles = {
+        f for f in os.listdir(folder)
+        if os.path.splitext(f)[1].lower() == ".srt"
+    }
+
+    for subtitle_file in current_subtitles:
+        base_name = os.path.splitext(subtitle_file)[0]
+        if base_name in media_basenames:
+            subtitle_path = os.path.join(folder, subtitle_file)
+            for media_file in (m for m in current_media if os.path.splitext(m)[0] == base_name):
+                try:
+                    with open(subtitle_path, "r", encoding="utf-8") as f:
+                        text = f.read().strip()
+                    blocks = text.split("\n\n")
+                    parsed = []
+                    for blk in blocks:
+                        lines = blk.strip().split("\n")
+                        if len(lines) < 3:
+                            continue
+                        idx = lines[0]
+                        m = re.match(
+                            r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})',
+                            lines[1]
+                        )
+                        if not m:
+                            continue
+                        start, end = m.groups()
+                        content = ' '.join(lines[2:]).strip()
+                        parsed.append([idx, start, end, content])
+
+                    # Store exactly as extract_all does: JSON-encoded list of blocks,
+                    # with empty language and track
+                    conn.execute(
+                        'INSERT INTO subtitles (filename, language, track, content) VALUES (?, ?, ?, ?)',
+                        (media_file, "und", "-1", json.dumps(parsed, ensure_ascii=False))
+                    )
+                    print(f"Added subtitle content for {subtitle_path} linked to media {media_file}")
+                except Exception as e:
+                    print(f"Failed to add subtitle content from {subtitle_path}: {e}")
+
 
     # remove missing media
+    cursor = conn.execute('SELECT DISTINCT filename FROM media_tracks')
+    indexed_media = {r[0] for r in cursor}
+
     for mf in sorted(indexed_media - current_media):
         conn.execute('DELETE FROM media_tracks WHERE filename=?', (mf,))
         conn.execute('DELETE FROM media_audio_start_times WHERE filename=?', (mf,))
@@ -132,9 +178,8 @@ def update_database():
     return conn
 
 
-def extract_all_subtitle_tracks_and_update_db():
-    db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
-    conn = sqlite3.connect(db_path)
+def extract_all_subtitle_tracks_and_update_db(conn):
+    log_filename(f"extract_all_subtitle_tracks_and_update_db called")
 
     folder = os.path.join(constants.addon_dir, constants.addon_source_folder)
     audio_exts = constants.audio_extensions
@@ -169,7 +214,7 @@ def extract_all_subtitle_tracks_and_update_db():
 
     # Skip media files already indexed
     media_to_process = sorted(current_media - indexed_media)
-
+    print(f"media_to_process: {media_to_process}")
     for media_file in media_to_process:
         media_path = os.path.join(folder, media_file)
         data = run_ffprobe(media_path)
@@ -237,4 +282,67 @@ def extract_all_subtitle_tracks_and_update_db():
             except Exception as e:
                 log_error(f"Exception during subtitle extraction for track {index} from {media_file}: {e}")
 
+        # check for matching external .srt file with no data tags
+        print(f"got ehre")
+        base_path = os.path.splitext(media_path)[0]
+        srt_path = base_path + '.srt'
+        if os.path.exists(srt_path):
+            log_filename(f"file exists: {srt_path}")
+            cursor = conn.execute(
+                "SELECT 1 FROM subtitles WHERE filename = ? AND track = ?",
+                (media_file, "-1")
+            )
+            if cursor.fetchone():
+                log_filename(f"External .srt already indexed for {media_file}")
+            else:
+                try:
+                    with open(srt_path, encoding="utf-8") as f:
+                        text = f.read().strip()
+                    if not text:
+                        log_error(f"External .srt file is empty for {media_file}")
+                    else:
+                        blocks = text.split('\n\n')
+                        parsed = []
+                        for blk in blocks:
+                            lines = blk.strip().split('\n')
+                            if len(lines) < 3:
+                                continue
+                            idx = lines[0]
+                            m = re.match(r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})', lines[1])
+                            if not m:
+                                continue
+                            start, end = m.groups()
+                            content = ' '.join(lines[2:]).strip()
+                            parsed.append([idx, start, end, content])
+
+                        conn.execute(
+                            'INSERT INTO subtitles VALUES (?, ?, ?, ?)',
+                            (media_file, "und", "-1", json.dumps(parsed, ensure_ascii=False))
+                        )
+                        log_filename(f"Inserted {len(parsed)} blocks from external .srt for {media_file}")
+                except Exception as e:
+                    log_error(f"Error reading external .srt for {media_file}: {e}")
+
+
     conn.commit()
+
+def print_all_subtitles_in_database():
+    db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
+    conn = sqlite3.connect(db_path)
+
+    cursor = conn.execute("SELECT filename, language, track, content FROM subtitles ORDER BY filename, track")
+    count = 0
+    for row in cursor:
+        filename, language, track, content_json = row
+        try:
+            blocks = json.loads(content_json)
+            print(f"{filename} | lang={language} | track={track} | blocks={len(blocks)}")
+            count += 1
+        except Exception as e:
+            print(f"Failed to load subtitles for {filename} (track {track}): {e}")
+
+    if count == 0:
+        print("No subtitle entries found.")
+    else:
+        print(f"\nTotal subtitle entries: {count}")
+# print_all_subtitles_in_database()

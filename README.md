@@ -4,12 +4,10 @@
 - [ ] use showinfo when any button returns null
 - [ ] run bulk generation in background, have a stop button, display info
 - [ ] fix audio stopping when adjusting too fast 
-- [ ] add track to sound line so it doesnt have to search for the subtitle file
 - [ ] make it so you can add the langauge code manually for your own subtitles
 - [ ] only add media file info to database when used, and not on startup
 - [ ] make context aware generation update sentence line
 - [ ] only store subtitles in the database so you can overwrite them with files in the source folder
-- [ ] make translation sound line more accurate by using timings on original sentnece instead of timings from translation sentence?
 
 
 low priority
@@ -19,6 +17,7 @@ low priority
 - [ ]  add/subtract 1db for each audio
 - [ ]  generate waveform
 - [ ]  allow square brackets in filenames
+- [ ]  add track to sound line so it doesnt have to search for the subtitle file
 
 ```
 Generate Fields:

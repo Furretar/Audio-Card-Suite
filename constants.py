@@ -9,7 +9,7 @@ from aqt.utils import showInfo
 import html
 
 # logging functions
-DEBUG_FILENAME = False
+DEBUG_FILENAME = True
 DEBUG_COMMAND = True
 DEBUG_ERROR = True
 DEBUG_IMAGE = False

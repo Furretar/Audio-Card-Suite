@@ -444,6 +444,7 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
             else:
                 after_removed = ""
 
+    log_filename(f"new context sentence line: {new_sentence_line}")
     return new_sound_line, new_sentence_line
 
 def generate_and_update_fields(editor, note, should_overwrite):
@@ -524,6 +525,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
             return None, None
 
         new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line = new_result
+        print(f"after new sentence line: {new_sentence_line}")
 
         def update_field(idx, new_val):
             nonlocal updated
@@ -533,7 +535,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
 
         note_type_name = list(config["mapped_fields"].keys())[0]
 
-        if get_field_key_from_label(note_type_name, target_subtitle_line_string, config) and ((not sentence_line) or overwrite):
+        if get_field_key_from_label(note_type_name, target_subtitle_line_string, config) and new_sentence_line:
             update_field(sentence_idx, new_sentence_line)
 
         if get_field_key_from_label(note_type_name, translation_subtitle_line_string, config) and ((not translation_line) or overwrite):
@@ -653,7 +655,9 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     if selected_text:
         new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, selected_text, new_sound_line, subtitle_path)
     else:
+        print(f"calling context_aware_sentence_sound_line_generate")
         new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path)
+        print(f'returned sentence line: {new_sentence_line}')
     if new_sentence_line:
         new_sentence_line = constants.format_text(new_sentence_line)
 
@@ -775,7 +779,6 @@ def get_fields_from_editor(editor):
     for lbl in required_labels:
         # find the field whose mapped label equals lbl
         fld = next((f for f, lab in field_map.items() if lab == lbl), None)
-        log_command(f"looking for '{lbl}' → field: {fld!r}")
         if fld:
             lookup[lbl] = fld
         else:

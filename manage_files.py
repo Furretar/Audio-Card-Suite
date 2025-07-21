@@ -720,6 +720,7 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
     combined_text = "\n\n".join(b[3].strip() for b in blocks if len(b) > 3)
     log_filename(f"generated sound_line: {new_sound_line}\nsentence line: {combined_text}")
 
+    print(f"combnied text: {combined_text}")
     return new_sound_line, combined_text
 
 # todo: make more efficient by only searching files after the current file

@@ -7,6 +7,7 @@ import constants
 import subprocess
 import json
 import unicodedata
+import tempfile
 
 from constants import (
     log_filename,
@@ -51,6 +52,28 @@ def run_ffprobe(file_path):
         return None
     return json.loads(result.stdout)
 
+
+def remove_subtitle_formatting(text: str) -> str:
+    # Remove HTML tags like <font>, <b>, <i>, etc.
+    text = re.sub(r'<[^>]+>', '', text)
+    # Remove ASS override codes {\...}
+    text = re.sub(r'{\\.*?}', '', text)
+    # Remove any remaining special formatting codes inside brackets
+    text = re.sub(r'\[.*?\]', '', text)
+    # Strip leading/trailing whitespace
+    return text.strip()
+
+def check_already_indexed(conn, media_file, track, lang=None):
+    query = "SELECT 1 FROM subtitles WHERE filename=? AND track=?"
+    params = [media_file, str(track)]
+    if lang is not None:
+        query += " AND language=?"
+        params.append(lang)
+    query += " LIMIT 1"
+
+    cursor = conn.execute(query, params)
+    return cursor.fetchone() is not None
+
 def update_database():
     log_filename(f"update database called")
     db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
@@ -58,6 +81,7 @@ def update_database():
 
     conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')
     conn.execute('CREATE TABLE IF NOT EXISTS media_tracks (filename TEXT, track INTEGER, language TEXT, type TEXT, PRIMARY KEY(filename, track, type))')
+
     conn.execute('''
     CREATE TABLE IF NOT EXISTS media_audio_start_times (
         filename TEXT,
@@ -92,10 +116,13 @@ def update_database():
 
     extract_all_subtitle_tracks_and_update_db(conn)
 
+
+    # add user placed subtitles
     current_media = {
         f for f in os.listdir(folder)
         if os.path.splitext(f)[1].lower() in audio_exts + video_exts
     }
+
     media_basenames = {os.path.splitext(f)[0] for f in current_media}
 
     current_subtitles = {
@@ -103,13 +130,17 @@ def update_database():
         if os.path.splitext(f)[1].lower() == ".srt"
     }
 
+    print(f"Current subtitles: {current_subtitles}")
+
     cursor = conn.execute(
         "SELECT DISTINCT filename FROM subtitles WHERE track = '-1' AND language = 'und'"
     )
+
     indexed_subtitle_files = {row[0] for row in cursor}
     indexed_subtitle_basenames = {os.path.splitext(f)[0] for f in indexed_subtitle_files}
 
     for subtitle_file in current_subtitles:
+        print(f"Processing subtitle: {subtitle_file}")
         base_name = os.path.splitext(subtitle_file)[0]
         if base_name in media_basenames and base_name not in indexed_subtitle_basenames:
             subtitle_path = os.path.join(folder, subtitle_file)
@@ -187,41 +218,6 @@ def update_database():
     return conn
 
 
-
-def remove_subtitle_formatting(text: str) -> str:
-    # Remove HTML tags like <font>, <b>, <i>, etc.
-    text = re.sub(r'<[^>]+>', '', text)
-    # Remove ASS override codes {\...}
-    text = re.sub(r'{\\.*?}', '', text)
-    # Remove any remaining special formatting codes inside brackets
-    text = re.sub(r'\[.*?\]', '', text)
-    # Strip leading/trailing whitespace
-    return text.strip()
-
-def normalize_filename(name: str) -> str:
-    name = unicodedata.normalize("NFKD", name)
-    name = name.encode("ascii", "ignore").decode("ascii")
-    name = name.lower()
-    name = name.replace("~", "")
-    name = re.sub(r"\s+", "", name)
-    name = re.sub(r"[^a-z0-9]", "", name)
-    # print(f"normalized filename: {name}")
-    return name
-
-def check_already_indexed(conn, media_file, track, lang=None):
-    norm_media = normalize_filename(media_file)
-    query = "SELECT 1 FROM subtitles WHERE track=?"
-    params = [str(track)]
-    if lang is not None:
-        query += " AND language=?"
-        params.append(lang)
-    query += " LIMIT 1"
-
-    cursor = conn.execute(query, params)
-    for row in cursor:
-        return True
-    return False
-
 def extract_all_subtitle_tracks_and_update_db(conn):
     log_filename("extract_all_subtitle_tracks_and_update_db called")
 
@@ -254,15 +250,15 @@ def extract_all_subtitle_tracks_and_update_db(conn):
     current_media = {f for f in current_files if os.path.splitext(f)[1].lower() in media_exts}
 
     cursor = conn.execute('SELECT DISTINCT filename FROM subtitles')
-    indexed_media_raw = {row[0] for row in cursor}
-    indexed_media = {normalize_filename(f) for f in indexed_media_raw}
+    indexed_media = {row[0] for row in cursor}
 
-    normalized_to_raw = {normalize_filename(f): f for f in current_media}
     media_to_process = sorted(
-        normalized_to_raw[n] for n in normalized_to_raw if n not in indexed_media
+        n for n in current_media if n not in indexed_media
     )
 
-    print(f"media_to_process: {media_to_process}")
+    # print(f"---------------------\ncurrent_media:\n{current_media}\n-----------------------")
+    # print(f"---------------------\nindexed_media:\n{indexed_media}\n-----------------------")
+
 
     for media_file in media_to_process:
         print(f"processing file: {media_file}")
@@ -276,6 +272,11 @@ def extract_all_subtitle_tracks_and_update_db(conn):
 
         if not subtitle_streams:
             log_filename(f"No subtitle streams found in {media_file}")
+            # Insert a placeholder to indicate this file was processed
+            conn.execute(
+                'INSERT INTO subtitles (filename, language, track, content) VALUES (?, ?, ?, ?)',
+                (media_file, "und", "-999", json.dumps([], ensure_ascii=False))
+            )
             continue
 
         log_filename(f"Found {len(subtitle_streams)} subtitle streams in {media_file}")
@@ -337,68 +338,7 @@ def extract_all_subtitle_tracks_and_update_db(conn):
             except Exception as e:
                 log_error(f"Exception during subtitle extraction for track {index} from {media_file}: {e}")
 
-        base_path = os.path.splitext(media_path)[0]
-        srt_path = base_path + '.srt'
-        if os.path.exists(srt_path):
-            log_filename(f"External subtitle file exists: {srt_path}")
-
-            if check_already_indexed(conn, media_file, "-1"):
-                log_filename(f"External .srt already indexed for {media_file}")
-            else:
-                try:
-                    with open(srt_path, encoding="utf-8") as f:
-                        text = f.read().strip()
-                    if not text:
-                        log_error(f"External .srt file is empty for {media_file}")
-                    else:
-                        blocks = text.split('\n\n')
-                        parsed = []
-                        for blk in blocks:
-                            lines = blk.strip().split('\n')
-                            if len(lines) < 3:
-                                continue
-                            idx = lines[0]
-                            m = re.match(r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})', lines[1])
-                            if not m:
-                                continue
-                            start, end = m.groups()
-                            content = ' '.join(lines[2:]).strip()
-                            content = remove_subtitle_formatting(content)
-                            parsed.append([idx, start, end, content])
-
-                        conn.execute(
-                            'INSERT INTO subtitles (filename, language, track, content) VALUES (?, ?, ?, ?)',
-                            (media_file, "und", "-1", json.dumps(parsed, ensure_ascii=False))
-                        )
-                        log_filename(f"Inserted {len(parsed)} blocks from external .srt for {media_file}")
-                except Exception as e:
-                    log_error(f"Error reading external .srt for {media_file}: {e}")
-
-                conn.commit()
-                log_filename(f"Committed changes for {media_file}")
-
     conn.commit()
-
-def print_all_subtitles_in_database():
-    db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
-    conn = sqlite3.connect(db_path)
-
-    cursor = conn.execute("SELECT filename, language, track, content FROM subtitles ORDER BY filename, track")
-    count = 0
-    for row in cursor:
-        filename, language, track, content_json = row
-        try:
-            blocks = json.loads(content_json)
-            print(f"{filename} | lang={language} | track={track} | blocks={len(blocks)}")
-            count += 1
-        except Exception as e:
-            print(f"Failed to load subtitles for {filename} (track {track}): {e}")
-
-    if count == 0:
-        print("No subtitle entries found.")
-    else:
-        print(f"\nTotal subtitle entries: {count}")
-# print_all_subtitles_in_database()
 
 def print_largest_subtitle_entries(limit=10):
     conn = get_database()
@@ -418,3 +358,10 @@ def print_largest_subtitle_entries(limit=10):
         print(f"File: {filename}, Lang: {language}, Track: {track}, Size (chars): {size}")
 
 # print_largest_subtitle_entries()
+
+def print_all_subtitle_filenames():
+    conn = get_database()
+    cursor = conn.execute('SELECT DISTINCT filename FROM subtitles')
+    for row in cursor:
+        print(row[0])
+print_all_subtitle_filenames()

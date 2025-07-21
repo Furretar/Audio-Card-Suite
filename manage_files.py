@@ -349,6 +349,7 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
     # get translation subtitle file and the subtitle blocks that overlap timings with the sound line
     translation_subtitle_path = get_subtitle_file_from_database(full_source_filename, translation_audio_track, translation_language_code, config, subtitle_database)
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
+    log_filename(f"got blocks")
 
     # adds text from each block and formats it, remove curly braces, html formatting, etc.
     translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)

@@ -148,7 +148,6 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         if alt_pressed:
             sound_line = fields["translation_sound_line"]
             sound_idx = fields["translation_sound_idx"]
-            sentence_line = fields["translation_line"]
             sentence_idx = fields["translation_idx"]
             translation_idx = ""
             track = config.get("translation_subtitle_track")
@@ -159,7 +158,6 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         else:
             sound_line = fields["sound_line"]
             sound_idx = fields["sound_idx"]
-            sentence_line = fields["sentence_line"]
             sentence_idx = fields["sentence_idx"]
             translation_idx = fields["translation_idx"]
             track = config.get("target_subtitle_track")
@@ -205,6 +203,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         sentence_data = extract_subtitle_path_data(sentence_subtitle_path)
         sentence_code = sentence_data["code"]
 
+        print(f"timing blocks: {timing_blocks}")
         if timing_code:
             new_timing_sound_line, _ = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(timing_blocks, timing_subtitle_path, sentence_code, timing_code, config)
         else:

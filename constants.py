@@ -4,15 +4,17 @@ import os
 import inspect
 import shutil
 import subprocess
+import sys
 
 from aqt.utils import showInfo
 import html
 
 # logging functions
-DEBUG_FILENAME = False
+DEBUG_FILENAME = True
 DEBUG_COMMAND = True
 DEBUG_ERROR = True
 DEBUG_IMAGE = True
+DEBUG_DATABASE = True
 
 # integers
 ms_amount = 50
@@ -135,6 +137,13 @@ def log_image(message):
         line = frame.lineno
         print(f"{file}:{line} in {func}:\n[image] {message.strip()}\n")
 
+def log_database(message):
+    if DEBUG_DATABASE:
+        frame = inspect.stack()[1]
+        func = frame.function
+        file = os.path.basename(frame.filename)
+        line = frame.lineno
+        print(f"{file}:{line} in {func}:\n[database] {message.strip()}\n")
 
 
 def get_ffmpeg_exe_path():
@@ -242,3 +251,9 @@ def format_subtitle_block(subtitle_block):
 
 def format_timestamp_for_filename(timestamp: str) -> str:
     return timestamp.replace(':', '.').replace(',', '.')
+
+
+def silent_run(*args, **kwargs):
+    if sys.platform.startswith("win"):
+        kwargs.setdefault("creationflags", subprocess.CREATE_NO_WINDOW)
+    return subprocess.run(*args, **kwargs)

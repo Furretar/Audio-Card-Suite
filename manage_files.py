@@ -1,5 +1,4 @@
 import os
-import shutil
 import subprocess
 import json
 import html
@@ -14,6 +13,7 @@ from constants import (
     log_error,
     log_image,
     log_command,
+log_database,
 )
 
 
@@ -223,8 +223,9 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
             basename_no_ext = os.path.splitext(full_source_filename)[0]
             basename_subtitle_file = f"{basename_no_ext}.srt"
             basename_subtitle_path = os.path.join(constants.addon_source_folder, basename_subtitle_file)
-            log_filename(f"basename_subtitle_path: {basename_subtitle_path}")
-            return basename_subtitle_path
+            if os.path.exists(basename_subtitle_path):
+                log_filename(f"basename_subtitle_path: {basename_subtitle_path}")
+                return basename_subtitle_path
 
         # prioritize finding the code if that tab is selected
         log_filename(f"trying match code")
@@ -272,12 +273,6 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
     if path:
         return path
 
-    # extract subtitle files and update database if not found
-    log_error("Subtitle not found; extracting and retrying...")
-    manage_database.update_database()
-    path = find_subtitle()
-    if path:
-        return path
 
     log_error(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
     if config["selected_tab_index"] == 0:
@@ -351,10 +346,8 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
     subtitle_database = manage_database.get_database()
 
     # get translation subtitle file and the subtitle blocks that overlap timings with the sound line
-    print(f"full source filename1: {full_source_filename}")
     translation_subtitle_path = get_subtitle_file_from_database(full_source_filename, translation_audio_track, translation_language_code, config, subtitle_database)
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
-    log_filename(f"got blocks")
 
     # adds text from each block and formats it, remove curly braces, html formatting, etc.
     translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
@@ -420,7 +413,7 @@ def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, 
         subtitle_data = extract_subtitle_path_data(timing_subtitle_path)
         timing_language_code = subtitle_data["code"]
 
-        log_filename(f"building sound line with filename: {filename_base}, and extension: {source_file_extension}")
+        log_filename(f"building sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {audio_language_code}, timing langauge code: {timing_language_code}")
         timestamp, sound_line = build_file_and_sound_line(filename_base, source_file_extension, audio_language_code, timing_language_code, first_start, last_end, start_index, end_index, None, audio_ext)
 
 
@@ -582,74 +575,122 @@ def get_subtitle_code_by_track_number(source_path, track_number):
 
 def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path):
     if not subtitle_path:
-        log_error(f"subtitle path is none")
-        return ""
-
-    if not os.path.exists(subtitle_path):
-        log_error(f"subtitle path {subtitle_path} does not exist")
-
-    with open(subtitle_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-
-    blocks = content.strip().split('\n\n')
-
-    formatted_blocks = []
-    for block in blocks:
-        formatted = constants.format_subtitle_block(block)
-        formatted_blocks.append(formatted)
-
-    log_filename(f"start index: {start_index}, end index: {end_index}, total blocks: {len(formatted_blocks)}")
-    if start_index <= 0:
-        showInfo(f"You've reached the first subtitle line.")
+        log_error("subtitle path is None")
         return []
-    if end_index > len(formatted_blocks):
-        showInfo(f"You've reached the last subtitle line.")
+
+    subtitle_data = extract_subtitle_path_data(subtitle_path)
+    filename = subtitle_data["filename"]
+    track = str(subtitle_data["track"])
+    code = subtitle_data["code"]
+
+    log_filename(f"searching for blocks with filename: {filename}, code: {code}, track: {track}")
+
+    conn = manage_database.get_database()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT content FROM subtitles WHERE filename = ? AND track = ? AND language = ? ORDER BY rowid",
+        (filename, track, code)
+    )
+    row = cursor.fetchone()
+    content_json = row[0]
+
+    try:
+        blocks = json.loads(content_json)
+        print(f"blocks: {blocks}")
+    except Exception as e:
+        log_error(f"Failed to parse subtitle JSON")
+        return []
+
+    total_blocks = len(blocks)
+
+    log_filename(f"start index: {start_index}, end index: {end_index}, total blocks: {total_blocks}")
+
+    if total_blocks == 0:
+        log_error(f"no subtitle blocks returned")
+        return []
+
+    if start_index <= 0:
+        showInfo("You've reached the first subtitle line.")
+        return []
+
+    if end_index > total_blocks:
+        log_error(f"last subtitle line, end index: {end_index}, total blocks: {total_blocks}")
+        showInfo("You've reached the last subtitle line.")
+
     if start_index > end_index:
         showInfo(f"Start index cannot be after end index: {start_index}-{end_index}.")
+        return []
 
-    return formatted_blocks[start_index - 1:end_index]
+    usable_blocks = []
+    for i, raw_block in enumerate(blocks[start_index - 1:end_index]):
+        if isinstance(raw_block, str):
+            parsed = constants.format_subtitle_block(raw_block)
+            if parsed:
+                usable_blocks.append(parsed)
+        elif isinstance(raw_block, list) and len(raw_block) == 4:
+            usable_blocks.append(raw_block)
+
+    print(f"returning blocks: {usable_blocks}")
+    return usable_blocks
+
 
 def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config):
     log_filename(f"getting block from sentence line: {sentence_line}")
 
+    target_language_code = config["target_language_code"]
+    target_audio_track = config["target_audio_track"]
+    target_subtitle_track = config["target_subtitle_track"]
+    translation_subtitle_track = config["translation_subtitle_track"]
+    translation_language_code = config["translation_language_code"]
+    target_timing_code = config["target_timing_code"]
+    translation_timing_code = config["translation_timing_code"]
+    target_timing_track = config["target_timing_track"]
+    translation_timing_track = config["translation_timing_track"]
+
     sentence_line = sentence_line or ""
     normalized_sentence = normalize_text(sentence_line)
+    log_filename(f"Normalized sentence to match: '{normalized_sentence}'")
 
-    manage_database.update_database()
     subtitle_database = manage_database.get_database()
 
     cursor = subtitle_database.execute("SELECT filename, language, track, content FROM subtitles")
     for db_filename, lang, trk, content_json in cursor:
-        log_filename(f"Checking subtitle file: {db_filename}, lang={lang}, track={trk}")
-        try:
-            raw_blocks = json.loads(content_json)
-        except Exception as e:
-            log_error(f"Failed to parse content for {db_filename}: {e}")
-            continue
+        if lang in {target_language_code, translation_language_code, target_timing_code, translation_timing_code} or \
+           trk in {str(target_audio_track), str(target_subtitle_track), str(translation_subtitle_track), str(target_timing_track), str(translation_timing_track)}:
+            log_filename(f"Checking subtitle file: {db_filename}, lang={lang}, track={trk}")
+            try:
+                raw_blocks = json.loads(content_json)
+            except Exception as e:
+                log_error(f"Failed to parse content for {db_filename}: {e}")
+                continue
 
-        usable_blocks = []
-        for raw_block in raw_blocks:
-            if isinstance(raw_block, str):
-                parsed = constants.format_subtitle_block(raw_block)
-                if parsed:
-                    usable_blocks.append(parsed)
-            elif isinstance(raw_block, list) and len(raw_block) == 4:
-                usable_blocks.append(raw_block)
+            usable_blocks = []
+            for i, raw_block in enumerate(raw_blocks):
+                if isinstance(raw_block, str):
+                    parsed = constants.format_subtitle_block(raw_block)
+                    if parsed:
+                        usable_blocks.append(parsed)
+                elif isinstance(raw_block, list) and len(raw_block) == 4:
+                    usable_blocks.append(raw_block)
 
-        normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
+            normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
 
-        max_window = 5
-        for start in range(len(normalized_lines)):
-            joined = ""
-            for end in range(start, min(len(normalized_lines), start + max_window)):
-                joined += normalized_lines[end]
-                if normalized_sentence in joined:
-                    log_filename(
-                        f"Sliding window match in {db_filename}, track={trk}, lang={lang}, blocks {start}–{end}")
-                    db_file_basename = os.path.splitext(db_filename)[0]
-                    subtitle_name = f"{db_file_basename}.srt"
-                    actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
-                    return usable_blocks[end], actual_path
+            max_window = 5
+            for start in range(len(normalized_lines)):
+                joined = ""
+                for end in range(start, min(len(normalized_lines), start + max_window)):
+                    joined += normalized_lines[end]
+
+                    if normalized_sentence in joined:
+                        subtitle_name = f"{db_filename}"
+                        print(f"subtitle name3: {subtitle_name}")
+                        if lang != "und" and str(trk) != "-1":
+                            subtitle_name += f"`track_{trk}`{lang}"
+                        subtitle_name += f".srt"
+
+                        actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
+                        return usable_blocks[end], actual_path
 
     log_command("No subtitle match found across blocks.")
     return None, None
@@ -662,8 +703,10 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
         log_error("Error: subtitle_path is None")
         return None, None
 
-    if not blocks:
+    if (not blocks) or (len(blocks) == 0):
+        log_error(f"no blocks")
         return None, None
+
 
     if not (isinstance(blocks, (list, tuple)) and isinstance(blocks[0], (list, tuple))):
         blocks = [blocks]
@@ -677,8 +720,9 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
     else:
         filename_base, file_extension = os.path.splitext(base)
         file_extension = file_extension.lstrip(".")
+        filename_with_ext = f"{filename_base}.{file_extension}"
 
-    log_filename(f"split filename: {base} from sub path: {subtitle_path}\nextracted file extension: {file_extension}")
+    log_filename(f"split filename: {filename_with_ext} from base: {base}, from sub path: {subtitle_path}\nextracted file extension: {file_extension}")
 
     start_index = blocks[0][0]
     end_index = blocks[-1][0]
@@ -709,14 +753,11 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
         timing_code = None
 
 
-    print(f"trying to get sourch path from base: {base}")
-    source_path = get_source_path_from_full_filename(base)
-    print(f"source_path: {source_path}")
-    source_ext = os.path.splitext(source_path)[1]
-    log_filename(f"building sound line with filename: {filename_base}, and extension: {source_ext}")
+    log_filename(f"trying to get sourch path from filename_with_ext: {filename_with_ext}")
+    log_filename(
+        f"building sound line with filename: {filename_base}, and extension: {file_extension}, audio langauge code: {code}, timing langauge code: {timing_code}")
 
-
-    timestamp, new_sound_line = build_file_and_sound_line(filename_base, source_ext, code, timing_code, start_time, end_time, start_index, end_index, lufs, audio_ext)
+    timestamp, new_sound_line = build_file_and_sound_line(filename_base, file_extension, code, timing_code, start_time, end_time, start_index, end_index, lufs, audio_ext)
     combined_text = "\n\n".join(b[3].strip() for b in blocks if len(b) > 3)
     log_filename(f"generated sound_line: {new_sound_line}\nsentence line: {combined_text}")
 
@@ -1277,7 +1318,9 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
     sound_file_extension = sound_line_data["sound_file_extension"]
     timing_lang_code = sound_line_data["timing_lang_code"]
 
-    log_filename(f"building sound line with filename: {filename_base}, and extension: {source_file_extension}")
+    log_filename(
+        f"building sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {lang_code}, timing langauge code: {timing_lang_code}")
+
     new_filename, _ = build_file_and_sound_line(filename_base, source_file_extension, lang_code, timing_lang_code, new_start_time, new_end_time, start_index, end_index, lufs, sound_file_extension)
 
     new_path = os.path.join(get_collection_dir(), new_filename)

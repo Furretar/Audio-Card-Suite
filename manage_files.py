@@ -785,43 +785,66 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
 # todo: make more efficient by only searching files after the current file
 # finds the location of the current sentence field, then uses the selected text to find the next line that
 # contains the selection and re-generates every field
-def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, config, sound_line_data) -> Tuple[Optional[List[str]], Optional[str]]:
+def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, config, sound_line_data,):
     log_filename(f"extracting sound_line_data from sound_line: {sound_line}")
 
     if not sound_line_data:
         print(f"no sound_line_data extracted from {sound_line}")
         return None, None
 
-    target_index = sound_line_data["start_index"]
-    filename_base = sound_line_data["filename_base"]
-    track = config["target_subtitle_track"]
-    code = config["target_language_code"]
-
+    target_index   = sound_line_data["start_index"]
+    filename_base  = sound_line_data["filename_base"]
+    track          = config["target_subtitle_track"]
+    code           = config["target_language_code"]
     normalized_target_text = normalize_text(selected_text or sentence_line)
     print(f"Searching for: {normalized_target_text}")
 
-    # finds the current subtitle line again, then returns the next result that matches the selected text
-    def search_blocks(after_current=True):
+    def search_blocks(after_current: bool):
         found_current = not after_current
-        for filename in os.listdir(constants.addon_source_folder):
-            base_candidate, ext = os.path.splitext(filename)
-            if ext.lower() not in constants.video_extensions + constants.audio_extensions:
+
+        db   = manage_database.get_database()
+        rows = db.execute(
+            "SELECT filename, language, track, content FROM subtitles"
+        ).fetchall()
+
+        def priority(lang, trk):
+            trk = str(trk)
+            if lang == "und" and trk == "-1":
+                return 0
+            if lang == code:
+                return 1
+            if trk == str(track):
+                return 2
+            return 3
+
+        # sort + drop everything‑else (priority < 3)
+        candidates = [
+            (fn, lang, trk, content_json)
+            for fn, lang, trk, content_json in sorted(rows, key=lambda row: priority(row[1], row[2]))
+            if priority(lang, trk) < 3
+        ]
+
+        for fn, lang, trk, content_json in candidates:
+            base_candidate, _ = os.path.splitext(fn)
+
+            # deserialize
+            try:
+                raw_blocks = json.loads(content_json)
+            except Exception as e:
+                log_error(f"Failed to parse {fn}: {e}")
                 continue
 
-            subtitle_database = manage_database.get_database()
-            print(f"full source filename3: {filename}")
-            subtitle_path = get_subtitle_file_from_database(filename, track, code, config, subtitle_database)
+            # normalize & format
+            usable = []
+            for rb in raw_blocks:
+                if isinstance(rb, list) and len(rb) == 4:
+                    usable.append(rb)
+                elif isinstance(rb, str):
+                    parsed = constants.format_subtitle_block(rb)
+                    if parsed:
+                        usable.append(parsed)
 
-            if not subtitle_path or not os.path.exists(subtitle_path):
-                log_error(f"Subtitle path not found: {subtitle_path}")
-                continue
-
-            with open(subtitle_path, 'r', encoding='utf-8') as f:
-                blocks = f.read().strip().split('\n\n')
-
-            formatted = [constants.format_subtitle_block(b) for b in blocks]
-            usable = [b for b in formatted if b and len(b) == 4]
-
+            # now scan through them
             for b in usable:
                 block_idx = int(b[0])
                 text = b[3]
@@ -829,17 +852,21 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
                     if base_candidate == filename_base and block_idx == target_index:
                         found_current = True
                     continue
+
+                subtitle_filename = f"{fn}`track_{track}`{code}.srt"
+                subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
                 if normalized_target_text in normalize_text(text):
-                    log_filename(f"Match found in block {block_idx} of {base_candidate}")
+                    log_filename(f"Match found in block {block_idx} of {base_candidate}, path is: {subtitle_path}")
                     return b, subtitle_path
+
         return None, None
 
-    # try first pass (after current)
+    # first pass: after the current block
     result, path = search_blocks(after_current=True)
     if result:
         return result, path
 
-    # wraparound pass (from beginning)
+    # wrap‑around: search from the top
     log_command("Wrapping to start of subtitle files...")
     return search_blocks(after_current=False)
 

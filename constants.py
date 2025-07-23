@@ -5,7 +5,7 @@ import inspect
 import shutil
 import subprocess
 import sys
-
+import time
 from aqt.utils import showInfo
 import html
 
@@ -257,3 +257,10 @@ def silent_run(*args, **kwargs):
     if sys.platform.startswith("win"):
         kwargs.setdefault("creationflags", subprocess.CREATE_NO_WINDOW)
     return subprocess.run(*args, **kwargs)
+
+def timed_call(func, *args, **kwargs):
+    start = time.perf_counter()
+    result = func(*args, **kwargs)
+    elapsed = time.perf_counter() - start
+    print(f"{func.__name__} took {elapsed:.4f} seconds")
+    return result

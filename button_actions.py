@@ -347,6 +347,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
 
         autoplay = config["autoplay"]
         if not autoplay:
+            editor.loadNote()
             QTimer.singleShot(0, play_after_reload)
 
     finally:

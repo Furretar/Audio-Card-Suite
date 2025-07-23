@@ -3,6 +3,9 @@ import subprocess
 import json
 import html
 import re
+import threading
+import time
+
 from aqt.utils import showInfo
 from send2trash import send2trash
 import constants
@@ -1374,20 +1377,33 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
         log_error(f"command was not generated")
         return None
 
-    try:
-        log_filename(f"generating new sound file: {altered_data['new_path']}")
-        log_filename(f"Running FFmpeg command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        if result.returncode != 0:
-            log_error(f"FFmpeg failed:\n{result.stderr}")
-            return ""
-        log_command(f"FFmpeg output:\n{result.stdout}")
-    except Exception as e:
-        log_error(f"FFmpeg error: {e}")
-        return ""
+    # run without freezing anki
+    def run_ffmpeg():
+        try:
+            log_filename(f"generating new sound file: {altered_data['new_path']}")
+            log_filename(f"Running FFmpeg command: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            if result.returncode != 0:
+                log_error(f"FFmpeg failed:\n{result.stderr}")
+                return
+            log_command(f"FFmpeg output:\n{result.stdout}")
+        except Exception as e:
+            log_error(f"FFmpeg error: {e}")
+            return
 
-    if os.path.exists(altered_data["new_path"]):
-        return f"[sound:{altered_data['new_filename']}]"
-    else:
-        log_error(f"Expected output file not found: {altered_data['new_path']}")
-        return ""
+        if not os.path.exists(altered_data["new_path"]):
+            log_error(f"Expected output file not found: {altered_data['new_path']}")
+
+    # wait until file is generated to return
+    def run_and_wait():
+        run_ffmpeg()
+        for _ in range(80):
+            if os.path.exists(altered_data["new_path"]):
+                break
+            time.sleep(0.05)
+
+    thread = threading.Thread(target=run_and_wait)
+    thread.start()
+    thread.join(timeout=4)  # won't freeze Anki UI
+    return f"[sound:{altered_data['new_filename']}]"
+

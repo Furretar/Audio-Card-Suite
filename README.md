@@ -3,11 +3,8 @@
 - [ ] allow removing from end start times and batch normalization even without source files
 - [ ] use showinfo when any button returns null
 - [ ] run bulk generation in background, have a stop button, display info
-- [ ] fix audio stopping when adjusting too fast 
 - [ ] make it so you can add the langauge code manually for your own subtitles
-- [ ] only add media file info to database when used, and not on startup
-- [ ] make context aware generation update sentence line
-- [ ] only store subtitles in the database so you can overwrite them with files in the source folder
+- [ ] when searching for a subtitle file with the sentence, search code/trach first, then manually placed subitles, then search all translation/timings tracks and codes
 
 
 low priority

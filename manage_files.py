@@ -672,9 +672,13 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
         if trk == target_audio_track:
             return 2
         return 3
+
     rows.sort(key=lambda row: priority(row[1], row[2]))
 
     for db_filename, lang, trk, content_json in rows:
+        # don't check subtitles with this priority set
+        if priority(lang, trk) == 3:
+            continue
         log_filename(f"Checking subtitle file: {db_filename}, lang={lang}, track={trk}")
         try:
             raw_blocks = json.loads(content_json)

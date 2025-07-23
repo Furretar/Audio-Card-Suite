@@ -121,25 +121,20 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         config = constants.extract_config_data()
         modifiers = QApplication.keyboardModifiers()
         alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
-
         if alt_pressed:
             sound_line = fields["translation_sound_line"]
         else:
             sound_line = fields["sound_line"]
-
         data = manage_files.extract_sound_line_data(sound_line)
 
         if not data:
             log_error(f"no data from sound line: {sound_line}, generating fields")
             generate_and_update_fields(editor, None, True)
-
             if alt_pressed:
                 sound_line = fields["translation_sound_line"]
             else:
                 sound_line = fields["sound_line"]
-
             data = manage_files.extract_sound_line_data(sound_line)
-
         if not data:
             log_error(f"still no data from sound line: {sound_line}, returning")
             return
@@ -179,10 +174,8 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
 
         # get blocks for sound line timings
         if timing_code:
-
             timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database)
         else:
-
             timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
         log_filename(f"timing subtitle path: {timing_subtitle_path}")
         timing_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, timing_subtitle_path)
@@ -191,25 +184,32 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
             return
 
         # get blocks for sentence line
-
         sentence_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
         log_filename(f"sentence_subtitle_path: {sentence_subtitle_path}")
         sentence_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, sentence_subtitle_path)
         if not sentence_blocks:
             log_error(f"no sentence blocks returned")
             return
+        print(f"timing blocks: {timing_blocks}")
+
 
         # generate sound and sentence lines from blocks
         sentence_data = extract_subtitle_path_data(sentence_subtitle_path)
         sentence_code = sentence_data["code"]
 
-        print(f"timing blocks: {timing_blocks}")
+        # get blocks from sound line times instead of indexes when using a timing subtitle file
         if timing_code:
             new_timing_sound_line, _ = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(timing_blocks, timing_subtitle_path, sentence_code, timing_code, config)
+            new_timing_data = manage_files.extract_sound_line_data(new_timing_sound_line)
+            start_time = new_timing_data["start_time"]
+            end_time = new_timing_data["end_time"]
+            overlapping_blocks = manage_files.get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(sentence_subtitle_path, start_time, end_time)
+            _, raw_sentence = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(overlapping_blocks, sentence_subtitle_path, sentence_code, timing_code, config)
+        # otherwise indexes match and can be used normally
         else:
             new_timing_sound_line, _ = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, None, None, config)
+            _, raw_sentence = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, sentence_code, timing_code, config)
 
-        _, raw_sentence = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, sentence_code, timing_code, config)
         new_sentence_line = constants.format_text(raw_sentence)
         log_filename(f"new_sentence_line from blocks: {new_sentence_line}")
 
@@ -583,7 +583,6 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         if not alt_pressed:
             sound_line = ""
 
-
     config = constants.extract_config_data()
     log_filename(f"calling extract sound line data: {sound_line}")
     data = manage_files.extract_sound_line_data(sound_line)
@@ -628,7 +627,11 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
     # generate sound line if doesn't exist
     if not data:
         log_error(f"no data extracted from sound line: {sound_line}")
-        block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
+        if selected_text:
+            block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(selected_text, config)
+        else:
+            block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
+
         log_filename(f"subtitle path from database2: {subtitle_path}")
 
         if not subtitle_path:
@@ -637,13 +640,15 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
             return None
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
     if selected_text:
-        new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, selected_text, new_sound_line, subtitle_path)
-    else:
-        print(f"calling context_aware_sentence_sound_line_generate")
+        log_filename(f"calling context_aware_sentence_sound_line_generate with sentence_line: {sentence_line}, new sentence line: {new_sentence_line}")
         new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path)
-        print(f'returned sentence line: {new_sentence_line}')
+    else:
+        log_filename(f"calling context_aware_sentence_sound_line_generate with sentence_line: {sentence_line}")
+        new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path)
     if new_sentence_line:
         new_sentence_line = constants.format_text(new_sentence_line)
+
+    print(f"new sentence line3: {new_sentence_line}")
 
     # get new timed sound line from first target sound line
     timing_tracks_enabled = config["timing_tracks_enabled"]
@@ -656,13 +661,24 @@ def get_generate_fields_sound_sentence_image_translation(sound_line, sentence_li
         new_timed_sound_line = manage_files.get_new_timing_sound_line_from_target_sound_line(new_sound_line, config, subtitle_file_code, False)
     else:
         new_timed_sound_line = new_sound_line
+    data = manage_files.extract_sound_line_data(new_timed_sound_line)
+
+    print(f"new sentence line: {new_sentence_line}")
+    # if using a timing track, generate sentence line from sound line so it matches
+    timing_code = data["timing_lang_code"]
+    if timing_tracks_enabled and timing_code:
+        print(f"entered here, code: {code}, timing code: {timing_code}")
+        start_time = data["start_time"]
+        end_time = data["end_time"]
+        overlapping_blocks = manage_files.get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, start_time, end_time)
+        _, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(overlapping_blocks, subtitle_path, None, timing_code,config)
+    print(f"new sentence line2: {new_sentence_line}")
 
     # pad target sound line if applicable
     pad_target_timings = (
             pad_start_target != 0 or
             pad_end_target != 0)
     if pad_target_timings:
-        data = extract_sound_line_data(new_timed_sound_line)
         altered_data = get_altered_sound_data(new_timed_sound_line, pad_start_target, pad_end_target, config, data)
         if not altered_data:
             log_error(f"padded sound line is empty")
@@ -914,7 +930,7 @@ def on_note_loaded(editor, override=False):
             if match:
                 filename = match.group(1)
                 log_command(f"Playing sound from field {sound_idx}: {filename}")
-                QTimer.singleShot(0, lambda fn=filename: play(fn))
+                QTimer.singleShot(50, lambda fn=filename: play(fn))
 
 
 # bulk generation

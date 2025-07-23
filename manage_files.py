@@ -792,10 +792,10 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
         print(f"no sound_line_data extracted from {sound_line}")
         return None, None
 
-    target_index   = sound_line_data["start_index"]
-    filename_base  = sound_line_data["filename_base"]
-    track          = config["target_subtitle_track"]
-    code           = config["target_language_code"]
+    target_index = sound_line_data["start_index"]
+    filename_base = sound_line_data["filename_base"]
+    track = config["target_subtitle_track"]
+    code = config["target_language_code"]
     normalized_target_text = normalize_text(selected_text or sentence_line)
     print(f"Searching for: {normalized_target_text}")
 
@@ -817,7 +817,7 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
                 return 2
             return 3
 
-        # sort + drop everything‑else (priority < 3)
+        # only search files with target code or track
         candidates = [
             (fn, lang, trk, content_json)
             for fn, lang, trk, content_json in sorted(rows, key=lambda row: priority(row[1], row[2]))
@@ -825,16 +825,17 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
         ]
 
         for fn, lang, trk, content_json in candidates:
+            log_filename(f"checking for next result: {fn}, {lang}, {trk}")
             base_candidate, _ = os.path.splitext(fn)
 
-            # deserialize
+            # convert to blocks
             try:
                 raw_blocks = json.loads(content_json)
             except Exception as e:
                 log_error(f"Failed to parse {fn}: {e}")
                 continue
 
-            # normalize & format
+            # normalize and format
             usable = []
             for rb in raw_blocks:
                 if isinstance(rb, list) and len(rb) == 4:
@@ -844,7 +845,7 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
                     if parsed:
                         usable.append(parsed)
 
-            # now scan through them
+            # scan through blocks
             for b in usable:
                 block_idx = int(b[0])
                 text = b[3]

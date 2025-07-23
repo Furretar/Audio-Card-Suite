@@ -125,7 +125,7 @@ def update_database():
 
     cursor = conn.execute('SELECT filename, language, track FROM subtitles')
     indexed_subs = {f"{r[0]}`track_{r[2]}`{r[1]}.srt" for r in cursor}
-    print(f"first indexed_subs: {indexed_subs}")
+    # log_database(f"current indexed subs: {indexed_subs}")
 
     # Remove subtitles with no media file or missing subtitle file
     for f in sorted(indexed_subs):
@@ -159,16 +159,13 @@ def update_database():
 
 
     indexed_subtitle_files = {row[0] for row in cursor}
-    print(f"indexed_subtitle_files: {indexed_subtitle_files}")
     indexed_subtitle_basenames = {os.path.splitext(f)[0] for f in indexed_subtitle_files}
 
-    log_database(f"current subtitles: {subtitles_in_folder}")
+    log_database(f"current subtitles in folder: {subtitles_in_folder}")
     for subtitle_file in subtitles_in_folder:
-        log_database(f"Processing subtitle: {subtitle_file}")
         base_name = os.path.splitext(subtitle_file)[0]
-        print(f"base_name: {base_name} in media_basenames: {media_basenames}, indexed_subtitle_files: {indexed_subtitle_basenames}")
         if base_name in media_basenames and base_name not in indexed_subtitle_basenames:
-            print(f"got here")
+            log_database(f"adding subtitle to database: {base_name}")
             subtitle_path = os.path.join(folder, subtitle_file)
             for media_file in (m for m in current_media if os.path.splitext(m)[0] == base_name):
                 # No need to check DB again here; just process
@@ -209,11 +206,8 @@ def update_database():
     extract_all_subtitle_tracks_and_update_db(conn)
 
     # remove missing media
-    log_database(f"removing missing media")
     cursor = conn.execute('SELECT DISTINCT filename FROM media_tracks')
     indexed_media = {r[0] for r in cursor}
-
-    log_database(f"indexed media")
 
     for mf in sorted(indexed_media - current_media):
         conn.execute('DELETE FROM media_tracks WHERE filename=?', (mf,))
@@ -246,16 +240,12 @@ def update_database():
     #     for r in conn.execute('SELECT track,language,type FROM media_tracks WHERE filename=? ORDER BY type,track',(mf,)):
     #         log_database(f"  Track {r[0]} | {r[2]} | {r[1]}")
 
-    log_database(f"committing changes")
     conn.commit()
-    log_database(f"running vacuum")
     conn.execute("VACUUM;")
-    log_database(f"done")
     return conn
 
 
 def extract_all_subtitle_tracks_and_update_db(conn):
-    log_database("extract_all_subtitle_tracks_and_update_db called")
     folder = os.path.join(constants.addon_dir, constants.addon_source_folder)
     audio_exts = constants.audio_extensions
     video_exts = constants.video_extensions
@@ -361,7 +351,13 @@ def extract_all_subtitle_tracks_and_update_db(conn):
         info = run_ffprobe(path)
         if not info:
             continue
-        streams = [s for s in info.get("streams", []) if s.get("codec_type") == "subtitle"]
+        # only add text based subtitles, no pgs or sup
+        streams = [
+            s for s in info.get("streams", [])
+            if s.get("codec_type") == "subtitle" and s.get("codec_name") in ("subrip", "ass", "srt", "ssa", "mov_text",
+                                                                             "webvtt")
+        ]
+
         if not streams:
             log_database(f"No subtitle streams in {media_file}, skipping")
             continue

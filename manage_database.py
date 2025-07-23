@@ -61,12 +61,11 @@ def remove_subtitle_formatting(text: str) -> str:
     if '\\p' in text or '{\\p' in text:
         return ''
 
-    text = re.sub(r'<[^>]+>', '', text)           # Remove HTML tags
-    text = re.sub(r'{[^{}]*}', '', text)          # Remove ASS override codes, including karaoke styles
-    text = re.sub(r'[\[\(].*?[\]\)]', '', text)   # Remove bracketed/parenthetical notes
+    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r'{[^{}]*}', '', text)
+    text = re.sub(r'[\[\(].*?[\]\)]', '', text)
     text = text.strip()
 
-    # Remove lines that are mostly numbers and spaces with few letters
     if re.fullmatch(r'[a-zA-Z0-9\s]+', text):
         letter_ratio = len(re.findall(r'[a-zA-Z]', text)) / (len(text) + 1e-6)
         if letter_ratio < 0.3:
@@ -81,13 +80,18 @@ def filter_subtitles(subtitles):
     filtered = []
     for start, end, text in subtitles:
         if timing_counts[(start, end)] >= 4:
+            filtered.append((start, end, ''))
             continue
+
         clean_text = remove_subtitle_formatting(text)
         key = (start, end, clean_text)
-        if clean_text and key not in seen:
+        if key in seen:
+            filtered.append((start, end, ''))
+        else:
             seen.add(key)
             filtered.append((start, end, clean_text))
     return filtered
+
 
 
 def check_already_indexed(conn, media_file, track, lang=None):

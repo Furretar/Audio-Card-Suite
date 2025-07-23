@@ -28,12 +28,6 @@ log_database,
 
 
 
-# returns collection directory
-def get_collection_dir():
-    from aqt import mw
-    if not mw or not mw.col:
-        print("Collection is not loaded yet.")
-    return mw.col.media.dir()
 
 # todo: implement 4 character sha hash to disambiguate files with the same name and extension
 # extracts all data in a sound line and returns it as a dict
@@ -75,11 +69,11 @@ def extract_sound_line_data(sound_line):
             meta_parts.append(normalize_tag)
 
         timestamp_filename = "`".join(meta_parts) + f".{sound_file_extension}"
-        audio_collection_path = os.path.join(get_collection_dir(), timestamp_filename)
+        audio_collection_path = os.path.join(constants.get_collection_dir(), timestamp_filename)
         m4b_image_filename = f"{filename_base}{source_file_extension}.jpg"
         image_filename = f"{filename_base}.{sound_file_extension}`{start_time}.jpg"
-        image_collection_path = os.path.join(get_collection_dir(), image_filename)
-        m4b_image_collection_path = os.path.join(get_collection_dir(), m4b_image_filename)
+        image_collection_path = os.path.join(constants.get_collection_dir(), image_filename)
+        m4b_image_collection_path = os.path.join(constants.get_collection_dir(), m4b_image_filename)
 
         log_filename(
             f"extracting sound_line_data from: {sound_line}\n"
@@ -1326,7 +1320,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
 
     new_filename, _ = build_file_and_sound_line(filename_base, source_file_extension, lang_code, timing_lang_code, new_start_time, new_end_time, start_index, end_index, lufs, sound_file_extension)
 
-    new_path = os.path.join(get_collection_dir(), new_filename)
+    new_path = os.path.join(constants.get_collection_dir(), new_filename)
     new_sound_line = f"[sound:{new_filename}]"
     old_path = sound_line_data["collection_path"]
 

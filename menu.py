@@ -978,7 +978,9 @@ def add_custom_controls(editor: Editor) -> None:
 gui_hooks.editor_did_init.append(add_custom_controls)
 
 def on_profile_loaded():
-    gui_hooks.editor_did_load_note.append(button_actions.on_note_loaded)
+    def wrapped(editor):
+        button_actions.on_note_loaded(editor, override=False)
+    gui_hooks.editor_did_load_note.append(wrapped)
 
 def save_config(cfg: dict) -> None:
     path = os.path.join(constants.addon_dir, "config.json")

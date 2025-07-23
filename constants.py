@@ -264,3 +264,10 @@ def timed_call(func, *args, **kwargs):
     elapsed = time.perf_counter() - start
     print(f"{func.__name__} took {elapsed:.4f} seconds")
     return result
+
+# returns collection directory
+def get_collection_dir():
+    from aqt import mw
+    if not mw or not mw.col:
+        print("Collection is not loaded yet.")
+    return mw.col.media.dir()

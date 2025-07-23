@@ -278,80 +278,57 @@ def new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, 
     return new_sound_line, new_sentence_line
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int):
-    # lock function while running
-    if getattr(editor, "_is_generating_fields", False):
-        log_filename("generate_and_update_fields is already running, skipping duplicate call.")
-        return None, None
-    editor._is_generating_fields = True
+    # check for modifier keys
+    config = constants.extract_config_data()
+    modifiers = QApplication.keyboardModifiers()
+    if modifiers & Qt.KeyboardModifier.ShiftModifier:
+        start_delta //= 2
+        end_delta //= 2
+    if modifiers & Qt.KeyboardModifier.ControlModifier:
+        start_delta *= 10
+        end_delta *= 10
 
-    try:
-        # check for modifier keys
-        config = constants.extract_config_data()
-        modifiers = QApplication.keyboardModifiers()
-        if modifiers & Qt.KeyboardModifier.ShiftModifier:
-            start_delta //= 2
-            end_delta //= 2
-        if modifiers & Qt.KeyboardModifier.ControlModifier:
-            start_delta *= 10
-            end_delta *= 10
-
-        fields = get_fields_from_editor(editor)
-        alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
-        if alt_pressed:
-            sound_line = fields["translation_sound_line"]
-            sound_idx = fields["translation_sound_idx"]
-            sentence_line = fields["translation_line"]
-        else:
-            sound_line = fields["sound_line"]
-            sound_idx = fields["sound_idx"]
-            sentence_line = fields["sentence_line"]
+    fields = get_fields_from_editor(editor)
+    alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
+    if alt_pressed:
+        sound_line = fields["translation_sound_line"]
+        sound_idx = fields["translation_sound_idx"]
+        sentence_line = fields["translation_line"]
+    else:
+        sound_line = fields["sound_line"]
+        sound_idx = fields["sound_idx"]
+        sentence_line = fields["sentence_line"]
 
 
-        log_filename(f"calling extract sound line data: {sound_line}")
-        data = manage_files.extract_sound_line_data(sound_line)
-        if not data:
-            log_error(f"no valid sound line detected")
-            generate_and_update_fields(editor, None, True)
+    log_filename(f"calling extract sound line data: {sound_line}")
+    data = manage_files.extract_sound_line_data(sound_line)
+    if not data:
+        log_error(f"no valid sound line detected")
+        generate_and_update_fields(editor, None, True)
+        return
+
+    log_filename(f"getting altered data from1: {sound_line}")
+    altered_data = manage_files.get_altered_sound_data(sound_line, -start_delta, end_delta, config, data)
+    log_filename(f"sending data to alter sound file times: {altered_data}")
+    new_sound_line = manage_files.alter_sound_file_times(altered_data, sound_line, config, alt_pressed)
+
+    # generate a new sound line if first try failed
+    if not new_sound_line:
+        log_error("No new sound tag returned, checking database.")
+        block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
+        new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
+        if not new_sound_line:
+            log_error(f"nothing found from sentence line {sentence_line}, returning")
             return
 
-        log_filename(f"getting altered data from1: {sound_line}")
-        altered_data = manage_files.get_altered_sound_data(sound_line, -start_delta, end_delta, config, data)
-        log_filename(f"sending data to alter sound file times: {altered_data}")
-        new_sound_line = manage_files.alter_sound_file_times(altered_data, sound_line, config, alt_pressed)
+    editor.note.fields[sound_idx] = new_sound_line
+    editor.loadNote()
 
-        # generate a new sound line if first try failed
-        if not new_sound_line:
-            log_error("No new sound tag returned, checking database.")
-            block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
-            new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
-            if not new_sound_line:
-                log_error(f"nothing found from sentence line {sentence_line}, returning")
-                return
+    autoplay = config["autoplay"]
+    if not autoplay:
+        QTimer.singleShot(100, lambda: on_note_loaded(editor, True))
 
-        editor.note.fields[sound_idx] = new_sound_line
 
-        def play_after_reload():
-            if alt_pressed:
-                translation_sound_idx = fields["translation_sound_idx"]
-                play_sound = editor.note.fields[translation_sound_idx]
-            else:
-                play_sound = editor.note.fields[sound_idx]
-            log_filename(f"playing sound: {play_sound}")
-
-            match = re.search(r"\[sound:(.*?)]", play_sound)
-            if match:
-                sound_filename = match.group(1)
-                QTimer.singleShot(0, lambda: play(sound_filename))
-
-        editor.loadNote()
-
-        autoplay = config["autoplay"]
-        if not autoplay:
-            editor.loadNote()
-            QTimer.singleShot(0, play_after_reload)
-
-    finally:
-        editor._is_generating_fields = False
 
 def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path):
     log_filename(f"received subtitle path: {subtitle_path}")
@@ -910,14 +887,14 @@ def generate_fields_button(editor):
         log_command(f"Playing sound filename: {sound_filename}")
         QTimer.singleShot(0, lambda: play(sound_filename))
 
-def on_note_loaded(editor):
+def on_note_loaded(editor, override=False):
     editor.web.eval("window.getSelection().removeAllRanges();")
     av_player.stop_and_clear_queue()
 
     modifiers = QApplication.keyboardModifiers()
     alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
 
-    if getattr(editor, "_auto_play_enabled", False):
+    if getattr(editor, "_auto_play_enabled", False) or override:
         fields = get_fields_from_editor(editor)
         if alt_pressed:
             sound_idx = fields["translation_sound_idx"]

@@ -5,6 +5,7 @@
 - [ ] run bulk generation in background, have a stop button, display info
 - [ ] make it so you can add the langauge code manually for your own subtitles
 - [ ] when searching for a subtitle file with the sentence, search code/trach first, then manually placed subitles, then search all translation/timings tracks and codes
+- [ ] make fields like translation audio optional
 
 
 low priority

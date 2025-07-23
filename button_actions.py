@@ -374,6 +374,9 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
 
         if before_removed:
             before_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - 1, start_index - 1, subtitle_path)
+            if not before_blocks:
+                log_error(f"no blocks extracted from: {subtitle_path}")
+                return None, None
             before_block = before_blocks[0] if before_blocks else None
             before_line = before_block[3]
             before_line_clean = before_line.replace('\n', '').strip()
@@ -402,6 +405,10 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
 
         if after_removed:
             after_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(end_index + 1, end_index + 1, subtitle_path)
+            if not after_blocks:
+                log_error(f"no blocks extracted from: {subtitle_path}")
+                return None, None
+
             after_block = after_blocks[0] if after_blocks else None
             after_line = after_block[3]
             after_line_clean = after_line.replace('\n', '').strip()

@@ -125,6 +125,7 @@ def update_database():
 
     cursor = conn.execute('SELECT filename, language, track FROM subtitles')
     indexed_subs = {f"{r[0]}`track_{r[2]}`{r[1]}.srt" for r in cursor}
+    print(f"first indexed_subs: {indexed_subs}")
 
     # Remove subtitles with no media file or missing subtitle file
     for f in sorted(indexed_subs):
@@ -139,9 +140,6 @@ def update_database():
                          (vid, lang, track))
             log_database(f"Removed subtitle: file={vid}, track={track}, lang={lang}")
 
-    extract_all_subtitle_tracks_and_update_db(conn)
-
-
     # add user placed subtitles
     current_media = {
         f for f in os.listdir(folder)
@@ -150,27 +148,27 @@ def update_database():
 
     media_basenames = {os.path.splitext(f)[0] for f in current_media}
 
-    current_subtitles = {
+    subtitles_in_folder = {
         f for f in os.listdir(folder)
         if os.path.splitext(f)[1].lower() == ".srt"
     }
-
-    log_database(f"Current subtitles: {current_subtitles}")
 
     cursor = conn.execute(
         "SELECT DISTINCT filename FROM subtitles WHERE track = '-1' AND language = 'und'"
     )
 
-    log_database(f"cursor selected")
 
     indexed_subtitle_files = {row[0] for row in cursor}
+    print(f"indexed_subtitle_files: {indexed_subtitle_files}")
     indexed_subtitle_basenames = {os.path.splitext(f)[0] for f in indexed_subtitle_files}
 
-    log_database(f"current subtitles: {current_subtitles}")
-    for subtitle_file in current_subtitles:
+    log_database(f"current subtitles: {subtitles_in_folder}")
+    for subtitle_file in subtitles_in_folder:
         log_database(f"Processing subtitle: {subtitle_file}")
         base_name = os.path.splitext(subtitle_file)[0]
+        print(f"base_name: {base_name} in media_basenames: {media_basenames}, indexed_subtitle_files: {indexed_subtitle_basenames}")
         if base_name in media_basenames and base_name not in indexed_subtitle_basenames:
+            print(f"got here")
             subtitle_path = os.path.join(folder, subtitle_file)
             for media_file in (m for m in current_media if os.path.splitext(m)[0] == base_name):
                 # No need to check DB again here; just process
@@ -181,6 +179,7 @@ def update_database():
                     with open(subtitle_path, "r", encoding="utf-8") as f:
                         text = f.read().strip()
                     blocks = text.split("\n\n")
+                    print(f"blocks: {blocks}")
                     parsed = []
                     for blk in blocks:
                         lines = blk.strip().split("\n")
@@ -206,6 +205,9 @@ def update_database():
                     log_database(f"Failed to add subtitle content from {subtitle_path}: {e}")
 
 
+    # extract subtitles from all source files
+    extract_all_subtitle_tracks_and_update_db(conn)
+
     # remove missing media
     log_database(f"removing missing media")
     cursor = conn.execute('SELECT DISTINCT filename FROM media_tracks')
@@ -219,30 +221,30 @@ def update_database():
         log_database(f"Removed media entries for: {mf}")
 
 
-    # add new media
-    log_database(f"adding new media")
-    for mf in sorted(current_media - indexed_media):
-        path = os.path.join(folder, mf)
-        data = run_ffprobe(path)
-        if not data: continue
-        a_count = 0; s_count = 0
-        for st in data.get('streams', []):
-            ct = st.get('codec_type')
-            lang = st.get('tags', {}).get('language','und').lower()
-            if ct == 'audio':
-                a_count += 1
-                conn.execute('INSERT OR REPLACE INTO media_tracks VALUES(?,?,?,?)',
-                             (mf, a_count, lang, 'audio'))
-                dm = constants.get_audio_start_time_ms_for_track(path, st['index'])
-                conn.execute('INSERT OR REPLACE INTO media_audio_start_times VALUES(?,?,?)',
-                             (mf, a_count, dm))
-            elif ct == 'subtitle':
-                s_count += 1
-                conn.execute('INSERT OR REPLACE INTO media_tracks VALUES(?,?,?,?)',
-                             (mf, s_count, lang, 'subtitle'))
-        log_database(f"Added media file: {mf}")
-        for r in conn.execute('SELECT track,language,type FROM media_tracks WHERE filename=? ORDER BY type,track',(mf,)):
-            log_database(f"  Track {r[0]} | {r[2]} | {r[1]}")
+    # # add new media
+    # log_database(f"adding new media")
+    # for mf in sorted(current_media - indexed_media):
+    #     path = os.path.join(folder, mf)
+    #     data = run_ffprobe(path)
+    #     if not data: continue
+    #     a_count = 0; s_count = 0
+    #     for st in data.get('streams', []):
+    #         ct = st.get('codec_type')
+    #         lang = st.get('tags', {}).get('language','und').lower()
+    #         if ct == 'audio':
+    #             a_count += 1
+    #             conn.execute('INSERT OR REPLACE INTO media_tracks VALUES(?,?,?,?)',
+    #                          (mf, a_count, lang, 'audio'))
+    #             dm = constants.get_audio_start_time_ms_for_track(path, st['index'])
+    #             conn.execute('INSERT OR REPLACE INTO media_audio_start_times VALUES(?,?,?)',
+    #                          (mf, a_count, dm))
+    #         elif ct == 'subtitle':
+    #             s_count += 1
+    #             conn.execute('INSERT OR REPLACE INTO media_tracks VALUES(?,?,?,?)',
+    #                          (mf, s_count, lang, 'subtitle'))
+    #     log_database(f"Added media file: {mf}")
+    #     for r in conn.execute('SELECT track,language,type FROM media_tracks WHERE filename=? ORDER BY type,track',(mf,)):
+    #         log_database(f"  Track {r[0]} | {r[2]} | {r[1]}")
 
     log_database(f"committing changes")
     conn.commit()
@@ -361,10 +363,7 @@ def extract_all_subtitle_tracks_and_update_db(conn):
             continue
         streams = [s for s in info.get("streams", []) if s.get("codec_type") == "subtitle"]
         if not streams:
-            conn.execute(
-                'INSERT INTO subtitles (filename, language, track, content) VALUES (?,?,?,?)',
-                (media_file, "und", "-999", json.dumps([], ensure_ascii=False))
-            )
+            log_database(f"No subtitle streams in {media_file}, skipping")
             continue
         log_database(f"Found {len(streams)} subtitle streams in {media_file}")
         all_texts = extract_all_subs_single(path, streams)
@@ -430,9 +429,24 @@ def print_largest_subtitle_entry_content():
 
 #print_largest_subtitle_entry_content()
 
-def print_all_subtitle_filenames():
+def print_all_subtitle_contents():
     conn = get_database()
-    cursor = conn.execute('SELECT DISTINCT filename FROM subtitles')
-    for row in cursor:
-        log_database(row[0])
-# print_all_subtitle_filenames()
+    cursor = conn.execute('SELECT filename, track, language, content FROM subtitles')
+    for filename, track, language, content in cursor:
+        log_database(f"Subtitle: filename={filename}, track={track}, language={language}")
+        try:
+            log_database(f"Raw content: {content}")
+            parsed = json.loads(content)
+            log_database(f"parsed: {parsed}")
+            for i, line in enumerate(parsed[:20]):  # limit output to first 20 lines per subtitle
+                if len(line) >= 4:
+                    idx, start, end, text = line[:4]
+                    log_database(f"  {idx}: {start} --> {end} | {text}")
+                else:
+                    log_database(f"  Incomplete line {i}: {line}")
+            if len(parsed) > 20:
+                log_database(f"  ... (truncated, total lines: {len(parsed)})")
+        except Exception as e:
+            log_database(f"  [error] Failed to parse content: {e}")
+
+#print_all_subtitle_contents()

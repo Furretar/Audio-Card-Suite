@@ -185,7 +185,6 @@ def extract_subtitle_path_data(subtitle_path):
 def get_subtitle_file_from_database(full_source_filename, track, code, config, database):
     def find_subtitle():
         selected_tab_index = config["selected_tab_index"]
-        translation_language_code = config["translation_language_code"]
         log_filename(f"received filename: {full_source_filename}, track/code: {track}/{code}")
         sub_source_path = get_source_path_from_full_filename(full_source_filename)
 
@@ -214,15 +213,11 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
         # try matching basename (user placed file)
         log_filename(f"trying to match basename with filename: {full_source_filename}")
         cursor = database.cursor()
-        query = "SELECT 1 FROM subtitles WHERE filename = ? LIMIT 1"
+        query = "SELECT 1 FROM subtitles WHERE filename = ? AND track = '-1' AND language = 'und' LIMIT 1"
         cursor.execute(query, (full_source_filename,))
         if cursor.fetchone():
-            basename_no_ext = os.path.splitext(full_source_filename)[0]
-            basename_subtitle_file = f"{basename_no_ext}.srt"
-            basename_subtitle_path = os.path.join(constants.addon_source_folder, basename_subtitle_file)
-            if os.path.exists(basename_subtitle_path):
-                log_filename(f"basename_subtitle_path: {basename_subtitle_path}")
-                return basename_subtitle_path
+            log_filename(f"Found subtitle in DB for {full_source_filename} with track=-1 and language=und")
+            return f"{full_source_filename}.srt"
 
         # prioritize finding the code if that tab is selected
         log_filename(f"trying match code")
@@ -473,6 +468,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
         log_error(f"No subtitle content found in DB for filename={base_no_ext} track={track} language={code}")
         return []
 
+
     content_json = row[0]
 
     try:
@@ -576,20 +572,35 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
         return []
 
     subtitle_data = extract_subtitle_path_data(subtitle_path)
+    print(f"subtitle path get: {subtitle_path}")
     filename = subtitle_data["filename"]
     track = str(subtitle_data["track"])
     code = subtitle_data["code"]
 
-    log_filename(f"searching for blocks with filename: {filename}, code: {code}, track: {track}")
 
     conn = manage_database.get_database()
     cursor = conn.cursor()
+
+    if track is None or track == "None":
+        track = "-1"
+    if not code:
+        code = "und"
+
+    log_filename(f"searching for blocks with filename: {filename}, code: {code}, track: {track}")
+
 
     cursor.execute(
         "SELECT content FROM subtitles WHERE filename = ? AND track = ? AND language = ? ORDER BY rowid",
         (filename, track, code)
     )
     row = cursor.fetchone()
+
+
+
+    if row is None:
+        log_error(f"No subtitle content found in DB for filename={filename} track={track} language={code}")
+        return []
+
     content_json = row[0]
 
     try:
@@ -628,7 +639,6 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
         elif isinstance(raw_block, list) and len(raw_block) == 4:
             usable_blocks.append(raw_block)
 
-    print(f"returning blocks: {usable_blocks}")
     return usable_blocks
 
 
@@ -653,11 +663,14 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
 
     cursor = subtitle_database.execute("SELECT filename, language, track, content FROM subtitles")
     for db_filename, lang, trk, content_json in cursor:
-        if lang in {target_language_code, translation_language_code, target_timing_code, translation_timing_code} or \
-           trk in {str(target_audio_track), str(target_subtitle_track), str(translation_subtitle_track), str(target_timing_track), str(translation_timing_track)}:
+        if (lang in {target_language_code, translation_language_code, target_timing_code, translation_timing_code,
+                     "und"}) or \
+                (trk in {str(target_audio_track), str(target_subtitle_track), str(translation_subtitle_track),
+                         str(target_timing_track), str(translation_timing_track), "-1"}):
             log_filename(f"Checking subtitle file: {db_filename}, lang={lang}, track={trk}")
             try:
                 raw_blocks = json.loads(content_json)
+                print(f"raw_blocks: {raw_blocks}")
             except Exception as e:
                 log_error(f"Failed to parse content for {db_filename}: {e}")
                 continue

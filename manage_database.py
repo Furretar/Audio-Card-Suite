@@ -75,18 +75,20 @@ def remove_subtitle_formatting(text: str) -> str:
     return text
 
 def filter_subtitles(subtitles):
-    # subtitles: list of dicts or tuples with (start, end, text)
-    # Count how many times each timing appears
     timing_counts = Counter((sub[0], sub[1]) for sub in subtitles)
 
+    seen = set()
     filtered = []
     for start, end, text in subtitles:
         if timing_counts[(start, end)] >= 4:
             continue
         clean_text = remove_subtitle_formatting(text)
-        if clean_text:
+        key = (start, end, clean_text)
+        if clean_text and key not in seen:
+            seen.add(key)
             filtered.append((start, end, clean_text))
     return filtered
+
 
 def check_already_indexed(conn, media_file, track, lang=None):
     query = "SELECT 1 FROM subtitles WHERE filename=? AND track=?"
@@ -176,7 +178,6 @@ def update_database():
                     with open(subtitle_path, "r", encoding="utf-8") as f:
                         text = f.read().strip()
                     blocks = text.split("\n\n")
-                    print(f"blocks: {blocks}")
                     parsed = []
                     for blk in blocks:
                         lines = blk.strip().split("\n")
@@ -214,31 +215,6 @@ def update_database():
         conn.execute('DELETE FROM media_audio_start_times WHERE filename=?', (mf,))
         log_database(f"Removed media entries for: {mf}")
 
-
-    # # add new media
-    # log_database(f"adding new media")
-    # for mf in sorted(current_media - indexed_media):
-    #     path = os.path.join(folder, mf)
-    #     data = run_ffprobe(path)
-    #     if not data: continue
-    #     a_count = 0; s_count = 0
-    #     for st in data.get('streams', []):
-    #         ct = st.get('codec_type')
-    #         lang = st.get('tags', {}).get('language','und').lower()
-    #         if ct == 'audio':
-    #             a_count += 1
-    #             conn.execute('INSERT OR REPLACE INTO media_tracks VALUES(?,?,?,?)',
-    #                          (mf, a_count, lang, 'audio'))
-    #             dm = constants.get_audio_start_time_ms_for_track(path, st['index'])
-    #             conn.execute('INSERT OR REPLACE INTO media_audio_start_times VALUES(?,?,?)',
-    #                          (mf, a_count, dm))
-    #         elif ct == 'subtitle':
-    #             s_count += 1
-    #             conn.execute('INSERT OR REPLACE INTO media_tracks VALUES(?,?,?,?)',
-    #                          (mf, s_count, lang, 'subtitle'))
-    #     log_database(f"Added media file: {mf}")
-    #     for r in conn.execute('SELECT track,language,type FROM media_tracks WHERE filename=? ORDER BY type,track',(mf,)):
-    #         log_database(f"  Track {r[0]} | {r[2]} | {r[1]}")
 
     conn.commit()
     conn.execute("VACUUM;")
@@ -396,8 +372,39 @@ def extract_all_subtitle_tracks_and_update_db(conn):
                 [(media_file, lang, str(track), json.dumps(parsed, ensure_ascii=False))]
             )
             log_database(f"Inserted {len(parsed)} blocks for {media_file}, track={track}, lang={lang}")
+            conn.commit()
     conn.commit()
     return conn
+
+def print_top_20_largest_subtitle_entries():
+    conn = get_database()
+    cursor = conn.cursor()
+
+    query = """
+    SELECT filename, language, track, LENGTH(content) as size
+    FROM subtitles
+    ORDER BY size DESC
+    LIMIT 20
+    """
+    rows = cursor.execute(query).fetchall()
+
+    if rows:
+        folder = os.path.join(constants.addon_dir, constants.addon_source_folder)
+        for i, row in enumerate(rows, 1):
+            filename, language, track, size = row
+            file_path = os.path.join(folder, filename)
+            try:
+                file_size_bytes = os.path.getsize(file_path)
+                file_size_kb = round(file_size_bytes / 1024, 1)
+            except FileNotFoundError:
+                file_size_kb = -1
+            log_database(f"{i}. {filename} | Lang: {language} | Track: {track} | Subtitle: {size} chars | File: {file_size_kb} KB")
+    else:
+        log_database("No entries found.")
+
+#print_top_20_largest_subtitle_entries()
+
+
 
 def print_largest_subtitle_entry_content():
     conn = get_database()
@@ -423,7 +430,8 @@ def print_largest_subtitle_entry_content():
     else:
         log_database("No entries found.")
 
-#print_largest_subtitle_entry_content()
+# print_largest_subtitle_entry_content()
+
 
 def print_all_subtitle_contents():
     conn = get_database()

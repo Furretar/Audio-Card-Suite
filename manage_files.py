@@ -605,7 +605,6 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
 
     try:
         blocks = json.loads(content_json)
-        print(f"blocks: {blocks}")
     except Exception as e:
         log_error(f"Failed to parse subtitle JSON")
         return []
@@ -646,61 +645,66 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
     log_filename(f"getting block from sentence line: {sentence_line}")
 
     target_language_code = config["target_language_code"]
-    target_audio_track = config["target_audio_track"]
-    target_subtitle_track = config["target_subtitle_track"]
-    translation_subtitle_track = config["translation_subtitle_track"]
+    target_audio_track = str(config["target_audio_track"])
+    target_subtitle_track = str(config["target_subtitle_track"])
+    translation_subtitle_track = str(config["translation_subtitle_track"])
     translation_language_code = config["translation_language_code"]
     target_timing_code = config["target_timing_code"]
     translation_timing_code = config["translation_timing_code"]
-    target_timing_track = config["target_timing_track"]
-    translation_timing_track = config["translation_timing_track"]
+    target_timing_track = str(config["target_timing_track"])
+    translation_timing_track = str(config["translation_timing_track"])
 
     sentence_line = sentence_line or ""
     normalized_sentence = normalize_text(sentence_line)
     log_filename(f"Normalized sentence to match: '{normalized_sentence}'")
 
     subtitle_database = manage_database.get_database()
-
     cursor = subtitle_database.execute("SELECT filename, language, track, content FROM subtitles")
-    for db_filename, lang, trk, content_json in cursor:
-        if (lang in {target_language_code, translation_language_code, target_timing_code, translation_timing_code,
-                     "und"}) or \
-                (trk in {str(target_audio_track), str(target_subtitle_track), str(translation_subtitle_track),
-                         str(target_timing_track), str(translation_timing_track), "-1"}):
-            log_filename(f"Checking subtitle file: {db_filename}, lang={lang}, track={trk}")
-            try:
-                raw_blocks = json.loads(content_json)
-                print(f"raw_blocks: {raw_blocks}")
-            except Exception as e:
-                log_error(f"Failed to parse content for {db_filename}: {e}")
-                continue
+    rows = cursor.fetchall()
 
-            usable_blocks = []
-            for i, raw_block in enumerate(raw_blocks):
-                if isinstance(raw_block, str):
-                    parsed = constants.format_subtitle_block(raw_block)
-                    if parsed:
-                        usable_blocks.append(parsed)
-                elif isinstance(raw_block, list) and len(raw_block) == 4:
-                    usable_blocks.append(raw_block)
+    # search subs placed by user first, then target code, target track, then everything else
+    def priority(lang, trk):
+        trk = str(trk)
+        if lang == "und" and trk == "-1":
+            return 0
+        if lang == target_language_code:
+            return 1
+        if trk == target_audio_track:
+            return 2
+        return 3
+    rows.sort(key=lambda row: priority(row[1], row[2]))
 
-            normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
+    for db_filename, lang, trk, content_json in rows:
+        log_filename(f"Checking subtitle file: {db_filename}, lang={lang}, track={trk}")
+        try:
+            raw_blocks = json.loads(content_json)
+        except Exception as e:
+            log_error(f"Failed to parse content for {db_filename}: {e}")
+            continue
 
-            max_window = 5
-            for start in range(len(normalized_lines)):
-                joined = ""
-                for end in range(start, min(len(normalized_lines), start + max_window)):
-                    joined += normalized_lines[end]
+        usable_blocks = []
+        for raw_block in raw_blocks:
+            if isinstance(raw_block, str):
+                parsed = constants.format_subtitle_block(raw_block)
+                if parsed:
+                    usable_blocks.append(parsed)
+            elif isinstance(raw_block, list) and len(raw_block) == 4:
+                usable_blocks.append(raw_block)
 
-                    if normalized_sentence in joined:
-                        subtitle_name = f"{db_filename}"
-                        print(f"subtitle name3: {subtitle_name}")
-                        if lang != "und" and str(trk) != "-1":
-                            subtitle_name += f"`track_{trk}`{lang}"
-                        subtitle_name += f".srt"
+        normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
 
-                        actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
-                        return usable_blocks[end], actual_path
+        max_window = 5
+        for start in range(len(normalized_lines)):
+            joined = ""
+            for end in range(start, min(len(normalized_lines), start + max_window)):
+                joined += normalized_lines[end]
+                if normalized_sentence in joined:
+                    subtitle_name = f"{db_filename}"
+                    if lang != "und" or str(trk) != "-1":
+                        subtitle_name += f"`track_{trk}`{lang}"
+                    subtitle_name += ".srt"
+                    actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
+                    return usable_blocks[end], actual_path
 
     log_command("No subtitle match found across blocks.")
     return None, None

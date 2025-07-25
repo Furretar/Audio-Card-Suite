@@ -11,7 +11,7 @@ import html
 
 # logging functions
 DEBUG_FILENAME = True
-DEBUG_COMMAND = True
+DEBUG_COMMAND = False
 DEBUG_ERROR = True
 DEBUG_IMAGE = True
 DEBUG_DATABASE = True
@@ -254,7 +254,7 @@ def format_timestamp_for_filename(timestamp: str) -> str:
 
 
 def silent_run(*args, **kwargs):
-    print("silent_run called with:", args[0])
+    log_command(f"silent_run called with: {args[0]}")
     if sys.platform.startswith("win"):
         kwargs.setdefault("creationflags", subprocess.CREATE_NO_WINDOW)
     return subprocess.run(*args, **kwargs)

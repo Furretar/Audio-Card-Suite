@@ -263,21 +263,6 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     finally:
         editor._is_generating_fields = False
 
-def new_sound_sentence_line_from_sound_line_path_and_relative_index(sound_line, subtitle_path, relative_start, relative_end):
-    config = constants.extract_config_data()
-    log_filename(f"calling extract sound line data: {sound_line}")
-    data = manage_files.extract_sound_line_data(sound_line)
-    if not data:
-        return "", ""
-
-    start_index = data["start_index"]
-    end_index = data["end_index"]
-
-    blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - relative_start, end_index + relative_end, subtitle_path)
-    log_filename(f"blocks: {blocks}")
-    new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, None, None, config)
-    return new_sound_line, new_sentence_line
-
 def adjust_sound_tag(editor, start_delta: int, end_delta: int):
     # check for modifier keys
     config = constants.extract_config_data()
@@ -331,7 +316,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
 
 
 
-def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path):
+def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path, config):
     log_filename(f"received subtitle path: {subtitle_path}")
     if sentence_line == new_sentence_line:
         log_error(f"sentence line and new sentence line are the same: {sentence_line}")
@@ -370,9 +355,10 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
         if end_index is None:
             break
 
+        lang_code = data["lang_code"]
+        timing_lang_code = data["timing_lang_code"]
 
-
-
+        # get the previous block if there's still text left over before the current sentence line
         if before_removed:
             before_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - 1, start_index - 1, subtitle_path)
             if not before_blocks:
@@ -383,18 +369,16 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
             before_line_clean = before_line.replace('\n', '').strip()
 
             # check if previous line is in leftover line, or if leftover line is in previous line, and add previous line if it is
-            if before_line_clean in before_removed:
-                before_removed = before_removed.replace(before_line_clean, "").strip()
-                new_sound_line, new_sentence_line = new_sound_sentence_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, 1, 0)
-            elif before_line in before_removed:
-                before_removed = before_removed.replace(before_line, "").strip()
-                new_sound_line, new_sentence_line = new_sound_sentence_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, 1, 0)
-            elif before_removed in before_line:
-                before_removed = ""
-                new_sound_line, new_sentence_line = new_sound_sentence_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, 1, 0)
-            elif before_removed in before_line_clean:
-                before_removed = ""
-                new_sound_line, new_sentence_line = new_sound_sentence_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, 1, 0)
+            if (
+                before_line_clean in before_removed
+                or before_line in before_removed
+                or before_removed in before_line
+                or before_removed in before_line_clean
+            ):
+                before_removed = before_removed.replace(before_line_clean, "", 1).replace(before_line, "", 1).strip()
+                sentence_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - 1, end_index, subtitle_path)
+                new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, subtitle_path, lang_code, timing_lang_code, config)
+
             else:
                 before_removed = ""
 
@@ -402,6 +386,7 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
         data = manage_files.extract_sound_line_data(new_sound_line)
         if not data:
             break
+        start_index = data.get("start_index")
         end_index = data.get("end_index")
 
         if after_removed:
@@ -414,18 +399,15 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
             after_line = after_block[3]
             after_line_clean = after_line.replace('\n', '').strip()
 
-            if after_line_clean in after_removed:
-                after_removed = after_removed.replace(after_line_clean, "").strip()
-                new_sound_line, new_sentence_line = new_sound_sentence_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, 0, 1)
-            elif after_line in after_removed:
-                after_removed = after_removed.replace(after_line, "").strip()
-                new_sound_line, new_sentence_line = new_sound_sentence_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, 0, 1)
-            elif after_removed in after_line:
-                after_removed = ""
-                new_sound_line, new_sentence_line = new_sound_sentence_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, 0, 1)
-            elif after_removed in after_line_clean:
-                after_removed = ""
-                new_sound_line, new_sentence_line = new_sound_sentence_line_from_sound_line_path_and_relative_index(new_sound_line, subtitle_path, 0, 1)
+            if (
+                after_line_clean in after_removed
+                or after_line in after_removed
+                or after_removed in after_line
+                or after_removed in after_line_clean
+            ):
+                after_removed = after_removed.replace(after_line_clean, "", 1).replace(after_line, "", 1).strip()
+                sentence_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index, end_index + 1, subtitle_path)
+                new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, subtitle_path, lang_code, timing_lang_code, config)
             else:
                 after_removed = ""
 
@@ -722,10 +704,10 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
     if selected_text:
         log_filename(f"calling context_aware_sentence_sound_line_generate with sentence_line: {sentence_line}, new sentence line: {new_sentence_line}")
-        new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path)
+        new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path, config)
     else:
         log_filename(f"calling context_aware_sentence_sound_line_generate with sentence_line: {sentence_line}")
-        new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path)
+        new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path, config)
     if new_sentence_line:
         new_sentence_line = constants.format_text(new_sentence_line)
 
@@ -1047,4 +1029,3 @@ def bulk_generate(deck, note_type):
             generate_and_update_fields(None, note, False)
     finally:
         aqt.utils.showInfo = original_showInfo
-

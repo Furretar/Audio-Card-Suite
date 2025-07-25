@@ -338,7 +338,6 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
     else:
         before_removed = ""
         after_removed = leftover_sentence.strip()
-
     new_sound_line = sound_line
     while before_removed or after_removed:
         if not subtitle_path:
@@ -354,7 +353,6 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
         end_index = data.get("end_index")
         if end_index is None:
             break
-
         lang_code = data["lang_code"]
         timing_lang_code = data["timing_lang_code"]
 
@@ -367,8 +365,7 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
             before_block = before_blocks[0] if before_blocks else None
             before_line = before_block[3]
             before_line_clean = before_line.replace('\n', '').strip()
-
-            # check if previous line is in leftover line, or if leftover line is in previous line, and add previous line if it is
+            # and add the previous line if the previous line is in leftover line, or if leftover line is in previous line
             if (
                 before_line_clean in before_removed
                 or before_line in before_removed
@@ -381,7 +378,6 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
 
             else:
                 before_removed = ""
-
         log_filename(f"calling extract sound line data: {new_sound_line}")
         data = manage_files.extract_sound_line_data(new_sound_line)
         if not data:
@@ -389,16 +385,17 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
         start_index = data.get("start_index")
         end_index = data.get("end_index")
 
+
+        # get the next block if there's still text left over after the current sentence line
         if after_removed:
             after_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(end_index + 1, end_index + 1, subtitle_path)
             if not after_blocks:
                 log_error(f"no blocks extracted from: {subtitle_path}")
                 return None, None
-
             after_block = after_blocks[0] if after_blocks else None
             after_line = after_block[3]
             after_line_clean = after_line.replace('\n', '').strip()
-
+            # and add the next line if the next line is in leftover line, or if leftover line is in next line
             if (
                 after_line_clean in after_removed
                 or after_line in after_removed
@@ -415,7 +412,6 @@ def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,
     return new_sound_line, new_sentence_line
 
 def should_generate_fields(fields, note_type_name, data, config):
-    sentence_line = fields["sentence_line"]
     sound_line = fields["sound_line"]
     image_line = fields["image_line"]
     translation_line = fields["translation_line"]
@@ -476,7 +472,7 @@ def should_generate_fields(fields, note_type_name, data, config):
 
     return should_generate
 
-
+# uses current fields to generate all missing fields
 def generate_and_update_fields(editor, note, should_overwrite):
     # lock function while running
     if getattr(editor, "_is_generating_fields", False):
@@ -494,12 +490,9 @@ def generate_and_update_fields(editor, note, should_overwrite):
             image_idx = get_idx(f"{image_string}", note_type_name, config, fields)
             translation_idx = get_idx(f"{translation_subtitle_line_string}", note_type_name, config, fields)
             translation_sound_idx = get_idx(f"{translation_audio_string}", note_type_name, config, fields)
-            sentence_line = note.fields[sentence_idx] if 0 <= sentence_idx < len(note.fields) else ""
             sound_line = note.fields[sound_idx] if 0 <= sound_idx < len(note.fields) else ""
             image_line = note.fields[image_idx] if 0 <= image_idx < len(note.fields) else ""
             translation_line = note.fields[translation_idx] if 0 <= translation_idx < len(note.fields) else ""
-            translation_sound_line = note.fields[translation_sound_idx] if 0 <= translation_sound_idx < len(note.fields) else ""
-            selected_text = ""
             current_note = note
         else:
             fields = get_fields_from_editor(editor)
@@ -511,12 +504,9 @@ def generate_and_update_fields(editor, note, should_overwrite):
             image_idx = fields["image_idx"]
             translation_idx = fields["translation_idx"]
             translation_sound_idx = fields["translation_sound_idx"]
-            sentence_line = fields["sentence_line"]
             sound_line = fields["sound_line"]
             image_line = fields["image_line"]
             translation_line = fields["translation_line"]
-            translation_sound_line = fields["translation_sound_line"]
-            selected_text = fields["selected_text"]
             current_note = editor.note
             note_type_name = current_note.model()["name"]
 
@@ -527,7 +517,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
         data = manage_files.extract_sound_line_data(sound_line)
         should_generate = should_generate_fields(fields, note_type_name, data, config)
 
-        # don't generate any fields if they are full
         fields_status = {
             "sound_line": not should_generate["sound_line"],
             "sentence_line": not should_generate["image_line"],
@@ -536,6 +525,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
             "translation_sound_line":not should_generate["translation_sound_line"],
         }
 
+        # don't generate any fields if they are full
         updated = False
         if all(fields_status.values()) and not overwrite:
             log_filename("All fields are filled, returning.")
@@ -546,10 +536,10 @@ def generate_and_update_fields(editor, note, should_overwrite):
             if not is_present:
                 log_filename(f"Missing: {name}")
 
+        # get all the new fields
         new_result = get_generate_fields_sound_sentence_image_translation(
             note_type_name, fields, overwrite, alt_pressed, data
         )
-
         log_filename(f"new result: {new_result}")
 
         if not new_result:
@@ -571,6 +561,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
 
         note_type_name = current_note.model()["name"]
 
+        # only update fields if they are set in the menu and the current field is empty
         if should_generate["sentence_line"] and new_sentence_line:
             update_field(sentence_idx, new_sentence_line)
 
@@ -598,7 +589,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
                 current_note.fields[translation_sound_idx] = new_translation_sound_line
                 updated = True
 
-        if should_generate["image_line"] and ((not image_line) or overwrite):
+        if should_generate["image_line"] or overwrite:
             generated_img = manage_files.get_image_line_from_sound_line("", new_sound_line)
             log_image(f"new image: {generated_img}")
             if generated_img and isinstance(generated_img, str):
@@ -607,16 +598,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
         else:
             update_field(image_idx, new_image_line)
 
-        if updated:
-            if note:
-                print(f"updating note2")
-                mw.col.update_note(note)
-            else:
-                for i, val in enumerate(current_note.fields):
-                    if not isinstance(val, str):
-                        current_note.fields[i] = str(val) if val is not None else ""
-                print(f"loading note")
-                editor.loadNote()
+        editor.loadNote()
 
         sound_field = translation_sound_idx if alt_pressed else sound_idx
         sound_val = editor.note.fields[sound_field]
@@ -631,13 +613,12 @@ def generate_and_update_fields(editor, note, should_overwrite):
     finally:
         editor._is_generating_fields = False
 
+# uses current fields to generate and return update field data
 def get_generate_fields_sound_sentence_image_translation(note_type_name, fields, overwrite, alt_pressed, data):
     # checks each field, generating and updating if needed. Returns each field, empty if not needed
     sentence_line = fields["sentence_line"]
     sound_line = fields["sound_line"]
     image_line = fields["image_line"]
-    translation_line = fields["translation_line"]
-    translation_sound_line = fields["translation_sound_line"]
     selected_text = fields["selected_text"]
 
     if not sentence_line:
@@ -653,10 +634,8 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
     subtitle_path = ""
     new_sound_line = ""
     new_sentence_line = ""
-
     track = config["target_subtitle_track"]
     code = config["target_language_code"]
-
     pad_start_target = config["pad_start_target"]
     pad_end_target = config["pad_end_target"]
     pad_start_translation = config["pad_start_translation"]
@@ -666,10 +645,10 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
     if data:
         full_source_filename = data["full_source_filename"]
         subtitle_database = manage_database.get_database()
-
         subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
         log_filename(f"subtitle path from database1: {subtitle_path}")
 
+        # return if subtitle path could not be found
         if not subtitle_path:
             log_error(f"subtitle path null1")
             if selected_text:
@@ -687,33 +666,31 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
         else:
             data = None
 
-    # generate sound line if doesn't exist
+    # generate sound line if it doesn't exist
     if not data:
         log_error(f"no data extracted from sound line: {sound_line}")
-        if selected_text:
-            block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(selected_text, config)
-        else:
-            block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config)
 
+        # Get target block and subtitle path using selected_text if available, otherwise sentence_line
+        search_text = selected_text if selected_text else sentence_line
+        block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(search_text, config)
         log_filename(f"subtitle path from database2: {subtitle_path}")
 
         if not subtitle_path:
             log_error(f"subtitle path null2")
-            aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{addon_source_folder}',\n, or any embedded subtitle file with the code `{code}` or track `{track}`.")
+            aqt.utils.showInfo(
+                f"Could not find `{sentence_line}` in any subtitle file in '{addon_source_folder}',\n, or any embedded subtitle file with the code `{code}` or track `{track}`.")
             return None
-        new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
-    if selected_text:
-        log_filename(f"calling context_aware_sentence_sound_line_generate with sentence_line: {sentence_line}, new sentence line: {new_sentence_line}")
-        new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path, config)
-    else:
-        log_filename(f"calling context_aware_sentence_sound_line_generate with sentence_line: {sentence_line}")
-        new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path, config)
+
+        new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block,subtitle_path,None,None,config)
+
+    # always call context_aware_sentence_sound_line_generate
+    log_filename(f"calling context_aware_sentence_sound_line_generate with sentence_line: {sentence_line}" + (f", new sentence line: {new_sentence_line}" if selected_text else ""))
+    new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,new_sound_line, subtitle_path,config)
+
     if new_sentence_line:
         new_sentence_line = constants.format_text(new_sentence_line)
 
-    print(f"new sentence line3: {new_sentence_line}")
-
-    # get new timed sound line from first target sound line
+    # get new timed sound line from target sound line
     timing_tracks_enabled = config["timing_tracks_enabled"]
     if timing_tracks_enabled:
         subtitle_data = manage_files.extract_subtitle_path_data(subtitle_path)
@@ -764,7 +741,6 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
         log_error(f"Target Audio not detected, cannot generate Translation or Translation Audio.")
         aqt.utils.showInfo(f"Target Audio not detected, cannot generate Translation or Translation Audio.")
         return ""
-
     if should_generate_translation_line or overwrite or should_generate_translation_sound_line:
         log_filename(f"calling extract sound line data: {new_sound_line}")
         new_data = manage_files.extract_sound_line_data(new_sound_line)
@@ -773,6 +749,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
             new_translation_line = constants.format_text(new_translation_line)
     else:
         new_translation_line = ""
+        translation_subtitle_path = ""
 
     # get translation sound line
     if should_generate_translation_sound_line or overwrite:
@@ -786,10 +763,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
         new_translation_sound_line = ""
 
     # pad translation sound line if applicable
-    pad_translation_timings = (
-            pad_start_translation != 0 or
-            pad_end_translation != 0)
-
+    pad_translation_timings = (pad_start_translation != 0 or pad_end_translation != 0)
     if pad_translation_timings:
         data = extract_sound_line_data(new_translation_sound_line)
         altered_data = get_altered_sound_data(new_translation_sound_line, pad_start_translation, pad_end_translation, config, data)

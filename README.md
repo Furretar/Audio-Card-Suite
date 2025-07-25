@@ -3,6 +3,7 @@
 - [ ] allow removing from end start times and batch normalization even without source files
 - [ ] use showinfo when any button returns null
 - [ ] run bulk generation in background, have a stop button, display info
+- [ ] show database update progress, add update database button to menu
 - [ ] make it so you can add the language code manually for your own subtitles
 - [ ] make ffmpeg commands run in the background, try to fix audio cutting off when spamming the button
 

@@ -566,6 +566,7 @@ class AudioToolsDialog(QDialog):
         hbox2.addWidget(self.bulkGenerateButton)
         hbox2.addStretch(4)
 
+        # todo add mpv support
         # open file button
         # self.openFileButton = QPushButton("Open File")
         # self.openFileButton.setDefault(True)
@@ -776,6 +777,7 @@ class FieldMapping(QDialog):
             grid.addWidget(line, index, 0)
 
             comboBox = QComboBox()
+            comboBox.currentIndexChanged.connect(self.update_comboboxes)
             comboBox.addItem("None")
             comboBox.addItem("Target Subtitle Line")
             comboBox.addItem("Target Audio")
@@ -809,6 +811,28 @@ class FieldMapping(QDialog):
                 m[field] = box.currentText()
         self.configManager.updateMapping(self.name, m)
         self.close()
+
+    def update_comboboxes(self):
+        selected = set()
+        for _, combo in self.fields:
+            text = combo.currentText()
+            if text != "None":
+                selected.add(text)
+
+        for _, combo in self.fields:
+            current = combo.currentText()
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem("None")
+
+            for option in ["Target Subtitle Line", "Target Audio", "Image", "Translation Subtitle Line",
+                           "Translation Audio"]:
+                if option == current or option not in selected:
+                    combo.addItem(option)
+
+            combo.setCurrentText(current)
+            combo.blockSignals(False)
+
 
 def open_audio_tools_dialog(isEditor):
     global _audio_tools_dialog_instance

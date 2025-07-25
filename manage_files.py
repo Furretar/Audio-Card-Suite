@@ -570,7 +570,7 @@ def get_subtitle_code_by_track_number(source_path, track_number):
         log_error(f"ffprobe error while reading subtitle code: {e}")
     return None
 
-def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path):
+def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path, keep_start, keep_end):
     if not subtitle_path:
         log_error("subtitle path is None")
         return []
@@ -580,8 +580,6 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
     filename = subtitle_data["filename"]
     track = str(subtitle_data["track"])
     code = subtitle_data["code"]
-
-
     conn = manage_database.get_database()
     cursor = conn.cursor()
 
@@ -591,15 +589,11 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
         code = "und"
 
     log_filename(f"searching for blocks with filename: {filename}, code: {code}, track: {track}")
-
-
     cursor.execute(
         "SELECT content FROM subtitles WHERE filename = ? AND track = ? AND language = ? ORDER BY rowid",
         (filename, track, code)
     )
     row = cursor.fetchone()
-
-
 
     if row is None:
         log_error(f"No subtitle content found in DB for filename={filename} track={track} language={code}")
@@ -641,6 +635,14 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
                 usable_blocks.append(parsed)
         elif isinstance(raw_block, list) and len(raw_block) == 4:
             usable_blocks.append(raw_block)
+
+    if keep_start:
+        print(f"keep start: {keep_start}, current start: {usable_blocks[0][1]}")
+        usable_blocks[0][1] = keep_start
+
+    if keep_end:
+        print(f"keep end: {keep_end}, current end: {usable_blocks[-1][2]}")
+        usable_blocks[-1][2] = keep_end
 
     return usable_blocks
 

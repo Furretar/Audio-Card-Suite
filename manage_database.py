@@ -4,7 +4,6 @@ import os
 import sqlite3
 import re
 import constants
-import subprocess
 import json
 import unicodedata
 import tempfile

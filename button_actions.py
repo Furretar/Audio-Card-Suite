@@ -558,6 +558,10 @@ def generate_and_update_fields(editor, note, should_overwrite):
             if note:
                 mw.col.update_note(note)
             else:
+                # 🧼 Sanitize fields here
+                for i, val in enumerate(field_obj.fields):
+                    if not isinstance(val, str):
+                        field_obj.fields[i] = str(val) if val is not None else ""
                 editor.loadNote()
 
         sound_field = translation_sound_idx if alt_pressed else sound_idx
@@ -777,11 +781,9 @@ def get_fields_from_editor(editor):
         translation_audio_string,
     ]
 
-
     lookup = {}
     missing = []
     for lbl in required_labels:
-        # find the field whose mapped label equals lbl
         fld = next((f for f, lab in field_map.items() if lab == lbl), None)
         if fld:
             lookup[lbl] = fld
@@ -792,14 +794,13 @@ def get_fields_from_editor(editor):
         aqt.utils.showInfo(f"The following labels are not mapped for note type '{note_type_name}':\n" + "\n".join(missing))
         return {}
 
-
     fields = note_type["flds"]
 
     sentence_field = manage_files.get_field_key_from_label(note_type_name, f"{target_subtitle_line_string}", config)
     sentence_idx = index_of_field(sentence_field, fields) if sentence_field else -1
     if not sentence_field:
         log_error(f"Sentence field at index {sentence_idx} is empty.")
-        return None
+        return {}
 
     sound_field = manage_files.get_field_key_from_label(note_type_name, f"{target_audio_string}", config)
     sound_idx = index_of_field(sound_field, fields) if sound_field else -1
@@ -813,12 +814,13 @@ def get_fields_from_editor(editor):
     image_field = manage_files.get_field_key_from_label(note_type_name, f"{image_string}", config)
     image_idx = index_of_field(image_field, fields) if image_field else -1
 
-
     sound_line = editor.note.fields[sound_idx] if 0 <= sound_idx < len(editor.note.fields) else ""
+    sound_line = str(sound_line or "")
     if "[sound:" not in sound_line:
         sound_line = ""
 
     image_line = editor.note.fields[image_idx] if 0 <= image_idx < len(editor.note.fields) else ""
+    image_line = str(image_line or "")
     if "<img src=" not in image_line:
         log_image("no valid image detected")
         image_line = ""
@@ -827,20 +829,19 @@ def get_fields_from_editor(editor):
     translation_line = editor.note.fields[translation_idx] if 0 <= translation_idx < len(editor.note.fields) else ""
     translation_sound_line = editor.note.fields[translation_sound_idx] if 0 <= translation_sound_idx < len(editor.note.fields) else ""
 
-    selected_text = editor.web.selectedText().strip()
-
+    # Sanitize everything before returning
     return {
-        "sound_line": sound_line,
+        "sound_line": str(sound_line or ""),
         "sound_idx": sound_idx,
-        "sentence_line": sentence_line,
+        "sentence_line": str(sentence_line or ""),
         "sentence_idx": sentence_idx,
-        "image_line": image_line,
+        "image_line": str(image_line or ""),
         "image_idx": image_idx,
-        "translation_line": translation_line,
+        "translation_line": str(translation_line or ""),
         "translation_idx": translation_idx,
-        "translation_sound_line": translation_sound_line,
+        "translation_sound_line": str(translation_sound_line or ""),
         "translation_sound_idx": translation_sound_idx,
-        "selected_text": selected_text,
+        "selected_text": str(editor.web.selectedText().strip() or ""),
     }
 
 def index_of_field(field_name, fields):

@@ -254,6 +254,7 @@ def format_timestamp_for_filename(timestamp: str) -> str:
 
 
 def silent_run(*args, **kwargs):
+    print("silent_run called with:", args[0])
     if sys.platform.startswith("win"):
         kwargs.setdefault("creationflags", subprocess.CREATE_NO_WINDOW)
     return subprocess.run(*args, **kwargs)

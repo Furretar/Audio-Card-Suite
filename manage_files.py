@@ -134,8 +134,6 @@ def get_config():
     missing = [k for k in keys if k not in config]
     if missing:
         log_error(f"Missing required config fields: {missing}")
-        showInfo("Missing config fields:\n" + "\n".join(missing))
-        return None
 
     zero_tracks = [k for k in [
         "target_audio_track", "target_subtitle_track",
@@ -187,6 +185,9 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
         selected_tab_index = config["selected_tab_index"]
         log_filename(f"received filename: {full_source_filename}, track/code: {track}/{code}")
         sub_source_path = get_source_path_from_full_filename(full_source_filename)
+        
+        if not os.path.exists(constants.addon_source_folder):
+            os.makedirs(constants.addon_source_folder)
 
         if not os.path.exists(sub_source_path):
             log_error(f"Source file not found: {sub_source_path}")

@@ -478,22 +478,26 @@ def generate_and_update_fields(editor, note, should_overwrite):
         overwrite = bool(modifiers & Qt.KeyboardModifier.ControlModifier) or should_overwrite
         alt_pressed = bool(modifiers & Qt.KeyboardModifier.AltModifier)
 
+        note_type_name = list(config["mapped_fields"].keys())[0]
+
+        should_generate_image = get_field_key_from_label(note_type_name, "Image", config)
+        should_generate_translation_line = get_field_key_from_label(note_type_name,f"{translation_subtitle_line_string}", config)
+        should_generate_translation_sound = get_field_key_from_label(note_type_name, f"{translation_audio_string}", config)
+
+        # don't generate anything if all set fields are full
         fields_status = {
             "sound_line": bool(sound_line),
             "sentence_line": bool(sentence_line),
-            "image_line": bool(image_line),
-            "translation_line": bool(translation_line),
-            "translation_sound_line": bool(translation_sound_line)
+            "image_line": bool(image_line) or (not should_generate_image),
+            "translation_line": bool(translation_line) or (not should_generate_translation_line),
+            "translation_sound_line": bool(translation_sound_line) or (not should_generate_translation_sound)
         }
-
         updated = False
-
         if all(fields_status.values()) and not overwrite:
             log_filename("All fields are filled, returning.")
             current_sound_line = field_obj.fields[translation_sound_idx if alt_pressed else sound_idx]
             match = re.search(r"\[sound:(.*?)]", current_sound_line)
             return (match.group(1), updated) if match else (None, updated)
-
         for name, is_present in fields_status.items():
             if not is_present:
                 log_filename(f"Missing: {name}")
@@ -790,9 +794,9 @@ def get_fields_from_editor(editor):
         else:
             missing.append(lbl)
 
+    # todo remove
     if missing:
-        aqt.utils.showInfo(f"The following labels are not mapped for note type '{note_type_name}':\n" + "\n".join(missing))
-        return {}
+        log_error(f"The following labels are not mapped for note type '{note_type_name}':\n" + "\n".join(missing))
 
     fields = note_type["flds"]
 

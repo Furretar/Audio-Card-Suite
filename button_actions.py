@@ -442,7 +442,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
         config = constants.extract_config_data()
         if note:
             mapped_fields = config["mapped_fields"]
-            note_type_name = list(mapped_fields.keys())[0]
+            note_type_name = note.model()["name"]
             fields = note.note_type()["flds"]
             sentence_idx = get_idx(f"{target_subtitle_line_string}", note_type_name, config, fields)
             sound_idx = get_idx(f"{target_audio_string}", note_type_name, config, fields)
@@ -478,7 +478,9 @@ def generate_and_update_fields(editor, note, should_overwrite):
         overwrite = bool(modifiers & Qt.KeyboardModifier.ControlModifier) or should_overwrite
         alt_pressed = bool(modifiers & Qt.KeyboardModifier.AltModifier)
 
-        note_type_name = list(config["mapped_fields"].keys())[0]
+        note = editor.note
+        log_filename(f"generating using note type: {note.model()['name']}")
+        note_type_name = note.model()["name"]
 
         should_generate_image = get_field_key_from_label(note_type_name, "Image", config)
         should_generate_translation_line = get_field_key_from_label(note_type_name,f"{translation_subtitle_line_string}", config)
@@ -774,7 +776,7 @@ def get_fields_from_editor(editor):
         return {}
 
     note_type = editor.note.note_type()
-    note_type_name = list(mapped_fields.keys())[0]
+    note_type_name = note_type['name']
     field_map = mapped_fields[note_type_name]
 
     required_labels = [
@@ -862,6 +864,7 @@ def get_fields_from_note(note):
     config = constants.extract_config_data()
     mapped_fields = config.get("mapped_fields", {})
 
+    note = editor.note
     note_type_name = note.model()["name"]
     if note_type_name not in mapped_fields:
         log_error(f"fields not mapped for note type '{note_type_name}'")

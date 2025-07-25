@@ -153,6 +153,7 @@ def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> s
     mapped_fields = config["mapped_fields"][note_type_name]
     for field_key, mapped_label in mapped_fields.items():
         if mapped_label == label:
+            print(f"returning field key {field_key}, from label: {mapped_label}")
             return field_key
     if label == "Target Subtitle Line":
         log_error(f"could not find Target Subtitle Line in note_type {note_type_name}, mapped field: {mapped_fields}, mapped fields items {mapped_fields.items()}")
@@ -185,7 +186,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
         selected_tab_index = config["selected_tab_index"]
         log_filename(f"received filename: {full_source_filename}, track/code: {track}/{code}")
         sub_source_path = get_source_path_from_full_filename(full_source_filename)
-        
+
         if not os.path.exists(constants.addon_source_folder):
             os.makedirs(constants.addon_source_folder)
 
@@ -297,6 +298,8 @@ def get_image_line_from_sound_line(image_line, sound_line):
 
     _, ext = os.path.splitext(video_source_path)
     video_extension = ext.lower()
+
+
 
     # generate image and get its path
     image_path = run_ffmpeg_extract_image_command(
@@ -906,6 +909,8 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
             log_error("Cover extraction failed: output file not found")
             return ""
 
+
+
     timestamp = convert_hmsms_to_ffmpeg_time_notation(image_timestamp)
     cmd = [
         ffmpeg_path, "-y",
@@ -915,7 +920,7 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
         "-q:v", "15",
         image_collection_path
     ]
-    log_command(f"Extracting image:\n{' '.join(cmd)}")
+    log_image(f"Extracting image:\n{' '.join(cmd)}")
     result = constants.silent_run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
     if result.returncode != 0:
         log_error(f"FFmpeg image extraction failed:\n{result.stderr}")

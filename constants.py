@@ -36,7 +36,7 @@ translation_audio_string = "Translation Audio"
 image_string = "Image"
 
 audio_extensions = [
-    ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma", ".opus", ".m4b"
+    ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma", ".opus"
 ]
 
 video_extensions = [

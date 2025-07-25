@@ -91,8 +91,6 @@ def filter_subtitles(subtitles):
             filtered.append((start, end, clean_text))
     return filtered
 
-
-
 def check_already_indexed(conn, media_file, track, lang=None):
     query = "SELECT 1 FROM subtitles WHERE filename=? AND track=?"
     params = [media_file, str(track)]
@@ -457,3 +455,11 @@ def print_all_subtitle_contents():
             log_database(f"  [error] Failed to parse content: {e}")
 
 #print_all_subtitle_contents()
+
+def print_all_subtitle_names():
+    conn = get_database()
+    cursor = conn.execute('SELECT filename, track, language FROM subtitles ORDER BY filename, track')
+    for filename, track, language in cursor:
+        print(f"{filename} | Track: {track} | Language: {language}")
+
+#print_all_subtitle_names()

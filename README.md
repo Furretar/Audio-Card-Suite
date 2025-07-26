@@ -15,6 +15,7 @@ low priority
 - [ ]  add/subtract 1db for each audio
 - [ ]  generate waveform
 - [ ]  add track to sound line so it doesnt have to search for the subtitle file
+- [ ]  figure out why database doesn't go to 0 when all files are removed
 
 ```
 Generate Fields:

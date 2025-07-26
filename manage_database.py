@@ -162,7 +162,26 @@ def parse_srt_from_text(srt_text):
         log_database(f"Failed to parse SRT text: {e}")
         return []
 
+def extract_subtitle_file_data(subtitle_filename):
+    # Remove the subtitle extension (.srt, .ass, etc.)
+    name_no_ext = os.path.splitext(subtitle_filename)[0]
 
+    # Extract language code after last ` or .
+    index_backtick = name_no_ext.rfind('`')
+    index_dot = name_no_ext.rfind('.')
+    separator_index = max(index_backtick, index_dot)
+
+    if separator_index != -1:
+        base_name = name_no_ext[:separator_index]
+        lang_code = name_no_ext[separator_index + 1:]
+    else:
+        base_name = name_no_ext
+        lang_code = "und"
+
+    return {
+        'lang_code': lang_code,
+        'base_name': base_name,
+    }
 
 def update_database():
     log_database(f"update database called")
@@ -190,7 +209,6 @@ def update_database():
 
     cursor = conn.execute('SELECT filename, language, track FROM subtitles')
     indexed_subs = {f"{r[0]}`track_{r[2]}`{r[1]}.srt" for r in cursor}
-    # log_database(f"current indexed subs: {indexed_subs}")
 
     # Remove subtitles with no media file or missing subtitle file
     for f in sorted(indexed_subs):
@@ -221,40 +239,53 @@ def update_database():
     }
 
     cursor = conn.execute(
-        "SELECT DISTINCT filename FROM subtitles WHERE track = '-1' AND language = 'und'"
+        "SELECT DISTINCT filename FROM subtitles WHERE track = '-1'"
     )
     indexed_subtitle_files = {row[0] for row in cursor}
     indexed_subtitle_basenames = {os.path.splitext(f)[0] for f in indexed_subtitle_files}
 
-
-
     log_database(f"current subtitles in folder: {subtitles_in_folder}")
     for subtitle_file in subtitles_in_folder:
-        base_name = os.path.splitext(subtitle_file)[0]
-        if base_name in media_basenames and base_name not in indexed_subtitle_basenames:
-            log_database(f"adding subtitle to database: {base_name}")
-            subtitle_path = os.path.join(folder, subtitle_file)
+        # Remove the subtitle extension (.srt, .ass, etc.)
+        name_no_ext = os.path.splitext(subtitle_file)[0]
 
-            for media_file in (m for m in current_media if os.path.splitext(m)[0] == base_name):
-                log_database(f"Processing new subtitle {subtitle_path} for media file {media_file}")
+        # Extract language code after last ` or .
+        index_backtick = name_no_ext.rfind('`')
+        index_dot = name_no_ext.rfind('.')
+        separator_index = max(index_backtick, index_dot)
 
-                try:
-                    # Convert subtitle to SRT format regardless of original format
-                    parsed = get_srt_converted_subtitle_from_path(subtitle_path)
+        if separator_index != -1:
+            base_name = name_no_ext[:separator_index]
+            lang_code = name_no_ext[separator_index + 1:]
+        else:
+            base_name = name_no_ext
+            lang_code = "und"
 
-                    if not parsed:
-                        log_database(f"No valid subtitle content found in {subtitle_path}")
-                        continue
+        print(f"base_name: {base_name}, indexed_subtitle_basenames: {indexed_subtitle_basenames}")
+        if base_name not in indexed_subtitle_basenames:
+            if base_name in media_basenames:
+                subtitle_path = os.path.join(folder, subtitle_file)
 
-                    conn.execute(
-                        'INSERT INTO subtitles (filename, language, track, content) VALUES (?, ?, ?, ?)',
-                        (media_file, "und", "-1", json.dumps(parsed, ensure_ascii=False))
-                    )
-                    log_database(
-                        f"Added subtitle content for {subtitle_path} linked to media {media_file} ({len(parsed)} entries)")
+                for media_file in (m for m in current_media if os.path.splitext(m)[0] == base_name):
 
-                except Exception as e:
-                    log_database(f"Failed to add subtitle content from {subtitle_path}: {e}")
+                    try:
+                        parsed = get_srt_converted_subtitle_from_path(subtitle_path)
+
+                        if not parsed:
+                            log_database(f"No valid subtitle content found in {subtitle_path}")
+                            continue
+
+                        conn.execute(
+                            'INSERT INTO subtitles (filename, language, track, content) VALUES (?, ?, ?, ?)',
+                            (media_file, lang_code, "-1", json.dumps(parsed, ensure_ascii=False))
+                        )
+                        log_database(
+                            f"Added subtitle content for {subtitle_path} linked to media {media_file} ({len(parsed)} entries)")
+
+                    except Exception as e:
+                        log_database(f"Failed to add subtitle content from {subtitle_path}: {e}")
+            else:
+                log_database(f"no media basename found for {base_name}")
 
     # extract subtitles from all source files
     extract_all_subtitle_tracks_and_update_db(conn)
@@ -514,4 +545,4 @@ def print_all_subtitle_names():
     for filename, track, language in cursor:
         print(f"{filename} | Track: {track} | Language: {language}")
 
-#print_all_subtitle_names()
+print_all_subtitle_names()

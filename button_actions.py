@@ -599,18 +599,17 @@ def generate_and_update_fields(editor, note, should_overwrite):
         altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, config, data)
         if new_sound_line != current_note.fields[sound_idx] and altered_data:
             new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line, config, False)
-            print(f"setting field of obj {current_note} at index {sound_idx}: {current_note.fields[sound_idx]} to: {new_sound_line}")
             current_note.fields[sound_idx] = new_sound_line
             updated = True
 
     if should_generate["translation_sound_line"]:
-        print(f"note type name: {note_type_name}")
-
         log_filename(f"getting sound data from translation: {new_translation_sound_line}")
         data = manage_files.extract_sound_line_data(new_translation_sound_line)
         altered_data = manage_files.get_altered_sound_data(new_translation_sound_line, 0, 0, config, data)
         if new_translation_sound_line != current_note.fields[translation_sound_idx] and altered_data:
             new_translation_sound_line = manage_files.alter_sound_file_times(altered_data, new_translation_sound_line, config, True)
+            if not new_translation_sound_line:
+                new_translation_sound_line = ""
             current_note.fields[translation_sound_idx] = new_translation_sound_line
             updated = True
 
@@ -673,10 +672,6 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
         # return if subtitle path could not be found
         if not subtitle_path:
             log_error(f"subtitle path null1")
-            if selected_text:
-                show_sentence = selected_text
-            else:
-                show_sentence = sentence_line
             aqt.utils.showInfo(f"No subtitles found with the track `{track}`, code `{code}`, and base name '{full_source_filename}'.")
             return None
 
@@ -725,12 +720,13 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
     data = manage_files.extract_sound_line_data(new_timed_sound_line)
 
     # if using a timing track, generate sentence line from sound line so it matches
-    timing_code = data["timing_lang_code"]
-    if timing_tracks_enabled and timing_code:
-        start_time = data["start_time"]
-        end_time = data["end_time"]
-        overlapping_blocks = manage_files.get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, start_time, end_time)
-        _, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(overlapping_blocks, subtitle_path, None, timing_code,config)
+    if timing_tracks_enabled:
+        timing_code = data["timing_lang_code"]
+        if timing_code:
+            start_time = data["start_time"]
+            end_time = data["end_time"]
+            overlapping_blocks = manage_files.get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, start_time, end_time)
+            _, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(overlapping_blocks, subtitle_path, None, timing_code,config)
 
     # pad target sound line if applicable
     pad_target_timings = (

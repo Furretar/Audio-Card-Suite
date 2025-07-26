@@ -208,11 +208,16 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database)
     else:
         timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
-    log_filename(f"timing subtitle path: {timing_subtitle_path}")
+
+    log_filename(f"start time: {start_time}, end time: {end_time}")
+    log_filename(f"getting timing blocks, start_index {start_index}, add to start: {add_to_start}, end_index {end_index}, add to end: {add_to_end}, timing subtitle path: {timing_subtitle_path}")
     timing_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, timing_subtitle_path, start_time, end_time)
+
     if not timing_blocks:
         log_error(f"no timing blocks returned")
         return ""
+    log_filename(f"timing blocks: {timing_blocks}")
+
 
     # get blocks for sentence line
     sentence_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
@@ -221,7 +226,6 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     if not sentence_blocks:
         log_error(f"no sentence blocks returned")
         return ""
-    print(f"timing blocks: {timing_blocks}")
 
 
     # generate sound and sentence lines from blocks
@@ -239,6 +243,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     # otherwise indexes match and can be used normally
     else:
         new_timing_sound_line, _ = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, None, None, config)
+        print(f"new timing sound line: {new_timing_sound_line}")
         _, raw_sentence = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, sentence_code, timing_code, config)
 
     new_sentence_line = constants.format_text(raw_sentence)
@@ -358,7 +363,7 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
         return None, None
 
     # check before and after selected text for more lines to add
-    leftover_sentence = sentence_line.strip()
+    leftover_sentence = manage_files.normalize_text(sentence_line)
 
     # try to find the longest matching block between the two strings
     matcher = difflib.SequenceMatcher(None, leftover_sentence, new_sentence_line)
@@ -395,7 +400,7 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
                 return None, None
             before_block = before_blocks[0] if before_blocks else None
             before_line = before_block[3]
-            before_line_clean = before_line.replace('\n', '').strip()
+            before_line_clean = before_line
             # and add the previous line if the previous line is in leftover line, or if leftover line is in previous line
             if (
                 before_line_clean in before_removed
@@ -689,7 +694,12 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
 
         # Get target block and subtitle path using selected_text if available, otherwise sentence_line
         search_text = selected_text if selected_text else sentence_line
-        block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(search_text, config)
+        block, subtitle_path = constants.timed_call(
+            manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line,
+            search_text,
+            config
+        )
+
         log_filename(f"subtitle path from database2: {subtitle_path}")
 
         if not subtitle_path:

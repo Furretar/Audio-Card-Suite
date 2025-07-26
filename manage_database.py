@@ -66,11 +66,6 @@ def remove_subtitle_formatting(text: str) -> str:
     text = re.sub(r'[\[\(].*?[\]\)]', '', text)
     text = text.strip()
 
-    if re.fullmatch(r'[a-zA-Z0-9\s]+', text):
-        letter_ratio = len(re.findall(r'[a-zA-Z]', text)) / (len(text) + 1e-6)
-        if letter_ratio < 0.3:
-            return ''
-
     return text
 
 def filter_subtitles(subtitles):

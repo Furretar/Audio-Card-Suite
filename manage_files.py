@@ -570,12 +570,13 @@ def get_subtitle_code_by_track_number(source_path, track_number):
     return None
 
 def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path, keep_start, keep_end):
+    log_filename(f"getting timing blocks, start_index {start_index},  end_index {end_index}, timing subtitle path: {subtitle_path}")
+
     if not subtitle_path:
         log_error("subtitle path is None")
         return []
 
     subtitle_data = extract_subtitle_path_data(subtitle_path)
-    print(f"subtitle_data: {subtitle_data}")
     filename = subtitle_data["filename"]
     track = str(subtitle_data["track"])
     code = subtitle_data["code"]
@@ -608,6 +609,8 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
 
     total_blocks = len(blocks)
 
+
+
     log_filename(f"start index: {start_index}, end index: {end_index}, total blocks: {total_blocks}")
 
     if total_blocks == 0:
@@ -627,6 +630,7 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
         return []
 
     usable_blocks = []
+    print(f"starting block at index: {start_index - 1}, {blocks[start_index - 1]}")
     for i, raw_block in enumerate(blocks[start_index - 1:end_index]):
         if isinstance(raw_block, str):
             parsed = constants.format_subtitle_block(raw_block)
@@ -702,18 +706,20 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
 
         normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
 
-        max_window = 5
-        for start in range(len(normalized_lines)):
-            joined = ""
-            for end in range(start, min(len(normalized_lines), start + max_window)):
-                joined += normalized_lines[end]
-                if normalized_sentence in joined:
-                    subtitle_name = f"{db_filename}"
-                    if lang != "und" or str(trk) != "-1":
-                        subtitle_name += f"`track_{trk}`{lang}"
-                    subtitle_name += ".srt"
-                    actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
-                    return usable_blocks[end], actual_path
+        max_window = 10
+        joined_lines = normalized_lines
+
+        for i in range(len(joined_lines) - max_window + 1):
+            window = joined_lines[i:i + max_window]
+            joined = ''.join(window)
+            if normalized_sentence in joined:
+                subtitle_name = f"{db_filename}"
+                if lang != "und" or str(trk) != "-1":
+                    subtitle_name += f"`track_{trk}`{lang}"
+                subtitle_name += ".srt"
+                actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
+                return usable_blocks[i + max_window - 1], actual_path
+
 
     log_command("No subtitle match found across blocks.")
     return None, None
@@ -1202,8 +1208,8 @@ def normalize_text(s):
     s = html.unescape(s)
     s = re.sub(r'<.*?>', '', s)
     s = re.sub(r'（.*?）|\(.*?\)', '', s)
-    s = s.replace('\xa0', '')
-    s = re.sub(r'[\s\u3000]+', '', s)
+    s = s.replace('\xa0', '')  # Non-breaking space
+    s = re.sub(r'[\u2000-\u200B\u3000\s]+', '', s)
     return s
 
 def timestamp_to_dot_format(ts: str) -> str:
@@ -1356,7 +1362,14 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
         log_error(f"Invalid time range: {to_hmsms_format(new_start_ms)}-{to_hmsms_format(new_end_ms)}")
         showInfo(f"Invalid time range: {to_hmsms_format(new_start_ms)}-{to_hmsms_format(new_end_ms)}.\nCheck your padded timings.")
         return {
-            "new_sound_line": sound_line
+            "new_sound_line": sound_line,
+            "new_start_time": None,
+            "new_end_time": None,
+            "new_filename": None,
+            "new_path": None,
+            "old_path": None,
+            "filename_base": None,
+            "full_source_filename": None,
         }
 
     new_start_time = to_hmsms_format(new_start_ms)
@@ -1409,7 +1422,9 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
         log_error("sound line is empty")
         return None
 
-    print(f"altered_data: {altered_data}, old path: {altered_data['old_path']}")
+    if not altered_data["old_path"]:
+        return None
+
     if os.path.exists(altered_data["old_path"]):
         send2trash(altered_data["old_path"])
 

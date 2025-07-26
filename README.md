@@ -14,7 +14,6 @@ low priority
 - [ ] open mpv option
 - [ ]  add/subtract 1db for each audio
 - [ ]  generate waveform
-- [ ]  allow square brackets in filenames
 - [ ]  add track to sound line so it doesnt have to search for the subtitle file
 
 ```

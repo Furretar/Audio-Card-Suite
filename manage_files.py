@@ -43,6 +43,8 @@ def extract_sound_line_data(sound_line):
 
         groups = match.groupdict()
         filename_base = groups["filename_base"]
+        filename_base = filename_base.replace('((', '[').replace('))', ']')
+
         source_file_extension = groups.get("source_file_extension") or ""
         lang_code = groups.get("lang_code") or ""
         timing_lang_code = groups.get("timing_lang_code") or ""
@@ -1376,6 +1378,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
         f"building sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {lang_code}, timing langauge code: {timing_lang_code}")
 
     new_filename, _ = build_file_and_sound_line(filename_base, source_file_extension, lang_code, timing_lang_code, new_start_time, new_end_time, start_index, end_index, lufs, sound_file_extension)
+    new_filename = new_filename.replace('[', '((').replace(']', '))')
 
     new_path = os.path.join(constants.get_collection_dir(), new_filename)
     new_sound_line = f"[sound:{new_filename}]"

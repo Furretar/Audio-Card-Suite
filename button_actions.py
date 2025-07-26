@@ -255,7 +255,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         log_filename(f"getting sound line data from5: {new_timing_sound_line}")
         new_data = manage_files.extract_sound_line_data(new_timing_sound_line)
         altered_data = manage_files.get_altered_sound_data(new_timing_sound_line, 0, 0, config, new_data)
-        manage_files.alter_sound_file_times(altered_data, new_timing_sound_line, config, alt_pressed)
+        new_timing_sound_line = manage_files.alter_sound_file_times(altered_data, new_timing_sound_line, config, alt_pressed)
 
         # generate new translation line
         if not alt_pressed:

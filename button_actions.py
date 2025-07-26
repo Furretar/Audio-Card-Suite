@@ -62,7 +62,15 @@ def next_result_button(editor):
 
         if not sentence_line and not selected_text:
             log_error(f"no text to search")
-            return
+            return ""
+
+        if not selected_text:
+            selected_text = sentence_line
+
+        if not sound_line:
+            log_error(f"no sound line, called generate fields")
+            generate_and_update_fields(editor, None, False)
+            return ""
 
         log_filename(f"calling extract sound line data: {sound_line}")
         data = manage_files.extract_sound_line_data(sound_line)
@@ -72,27 +80,29 @@ def next_result_button(editor):
 
         if not block or not subtitle_path:
             log_error(f"didn't find another result for: {selected_text}")
+            show_info_msg(f"No results found for: {selected_text}")
             return ""
 
         # generate new sound and sentence line using the block just retrieved
         next_sound_line, next_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
 
-        # # Check if we've wrapped around to the same result
-        # new_data = manage_files.extract_sound_line_data(next_sound_line)
-        # if new_data:
-        #     start_index = new_data["start_index"]
-        #     end_index = new_data["end_index"]
-        #     full_source_filename = new_data["full_source_filename"]
-        #
-        #     old_data = manage_files.extract_sound_line_data(sound_line)
-        #     if old_data:
-        #         old_start_index = old_data["start_index"]
-        #         old_end_index = old_data["end_index"]
-        #         old_full_source_filename = old_data["full_source_filename"]
-        #
-        #         if full_source_filename ==:
-        #             log_filename("Next result is the same as current result (wrapped around), returning without changes")
-        #             return ""
+        # Check if we've wrapped around to the same result
+        new_data = manage_files.extract_sound_line_data(next_sound_line)
+        if new_data:
+            start_index = new_data["start_index"]
+            end_index = new_data["end_index"]
+            full_source_filename = new_data["full_source_filename"]
+
+            old_data = manage_files.extract_sound_line_data(sound_line)
+            if old_data:
+                old_start_index = old_data["start_index"]
+                old_end_index = old_data["end_index"]
+                old_full_source_filename = old_data["full_source_filename"]
+
+                if full_source_filename == old_full_source_filename and old_start_index >= start_index and old_end_index <= end_index:
+                    log_filename("Next result is the same as current result")
+                    show_info_msg(f"This is the only result for: {selected_text}")
+                    return ""
 
         # generate sound file using next sound line
         log_filename(f"calling extract sound line data: {next_sound_line}")
@@ -126,169 +136,160 @@ def next_result_button(editor):
         editor._is_generating_fields = False
 
 def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
-    # lock function while running
-    if getattr(editor, "_is_generating_fields", False):
-        log_filename("generate_and_update_fields is already running, skipping duplicate call.")
-        return None, None
-    editor._is_generating_fields = True
+    fields = get_fields_from_editor(editor)
+    config = constants.extract_config_data()
+    modifiers = QApplication.keyboardModifiers()
+    alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
+    if alt_pressed:
+        sound_line = fields["translation_sound_line"]
+    else:
+        sound_line = fields["sound_line"]
+    data = manage_files.extract_sound_line_data(sound_line)
 
-    try:
-        fields = get_fields_from_editor(editor)
-        config = constants.extract_config_data()
-        modifiers = QApplication.keyboardModifiers()
-        alt_pressed = modifiers & Qt.KeyboardModifier.AltModifier
+    if not data:
+        log_error(f"no data from sound line: {sound_line}, generating fields")
+        generate_and_update_fields(editor, None, True)
         if alt_pressed:
             sound_line = fields["translation_sound_line"]
         else:
             sound_line = fields["sound_line"]
         data = manage_files.extract_sound_line_data(sound_line)
-
-        if not data:
-            log_error(f"no data from sound line: {sound_line}, generating fields")
-            generate_and_update_fields(editor, None, True)
-            if alt_pressed:
-                sound_line = fields["translation_sound_line"]
-            else:
-                sound_line = fields["sound_line"]
-            data = manage_files.extract_sound_line_data(sound_line)
-        if not data:
-            log_error(f"still no data from sound line: {sound_line}, returning")
-            return ""
+    if not data:
+        log_error(f"still no data from sound line: {sound_line}, returning")
+        return ""
 
 
+    if alt_pressed:
+        sound_line = fields["translation_sound_line"]
+        sound_idx = fields["translation_sound_idx"]
+        sentence_idx = fields["translation_idx"]
+        translation_idx = ""
+        track = config.get("translation_subtitle_track")
+        code = config.get("translation_language_code")
+        pad_start = config["pad_start_translation"]
+        pad_end = config["pad_end_translation"]
+
+    else:
+        sound_line = fields["sound_line"]
+        sound_idx = fields["sound_idx"]
+        sentence_idx = fields["sentence_idx"]
+        translation_idx = fields["translation_idx"]
+        track = config.get("target_subtitle_track")
+        code = config.get("target_language_code")
+        pad_start = config["pad_start_target"]
+        pad_end = config["pad_end_target"]
+
+    if add_to_start == 0:
+        pad_start = 0
+    if add_to_end == 0:
+        pad_end = 0
+
+    translation_sound_idx = fields["translation_sound_idx"]
+    start_index = data["start_index"]
+    end_index = data["end_index"]
+    timing_code = data["timing_lang_code"]
+    full_source_filename = data["full_source_filename"]
+
+    # keep start and end times on opposite edges if user already changed them
+    if add_to_end != 0:
+        start_time = data["start_time"]
+    else:
+        start_time = None
+
+    if add_to_start != 0:
+        end_time = data["end_time"]
+    else:
+        end_time = None
+
+    subtitle_database = manage_database.get_database()
+
+    # get blocks for sound line timings
+    if timing_code:
+        timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database)
+    else:
+        timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
+    log_filename(f"timing subtitle path: {timing_subtitle_path}")
+    timing_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, timing_subtitle_path, start_time, end_time)
+    if not timing_blocks:
+        log_error(f"no timing blocks returned")
+        return ""
+
+    # get blocks for sentence line
+    sentence_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
+    log_filename(f"sentence_subtitle_path: {sentence_subtitle_path}")
+    sentence_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, sentence_subtitle_path, start_time, end_time)
+    if not sentence_blocks:
+        log_error(f"no sentence blocks returned")
+        return ""
+    print(f"timing blocks: {timing_blocks}")
+
+
+    # generate sound and sentence lines from blocks
+    sentence_data = extract_subtitle_path_data(sentence_subtitle_path)
+    sentence_code = sentence_data["code"]
+
+    # get blocks from sound line times instead of indexes when using a timing subtitle file
+    if timing_code:
+        new_timing_sound_line, _ = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(timing_blocks, timing_subtitle_path, sentence_code, timing_code, config)
+        new_timing_data = manage_files.extract_sound_line_data(new_timing_sound_line)
+        start_time = new_timing_data["start_time"]
+        end_time = new_timing_data["end_time"]
+        overlapping_blocks = manage_files.get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(sentence_subtitle_path, start_time, end_time)
+        _, raw_sentence = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(overlapping_blocks, sentence_subtitle_path, sentence_code, timing_code, config)
+    # otherwise indexes match and can be used normally
+    else:
+        new_timing_sound_line, _ = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, None, None, config)
+        _, raw_sentence = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, sentence_code, timing_code, config)
+
+    new_sentence_line = constants.format_text(raw_sentence)
+    log_filename(f"new_sentence_line from blocks: {new_sentence_line}")
+
+    # pad sound line if applicable
+    pad_target_timings = (pad_start != 0 or pad_end != 0)
+    if pad_target_timings:
+        log_filename(f"padding timings for context line, pad start: {pad_start} | pad end: {pad_end}")
+        data = manage_files.extract_sound_line_data(new_timing_sound_line)
+        altered_data = get_altered_sound_data(new_timing_sound_line, pad_start, pad_end, config, data)
+        if not altered_data:
+            log_error(f"padded sound line is empty")
+            return None
+        new_timing_sound_line = altered_data["new_sound_line"]
+
+    log_filename(f"getting sound line data from5: {new_timing_sound_line}")
+    new_data = manage_files.extract_sound_line_data(new_timing_sound_line)
+    altered_data = manage_files.get_altered_sound_data(new_timing_sound_line, 0, 0, config, new_data)
+    new_timing_sound_line = manage_files.alter_sound_file_times(altered_data, new_timing_sound_line, config, alt_pressed)
+
+    # generate new translation line
+    if not alt_pressed:
+        translation_line, _ = manage_files.get_translation_line_and_subtitle_from_target_sound_line(new_timing_sound_line, config, new_data)
+        editor.note.fields[translation_idx] = str(translation_line or "")
+
+    # update sound field with new sound line
+    new_field = re.sub(r"\[sound:.*?]", new_timing_sound_line, sound_line)
+    editor.note.fields[sound_idx] = str(new_field)
+    editor.note.fields[sentence_idx] = str(new_sentence_line)
+
+    # apply and save the changes to the note
+    generate_and_update_fields(editor, None, False)
+
+    def play_after_reload():
         if alt_pressed:
-            sound_line = fields["translation_sound_line"]
-            sound_idx = fields["translation_sound_idx"]
-            sentence_idx = fields["translation_idx"]
-            translation_idx = ""
-            track = config.get("translation_subtitle_track")
-            code = config.get("translation_language_code")
-            pad_start = config["pad_start_translation"]
-            pad_end = config["pad_end_translation"]
-
+            play_sound = editor.note.fields[translation_sound_idx]
         else:
-            sound_line = fields["sound_line"]
-            sound_idx = fields["sound_idx"]
-            sentence_idx = fields["sentence_idx"]
-            translation_idx = fields["translation_idx"]
-            track = config.get("target_subtitle_track")
-            code = config.get("target_language_code")
-            pad_start = config["pad_start_target"]
-            pad_end = config["pad_end_target"]
+            play_sound = editor.note.fields[sound_idx]
+        log_filename(f"playing sound: {play_sound}")
+        match = re.search(r"\[sound:(.*?)]", play_sound)
+        if match:
+            sound_filename = match.group(1)
+            QTimer.singleShot(0, lambda: play(sound_filename))
 
-        if add_to_start == 0:
-            pad_start = 0
-        if add_to_end == 0:
-            pad_end = 0
+    editor.loadNote()
 
-        translation_sound_idx = fields["translation_sound_idx"]
-        start_index = data["start_index"]
-        end_index = data["end_index"]
-        timing_code = data["timing_lang_code"]
-        full_source_filename = data["full_source_filename"]
+    autoplay = config["autoplay"]
+    if not autoplay:
+        QTimer.singleShot(0, play_after_reload)
 
-        # keep start and end times on opposite edges if user already changed them
-        if add_to_end != 0:
-            start_time = data["start_time"]
-        else:
-            start_time = None
-
-        if add_to_start != 0:
-            end_time = data["end_time"]
-        else:
-            end_time = None
-
-        subtitle_database = manage_database.get_database()
-
-        # get blocks for sound line timings
-        if timing_code:
-            timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database)
-        else:
-            timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
-        log_filename(f"timing subtitle path: {timing_subtitle_path}")
-        timing_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, timing_subtitle_path, start_time, end_time)
-        if not timing_blocks:
-            log_error(f"no timing blocks returned")
-            return ""
-
-        # get blocks for sentence line
-        sentence_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
-        log_filename(f"sentence_subtitle_path: {sentence_subtitle_path}")
-        sentence_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, sentence_subtitle_path, start_time, end_time)
-        if not sentence_blocks:
-            log_error(f"no sentence blocks returned")
-            return ""
-        print(f"timing blocks: {timing_blocks}")
-
-
-        # generate sound and sentence lines from blocks
-        sentence_data = extract_subtitle_path_data(sentence_subtitle_path)
-        sentence_code = sentence_data["code"]
-
-        # get blocks from sound line times instead of indexes when using a timing subtitle file
-        if timing_code:
-            new_timing_sound_line, _ = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(timing_blocks, timing_subtitle_path, sentence_code, timing_code, config)
-            new_timing_data = manage_files.extract_sound_line_data(new_timing_sound_line)
-            start_time = new_timing_data["start_time"]
-            end_time = new_timing_data["end_time"]
-            overlapping_blocks = manage_files.get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(sentence_subtitle_path, start_time, end_time)
-            _, raw_sentence = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(overlapping_blocks, sentence_subtitle_path, sentence_code, timing_code, config)
-        # otherwise indexes match and can be used normally
-        else:
-            new_timing_sound_line, _ = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, None, None, config)
-            _, raw_sentence = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, sentence_code, timing_code, config)
-
-        new_sentence_line = constants.format_text(raw_sentence)
-        log_filename(f"new_sentence_line from blocks: {new_sentence_line}")
-
-        # pad sound line if applicable
-        pad_target_timings = (pad_start != 0 or pad_end != 0)
-        if pad_target_timings:
-            log_filename(f"padding timings for context line, pad start: {pad_start} | pad end: {pad_end}")
-            data = manage_files.extract_sound_line_data(new_timing_sound_line)
-            altered_data = get_altered_sound_data(new_timing_sound_line, pad_start, pad_end, config, data)
-            if not altered_data:
-                log_error(f"padded sound line is empty")
-                return None
-            new_timing_sound_line = altered_data["new_sound_line"]
-
-        log_filename(f"getting sound line data from5: {new_timing_sound_line}")
-        new_data = manage_files.extract_sound_line_data(new_timing_sound_line)
-        altered_data = manage_files.get_altered_sound_data(new_timing_sound_line, 0, 0, config, new_data)
-        new_timing_sound_line = manage_files.alter_sound_file_times(altered_data, new_timing_sound_line, config, alt_pressed)
-
-        # generate new translation line
-        if not alt_pressed:
-            translation_line, _ = manage_files.get_translation_line_and_subtitle_from_target_sound_line(new_timing_sound_line, config, new_data)
-            editor.note.fields[translation_idx] = str(translation_line or "")
-
-        # update sound field with new sound line
-        new_field = re.sub(r"\[sound:.*?]", new_timing_sound_line, sound_line)
-        editor.note.fields[sound_idx] = str(new_field)
-        editor.note.fields[sentence_idx] = str(new_sentence_line)
-
-        # apply and save the changes to the note
-        generate_and_update_fields(editor, None, False)
-
-        def play_after_reload():
-            if alt_pressed:
-                play_sound = editor.note.fields[translation_sound_idx]
-            else:
-                play_sound = editor.note.fields[sound_idx]
-            log_filename(f"playing sound: {play_sound}")
-            match = re.search(r"\[sound:(.*?)]", play_sound)
-            if match:
-                sound_filename = match.group(1)
-                QTimer.singleShot(0, lambda: play(sound_filename))
-
-        editor.loadNote()
-
-        autoplay = config["autoplay"]
-        if not autoplay:
-            QTimer.singleShot(0, play_after_reload)
-
-    finally:
-        editor._is_generating_fields = False
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int):
     # check for modifier keys
@@ -322,6 +323,9 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
 
     log_filename(f"getting altered data from1: {sound_line}")
     altered_data = manage_files.get_altered_sound_data(sound_line, -start_delta, end_delta, config, data)
+    if altered_data["new_sound_line"] == sound_line:
+        return
+
     log_filename(f"sending data to alter sound file times: {altered_data}")
     new_sound_line = manage_files.alter_sound_file_times(altered_data, sound_line, config, alt_pressed)
 
@@ -501,144 +505,134 @@ def should_generate_fields(fields, note_type_name, data, config):
 
 # uses current fields to generate all missing fields
 def generate_and_update_fields(editor, note, should_overwrite):
-    # lock function while running
-    if getattr(editor, "_is_generating_fields", False):
-        log_filename("generate_and_update_fields is already running, skipping duplicate call.")
-        return None, None
-    editor._is_generating_fields = True
-
-    try:
-        config = constants.extract_config_data()
-        if note:
-            note_type_name = note.model()["name"]
-            fields = note.note_type()["flds"]
-            sentence_idx = get_idx(f"{target_subtitle_line_string}", note_type_name, config, fields)
-            sound_idx = get_idx(f"{target_audio_string}", note_type_name, config, fields)
-            image_idx = get_idx(f"{image_string}", note_type_name, config, fields)
-            translation_idx = get_idx(f"{translation_subtitle_line_string}", note_type_name, config, fields)
-            translation_sound_idx = get_idx(f"{translation_audio_string}", note_type_name, config, fields)
-            sound_line = note.fields[sound_idx] if 0 <= sound_idx < len(note.fields) else ""
-            image_line = note.fields[image_idx] if 0 <= image_idx < len(note.fields) else ""
-            translation_line = note.fields[translation_idx] if 0 <= translation_idx < len(note.fields) else ""
-            current_note = note
-        else:
-            fields = get_fields_from_editor(editor)
-            if not fields:
-                log_error(f"fields is null, fields are not set in menu")
-                return None, None
-            sentence_idx = fields["sentence_idx"]
-            sound_idx = fields["sound_idx"]
-            image_idx = fields["image_idx"]
-            translation_idx = fields["translation_idx"]
-            translation_sound_idx = fields["translation_sound_idx"]
-            sound_line = fields["sound_line"]
-            image_line = fields["image_line"]
-            translation_line = fields["translation_line"]
-            current_note = editor.note
-            note_type_name = current_note.model()["name"]
-
-        modifiers = QApplication.keyboardModifiers()
-        overwrite = bool(modifiers & Qt.KeyboardModifier.ControlModifier) or should_overwrite
-        alt_pressed = bool(modifiers & Qt.KeyboardModifier.AltModifier)
-
-        data = manage_files.extract_sound_line_data(sound_line)
-        should_generate = should_generate_fields(fields, note_type_name, data, config)
-
-        fields_status = {
-            "sound_line": not should_generate["sound_line"],
-            "sentence_line": not should_generate["image_line"],
-            "image_line": not should_generate["image_line"],
-            "translation_line": not should_generate["translation_line"],
-            "translation_sound_line":not should_generate["translation_sound_line"],
-        }
-
-        # don't generate any fields if they are full
-        updated = False
-        if all(fields_status.values()) and not overwrite:
-            log_filename("All fields are filled, returning.")
-            current_sound_line = current_note.fields[translation_sound_idx if alt_pressed else sound_idx]
-            match = re.search(r"\[sound:(.*?)]", current_sound_line)
-            return (match.group(1), updated) if match else (None, updated)
-        for name, is_present in fields_status.items():
-            if not is_present:
-                log_filename(f"Missing: {name}")
-
-        # get all the new fields
-        new_result = get_generate_fields_sound_sentence_image_translation(
-            note_type_name, fields, overwrite, alt_pressed, data
-        )
-        log_filename(f"new result: {new_result}")
-
-        if not new_result:
-            log_error("generate_fields_sound_sentence_image failed to return valid values.")
+    config = constants.extract_config_data()
+    if note:
+        note_type_name = note.model()["name"]
+        fields = note.note_type()["flds"]
+        sentence_idx = get_idx(f"{target_subtitle_line_string}", note_type_name, config, fields)
+        sound_idx = get_idx(f"{target_audio_string}", note_type_name, config, fields)
+        image_idx = get_idx(f"{image_string}", note_type_name, config, fields)
+        translation_idx = get_idx(f"{translation_subtitle_line_string}", note_type_name, config, fields)
+        translation_sound_idx = get_idx(f"{translation_audio_string}", note_type_name, config, fields)
+        sound_line = note.fields[sound_idx] if 0 <= sound_idx < len(note.fields) else ""
+        image_line = note.fields[image_idx] if 0 <= image_idx < len(note.fields) else ""
+        translation_line = note.fields[translation_idx] if 0 <= translation_idx < len(note.fields) else ""
+        current_note = note
+    else:
+        fields = get_fields_from_editor(editor)
+        if not fields:
+            log_error(f"fields is null, fields are not set in menu")
             return None, None
-
-        new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line = new_result
-        print(f"after new sentence line: {new_sentence_line}")
-
-        def update_field(idx, new_val):
-            nonlocal updated
-            print(f"update_field called with idx={idx}, new_val={new_val!r}")
-            if new_val and current_note.fields[idx] != new_val:
-                print(f"Updating field {idx} from {current_note.fields[idx]!r} to {new_val!r}")
-                current_note.fields[idx] = new_val
-                updated = True
-            else:
-                print(f"No update needed for field {idx}")
-
+        sentence_idx = fields["sentence_idx"]
+        sound_idx = fields["sound_idx"]
+        image_idx = fields["image_idx"]
+        translation_idx = fields["translation_idx"]
+        translation_sound_idx = fields["translation_sound_idx"]
+        sound_line = fields["sound_line"]
+        image_line = fields["image_line"]
+        translation_line = fields["translation_line"]
+        current_note = editor.note
         note_type_name = current_note.model()["name"]
 
-        # only update fields if they are set in the menu and the current field is empty
-        if should_generate["sentence_line"] and new_sentence_line:
-            update_field(sentence_idx, new_sentence_line)
+    modifiers = QApplication.keyboardModifiers()
+    overwrite = bool(modifiers & Qt.KeyboardModifier.ControlModifier) or should_overwrite
+    alt_pressed = bool(modifiers & Qt.KeyboardModifier.AltModifier)
 
-        if should_generate["translation_line"] and ((not translation_line) or overwrite):
-            update_field(translation_idx, new_translation_line)
+    data = manage_files.extract_sound_line_data(sound_line)
+    should_generate = should_generate_fields(fields, note_type_name, data, config)
 
-        if should_generate["sound_line"]:
-            log_filename(f"getting altered data from3: {new_sound_line}")
-            data = manage_files.extract_sound_line_data(new_sound_line)
-            altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, config, data)
-            if new_sound_line != current_note.fields[sound_idx] and altered_data:
-                new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line, config, False)
-                print(f"setting field of obj {current_note} at index {sound_idx}: {current_note.fields[sound_idx]} to: {new_sound_line}")
-                current_note.fields[sound_idx] = new_sound_line
-                updated = True
+    fields_status = {
+        "sound_line": not should_generate["sound_line"],
+        "sentence_line": not should_generate["image_line"],
+        "image_line": not should_generate["image_line"],
+        "translation_line": not should_generate["translation_line"],
+        "translation_sound_line":not should_generate["translation_sound_line"],
+    }
 
-        if should_generate["translation_sound_line"] or overwrite:
-            print(f"note type name: {note_type_name}")
+    # don't generate any fields if they are full
+    updated = False
+    if all(fields_status.values()) and not overwrite:
+        log_filename("All fields are filled, returning.")
+        current_sound_line = current_note.fields[translation_sound_idx if alt_pressed else sound_idx]
+        match = re.search(r"\[sound:(.*?)]", current_sound_line)
+        return (match.group(1), updated) if match else (None, updated)
+    for name, is_present in fields_status.items():
+        if not is_present:
+            log_filename(f"Missing: {name}")
 
-            log_filename(f"getting sound data from translation: {new_translation_sound_line}")
-            data = manage_files.extract_sound_line_data(new_translation_sound_line)
-            altered_data = manage_files.get_altered_sound_data(new_translation_sound_line, 0, 0, config, data)
-            if new_translation_sound_line != current_note.fields[translation_sound_idx] and altered_data:
-                new_translation_sound_line = manage_files.alter_sound_file_times(altered_data, new_translation_sound_line, config, True)
-                current_note.fields[translation_sound_idx] = new_translation_sound_line
-                updated = True
+    # get all the new fields
+    new_result = get_generate_fields_sound_sentence_image_translation(
+        note_type_name, fields, overwrite, alt_pressed, data
+    )
+    log_filename(f"new result: {new_result}")
 
-        if should_generate["image_line"] or overwrite:
-            generated_img = manage_files.get_image_line_from_sound_line("", new_sound_line)
-            log_image(f"new image: {generated_img}")
-            if generated_img and isinstance(generated_img, str):
-                current_note.fields[image_idx] = generated_img
-                updated = True
+    if not new_result:
+        log_error("generate_fields_sound_sentence_image failed to return valid values.")
+        return None, None
+
+    new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line = new_result
+    print(f"after new sentence line: {new_sentence_line}")
+
+    def update_field(idx, new_val):
+        nonlocal updated
+        print(f"update_field called with idx={idx}, new_val={new_val!r}")
+        if new_val and current_note.fields[idx] != new_val:
+            print(f"Updating field {idx} from {current_note.fields[idx]!r} to {new_val!r}")
+            current_note.fields[idx] = new_val
+            updated = True
         else:
-            update_field(image_idx, new_image_line)
+            print(f"No update needed for field {idx}")
 
-        editor.loadNote()
+    note_type_name = current_note.model()["name"]
 
-        sound_field = translation_sound_idx if alt_pressed else sound_idx
-        sound_val = editor.note.fields[sound_field]
-        match = re.search(r"\[sound:(.*?)]", sound_val)
-        log_filename(f"playing sound2: {match.group(1)}" if match else "No sound match")
+    # only update fields if they are set in the menu and the current field is empty
+    if should_generate["sentence_line"] and new_sentence_line:
+        update_field(sentence_idx, new_sentence_line)
 
-        if match:
-            path = os.path.join(mw.col.media.dir(), match.group(1))
-            return (match.group(1), updated) if os.path.exists(path) else (None, updated)
-        return None, updated
+    if should_generate["translation_line"] and ((not translation_line) or overwrite):
+        update_field(translation_idx, new_translation_line)
 
-    finally:
-        editor._is_generating_fields = False
+    if should_generate["sound_line"]:
+        log_filename(f"getting altered data from3: {new_sound_line}")
+        data = manage_files.extract_sound_line_data(new_sound_line)
+        altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, config, data)
+        if new_sound_line != current_note.fields[sound_idx] and altered_data:
+            new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line, config, False)
+            print(f"setting field of obj {current_note} at index {sound_idx}: {current_note.fields[sound_idx]} to: {new_sound_line}")
+            current_note.fields[sound_idx] = new_sound_line
+            updated = True
+
+    if should_generate["translation_sound_line"] or overwrite:
+        print(f"note type name: {note_type_name}")
+
+        log_filename(f"getting sound data from translation: {new_translation_sound_line}")
+        data = manage_files.extract_sound_line_data(new_translation_sound_line)
+        altered_data = manage_files.get_altered_sound_data(new_translation_sound_line, 0, 0, config, data)
+        if new_translation_sound_line != current_note.fields[translation_sound_idx] and altered_data:
+            new_translation_sound_line = manage_files.alter_sound_file_times(altered_data, new_translation_sound_line, config, True)
+            current_note.fields[translation_sound_idx] = new_translation_sound_line
+            updated = True
+
+    if should_generate["image_line"] or overwrite:
+        generated_img = manage_files.get_image_line_from_sound_line("", new_sound_line)
+        log_image(f"new image: {generated_img}")
+        if generated_img and isinstance(generated_img, str):
+            current_note.fields[image_idx] = generated_img
+            updated = True
+    else:
+        update_field(image_idx, new_image_line)
+
+    editor.loadNote()
+
+    sound_field = translation_sound_idx if alt_pressed else sound_idx
+    sound_val = editor.note.fields[sound_field]
+    match = re.search(r"\[sound:(.*?)]", sound_val)
+    log_filename(f"playing sound2: {match.group(1)}" if match else "No sound match")
+
+    if match:
+        path = os.path.join(mw.col.media.dir(), match.group(1))
+        return (match.group(1), updated) if os.path.exists(path) else (None, updated)
+    return None, updated
 
 # uses current fields to generate and return update field data
 def get_generate_fields_sound_sentence_image_translation(note_type_name, fields, overwrite, alt_pressed, data):
@@ -682,7 +676,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
                 show_sentence = selected_text
             else:
                 show_sentence = sentence_line
-            aqt.utils.showInfo(f"Could not find `{show_sentence}` in any subtitle file in '{addon_source_folder}',\n or any embedded subtitle file with the code `{code}` or track `{track}`.")
+            aqt.utils.showInfo(f"No subtitles found with the track `{track}`, code `{code}`, and base name '{full_source_filename}'.")
             return None
 
         start_index = data["start_index"]
@@ -704,8 +698,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
 
         if not subtitle_path:
             log_error(f"subtitle path null2")
-            aqt.utils.showInfo(
-                f"Could not find `{sentence_line}` in any subtitle file in '{addon_source_folder}',\n, or any embedded subtitle file with the code `{code}` or track `{track}`.")
+            aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{os.path.basename(addon_source_folder)}',\n or any embedded subtitle file with the code `{code}` or track `{track}`.")
             return None
 
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block,subtitle_path,None,None,config)

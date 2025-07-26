@@ -21,14 +21,6 @@ log_database,
 
 
 
-
-
-
-
-
-
-
-
 # todo: implement 4 character sha hash to disambiguate files with the same name and extension
 # extracts all data in a sound line and returns it as a dict
 # performs only string operations
@@ -72,6 +64,8 @@ def extract_sound_line_data(sound_line):
 
         timestamp_filename = "`".join(meta_parts) + f".{sound_file_extension}"
         audio_collection_path = os.path.join(constants.get_collection_dir(), timestamp_filename)
+        audio_collection_path = audio_collection_path.replace('[', '((').replace(']', '))')
+
         m4b_image_filename = f"{filename_base}{source_file_extension}.jpg"
         image_filename = f"{filename_base}.{sound_file_extension}`{start_time}.jpg"
         image_collection_path = os.path.join(constants.get_collection_dir(), image_filename)
@@ -300,7 +294,6 @@ def get_image_line_from_sound_line(image_line, sound_line):
 
     _, ext = os.path.splitext(video_source_path)
     video_extension = ext.lower()
-
 
 
     # generate image and get its path
@@ -831,6 +824,7 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
             for fn, lang, trk, content_json in sorted(rows, key=lambda row: priority(row[1], row[2]))
             if priority(lang, trk) < 3
         ]
+        log_filename(f"next result sub candidates: {candidates}")
 
         for fn, lang, trk, content_json in candidates:
             log_filename(f"checking for next result: {fn}, {lang}, {trk}")
@@ -1356,8 +1350,10 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
 
     if new_end_ms <= new_start_ms:
         log_error(f"Invalid time range: {to_hmsms_format(new_start_ms)}-{to_hmsms_format(new_end_ms)}")
-        showInfo(f"Invalid time range: {to_hmsms_format(new_start_ms)}-{to_hmsms_format(new_end_ms)}\nCheck your padded timings.")
-        return {}
+        showInfo(f"Invalid time range: {to_hmsms_format(new_start_ms)}-{to_hmsms_format(new_end_ms)}.\nCheck your padded timings.")
+        return {
+            "new_sound_line": sound_line
+        }
 
     new_start_time = to_hmsms_format(new_start_ms)
     new_end_time = to_hmsms_format(new_end_ms)
@@ -1409,6 +1405,7 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
         log_error("sound line is empty")
         return None
 
+    print(f"altered_data: {altered_data}, old path: {altered_data['old_path']}")
     if os.path.exists(altered_data["old_path"]):
         send2trash(altered_data["old_path"])
 

@@ -1,7 +1,6 @@
 
 - [ ] read every sub folder in source folder, add folder it will ignore for easy management
 - [ ] allow removing from end start times and batch normalization even without source files
-- [ ] use showinfo when any button returns null
 - [ ] run bulk generation in background, have a stop button, display info
 - [ ] show database update progress, add update database button to menu
 - [ ] make it so you can add the language code manually for your own subtitles
@@ -15,6 +14,7 @@ low priority
 - [ ]  add/subtract 1db for each audio
 - [ ]  generate waveform
 - [ ]  add track to sound line so it doesnt have to search for the subtitle file
+- [ ]  figure out why database doesn't go to 0 when all files are removed
 
 ```
 Generate Fields:

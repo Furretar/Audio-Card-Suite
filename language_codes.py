@@ -163,7 +163,7 @@ class PyLangISO639_2:
         "enm": "English, Middle (1100–1500)",
         "epo": "Esperanto",
         "est": "Estonian",
-        "eus": "Basque",
+        "baq": "Basque",
         "ewe": "Ewe",
         "ewo": "Ewondo",
         "fan": "Fang",
@@ -494,6 +494,7 @@ class PyLangISO639_2:
     _name_to_code = {v.lower(): k for k, v in _code_to_name.items()}
 
     _T_to_B_map = {
+        "eus": "baq",
         "deu": "ger",
         "fra": "fre",
         "sqi": "alb",

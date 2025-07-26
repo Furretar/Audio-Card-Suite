@@ -71,18 +71,33 @@ def next_result_button(editor):
         block, subtitle_path = manage_files.get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, config, data)
 
         if not block or not subtitle_path:
-            log_error(f"didn't find another result")
-            return
+            log_error(f"didn't find another result for: {selected_text}")
+            return ""
 
         # generate new sound and sentence line using the block just retrieved
         next_sound_line, next_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
 
+        # # Check if we've wrapped around to the same result
+        # new_data = manage_files.extract_sound_line_data(next_sound_line)
+        # if new_data:
+        #     start_index = new_data["start_index"]
+        #     end_index = new_data["end_index"]
+        #     full_source_filename = new_data["full_source_filename"]
+        #
+        #     old_data = manage_files.extract_sound_line_data(sound_line)
+        #     if old_data:
+        #         old_start_index = old_data["start_index"]
+        #         old_end_index = old_data["end_index"]
+        #         old_full_source_filename = old_data["full_source_filename"]
+        #
+        #         if full_source_filename ==:
+        #             log_filename("Next result is the same as current result (wrapped around), returning without changes")
+        #             return ""
+
         # generate sound file using next sound line
         log_filename(f"calling extract sound line data: {next_sound_line}")
-        new_data = manage_files.extract_sound_line_data(next_sound_line)
         altered_data = manage_files.get_altered_sound_data(next_sound_line, 0, 0, config, new_data)
         next_sound_line = manage_files.alter_sound_file_times(altered_data, next_sound_line, config, False)
-
 
         if next_sound_line:
             # add tag and remove any previous tags
@@ -328,7 +343,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
 
 
 
-def context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path, config):
+def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path, config):
     log_filename(f"received subtitle path: {subtitle_path}")
     if sentence_line == new_sentence_line:
         log_error(f"sentence line and new sentence line are the same: {sentence_line}")
@@ -697,7 +712,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
 
     # always call context_aware_sentence_sound_line_generate
     log_filename(f"calling context_aware_sentence_sound_line_generate with sentence_line: {sentence_line}" + (f", new sentence line: {new_sentence_line}" if selected_text else ""))
-    new_sound_line, new_sentence_line = context_aware_sentence_sound_line_generate(sentence_line, new_sentence_line,new_sound_line, subtitle_path,config)
+    new_sound_line, new_sentence_line = context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path, config)
 
     if new_sentence_line:
         new_sentence_line = constants.format_text(new_sentence_line)

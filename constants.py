@@ -43,6 +43,8 @@ video_extensions = [
     ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".m4b"
 ]
 
+subtitle_extensions = {".srt", ".vtt", ".ass", ".ssa"}
+
 BACKTICK_PATTERN = re.compile(
     r'^\[sound:'
     r'(?P<filename_base>[^`.]+)'

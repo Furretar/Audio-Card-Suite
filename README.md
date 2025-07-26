@@ -5,6 +5,8 @@
 - [ ] show database update progress, add update database button to menu
 - [ ] make it so you can add the language code manually for your own subtitles
 - [ ] make ffmpeg commands run in the background, try to fix audio cutting off when spamming the button
+- [ ] figure out why some files arent deleted from collection
+- [ ]  figure out why database doesn't go to 0 when all files are removed
 
 
 low priority
@@ -14,7 +16,6 @@ low priority
 - [ ]  add/subtract 1db for each audio
 - [ ]  generate waveform
 - [ ]  add track to sound line so it doesnt have to search for the subtitle file
-- [ ]  figure out why database doesn't go to 0 when all files are removed
 
 ```
 Generate Fields:

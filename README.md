@@ -7,6 +7,7 @@
 - [ ] figure out why some files arent deleted from collection
 - [ ]  figure out why database doesn't go to 0 when all files are removed
 - [ ] add next and previous lines without a source file, for just text sentence cards
+- [ ] crashes when adding new note type
 
 
 

@@ -609,8 +609,6 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
 
     total_blocks = len(blocks)
 
-
-
     log_filename(f"start index: {start_index}, end index: {end_index}, total blocks: {total_blocks}")
 
     if total_blocks == 0:
@@ -655,13 +653,6 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
 
     target_language_code = config["target_language_code"]
     target_audio_track = str(config["target_audio_track"])
-    target_subtitle_track = str(config["target_subtitle_track"])
-    translation_subtitle_track = str(config["translation_subtitle_track"])
-    translation_language_code = config["translation_language_code"]
-    target_timing_code = config["target_timing_code"]
-    translation_timing_code = config["translation_timing_code"]
-    target_timing_track = str(config["target_timing_track"])
-    translation_timing_track = str(config["translation_timing_track"])
 
     sentence_line = sentence_line or ""
     normalized_sentence = normalize_text(sentence_line)

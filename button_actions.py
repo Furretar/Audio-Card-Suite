@@ -520,8 +520,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
         translation_idx = get_idx(f"{translation_subtitle_line_string}", note_type_name, config, fields)
         translation_sound_idx = get_idx(f"{translation_audio_string}", note_type_name, config, fields)
         sound_line = note.fields[sound_idx] if 0 <= sound_idx < len(note.fields) else ""
-        image_line = note.fields[image_idx] if 0 <= image_idx < len(note.fields) else ""
-        translation_line = note.fields[translation_idx] if 0 <= translation_idx < len(note.fields) else ""
         current_note = note
     else:
         fields = get_fields_from_editor(editor)
@@ -534,8 +532,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
         translation_idx = fields["translation_idx"]
         translation_sound_idx = fields["translation_sound_idx"]
         sound_line = fields["sound_line"]
-        image_line = fields["image_line"]
-        translation_line = fields["translation_line"]
         current_note = editor.note
         note_type_name = current_note.model()["name"]
 
@@ -580,7 +576,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
 
     def update_field(idx, new_val):
         nonlocal updated
-        print(f"update_field called with idx={idx}, new_val={new_val!r}")
         if new_val and current_note.fields[idx] != new_val:
             print(f"Updating field {idx} from {current_note.fields[idx]!r} to {new_val!r}")
             current_note.fields[idx] = new_val

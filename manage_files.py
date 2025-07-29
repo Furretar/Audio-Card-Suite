@@ -514,24 +514,30 @@ def get_source_path_from_full_filename(full_source_filename) -> str:
     basename_no_ext = os.path.splitext(full_source_filename)[0]
     possible_bases = [basename_no_ext, basename_no_ext.replace("_", " ")]
 
-    # If input has a valid audio/video extension, check it directly first
+    folder = constants.addon_source_folder
+
+    # If input has a valid audio/video extension, check it directly first (in base folder)
     ext = os.path.splitext(full_source_filename)[1].lower()
     if ext in all_exts:
-        path = os.path.join(constants.addon_source_folder, full_source_filename)
+        path = os.path.join(folder, full_source_filename)
         log_image(f"searching path for video/audio: {path}")
         log_command(f"now checking: {path}")
         if os.path.exists(path):
             return path
 
-    # Try all possible bases + audio/video extensions
-    for base in possible_bases:
-        for ext in all_exts:
-            candidate = base + ext
-            path = os.path.join(constants.addon_source_folder, candidate)
-            log_image(f"searching path for video/audio: {path}")
-            log_command(f"now checking: {path}")
-            if os.path.exists(path):
-                return path
+    # Walk recursively through all subfolders except 'ignore'
+    for root, dirs, files in os.walk(folder):
+        if 'ignore' in root.split(os.sep):
+            continue
+        for base in possible_bases:
+            for ext in all_exts:
+                candidate = base + ext
+                if candidate in files:
+                    full_path = os.path.join(root, candidate)
+                    log_image(f"searching path for video/audio: {full_path}")
+                    log_command(f"now checking: {full_path}")
+                    if os.path.exists(full_path):
+                        return full_path
 
     log_error(f"No source file found for base name: {full_source_filename}")
     return ""
@@ -726,7 +732,6 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
     if (not blocks) or (len(blocks) == 0):
         log_error(f"no blocks")
         return None, None
-
 
     if not (isinstance(blocks, (list, tuple)) and isinstance(blocks[0], (list, tuple))):
         blocks = [blocks]
@@ -1179,6 +1184,10 @@ def set_audio_start_time_ms_in_db(filename, delay_ms, conn):
 
 # todo deprecate
 def get_audio_start_time_ms(source_file_path: str) -> int:
+    if not os.path.exists(source_file_path):
+        log_error(f"[skip] file missing: {source_file_path}")
+        return 0
+
     _, ffprobe_path = constants.get_ffmpeg_exe_path()
     cmd = [
         ffprobe_path, "-v", "error",

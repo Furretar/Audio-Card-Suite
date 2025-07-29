@@ -51,9 +51,13 @@ def run_ffprobe(file_path):
         "-show_streams",
         file_path
     ]
-    result = constants.silent_run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
+    result = constants.silent_run(cmd, capture_output=True, text=True, errors="replace")
+
+    if result is None or result.returncode != 0:
+        err = result.stderr.strip() if result and result.stderr else "(no error output)"
+        log_error(f"[error] ffprobe failed on {file_path}: {err}")
         return None
+
     return json.loads(result.stdout)
 
 
@@ -198,18 +202,27 @@ def update_database():
     folder = os.path.join(constants.addon_dir, constants.addon_source_folder)
     audio_exts = constants.audio_extensions
     video_exts = constants.video_extensions
+    media_exts = audio_exts + video_exts
 
     if not os.path.exists(folder):
         os.makedirs(folder)
 
-    current_files = set(os.listdir(folder))
+    # Recursively get all media files, excluding any folder that contains 'ignore' in its path parts
+    current_media_fullpaths = {
+        os.path.join(root, f)
+        for root, dirs, files in os.walk(folder)
+        if 'ignore' not in root.lower().split(os.sep)
+        for f in files
+        if os.path.splitext(f)[1].lower() in media_exts
+    }
 
-    current_media = {f for f in current_files if os.path.splitext(f)[1].lower() in audio_exts + video_exts}
+    # Convert to just basename + extension for database usage
+    current_media = {os.path.basename(p) for p in current_media_fullpaths}
 
     cursor = conn.execute('SELECT filename, language, track FROM subtitles')
     indexed_subs = {f"{r[0]}`track_{r[2]}`{r[1]}.srt" for r in cursor}
 
-    # Remove subtitles with no media file or missing subtitle file
+    # Remove subtitles with no media file
     for f in sorted(indexed_subs):
         vid, tpart, lang_s = f.split('`')
         track = tpart[len('track_'):]
@@ -222,20 +235,17 @@ def update_database():
                          (vid, lang, track))
             log_database(f"Removed subtitle: file={vid}, track={track}, lang={lang}")
 
-
-    # add user placed subtitles
-    current_media = {
-        f for f in os.listdir(folder)
-        if os.path.splitext(f)[1].lower() in audio_exts + video_exts
-    }
-    media_basenames = {os.path.splitext(f)[0] for f in current_media}
-
-    # Support multiple subtitle formats
+    # Add user placed subtitles (same logic, just base filenames)
     subtitle_extensions = constants.subtitle_extensions
     subtitles_in_folder = {
-        f for f in os.listdir(folder)
+        f for root, dirs, files in os.walk(folder)
+        if 'ignore' not in root.lower().split(os.sep)
+        for f in files
         if os.path.splitext(f)[1].lower() in subtitle_extensions
     }
+
+    # Get current media basenames (without extension)
+    media_basenames = {os.path.splitext(f)[0] for f in current_media}
 
     cursor = conn.execute(
         "SELECT DISTINCT filename FROM subtitles WHERE track = '-1'"
@@ -245,10 +255,8 @@ def update_database():
 
     log_database(f"current subtitles in folder: {subtitles_in_folder}")
     for subtitle_file in subtitles_in_folder:
-        # Remove the subtitle extension (.srt, .ass, etc.)
         name_no_ext = os.path.splitext(subtitle_file)[0]
 
-        # Extract language code after last ` or .
         index_backtick = name_no_ext.rfind('`')
         index_dot = name_no_ext.rfind('.')
         separator_index = max(index_backtick, index_dot)
@@ -260,16 +268,14 @@ def update_database():
             base_name = name_no_ext
             lang_code = "und"
 
-        print(f"base_name: {base_name}, indexed_subtitle_basenames: {indexed_subtitle_basenames}")
         if base_name not in indexed_subtitle_basenames:
             if base_name in media_basenames:
                 subtitle_path = os.path.join(folder, subtitle_file)
 
+                # There might be multiple media files with this base_name but different extensions
                 for media_file in (m for m in current_media if os.path.splitext(m)[0] == base_name):
-
                     try:
                         parsed = get_srt_converted_subtitle_from_path(subtitle_path)
-
                         if not parsed:
                             log_database(f"No valid subtitle content found in {subtitle_path}")
                             continue
@@ -278,18 +284,16 @@ def update_database():
                             'INSERT INTO subtitles (filename, language, track, content) VALUES (?, ?, ?, ?)',
                             (media_file, lang_code, "-1", json.dumps(parsed, ensure_ascii=False))
                         )
-                        log_database(
-                            f"Added subtitle content for {subtitle_path} linked to media {media_file} ({len(parsed)} entries)")
-
+                        log_database(f"Added subtitle content for {subtitle_path} linked to media {media_file} ({len(parsed)} entries)")
                     except Exception as e:
                         log_database(f"Failed to add subtitle content from {subtitle_path}: {e}")
             else:
                 log_database(f"no media basename found for {base_name}")
 
-    # extract subtitles from all source files
+    # Extract subtitles from all source files
     extract_all_subtitle_tracks_and_update_db(conn)
 
-    # remove missing media
+    # Remove missing media entries
     cursor = conn.execute('SELECT DISTINCT filename FROM media_tracks')
     indexed_media = {r[0] for r in cursor}
 
@@ -297,7 +301,6 @@ def update_database():
         conn.execute('DELETE FROM media_tracks WHERE filename=?', (mf,))
         conn.execute('DELETE FROM media_audio_start_times WHERE filename=?', (mf,))
         log_database(f"Removed media entries for: {mf}")
-
 
     conn.commit()
     conn.execute("VACUUM;")
@@ -327,8 +330,6 @@ def extract_all_subtitle_tracks_and_update_db(conn):
         except Exception as e:
             log_error(f"ffprobe JSON parse error for {path}: {e}")
             return None
-
-
 
     def parse_srt_blocks(srt_text):
         blocks = []
@@ -396,13 +397,20 @@ def extract_all_subtitle_tracks_and_update_db(conn):
             return filtered_texts
         finally:
             shutil.rmtree(temp_dir)
+
     current_media = {
-        f for f in os.listdir(folder)
+        os.path.relpath(os.path.join(root, f), folder)
+        for root, dirs, files in os.walk(folder)
+        if 'ignore' not in root.split(os.sep)
+        for f in files
         if os.path.splitext(f)[1].lower() in media_exts
     }
+
+    # Fetch all filenames with any subtitle entry, use basenames only
     cursor = conn.execute('SELECT DISTINCT filename FROM subtitles')
-    indexed = {r[0] for r in cursor}
-    media_to_process = sorted(n for n in current_media if n not in indexed)
+    indexed_basenames = {os.path.basename(r[0]) for r in cursor}
+
+    media_to_process = sorted(m for m in current_media if os.path.basename(m) not in indexed_basenames)
 
     for media_file in media_to_process:
         log_database(f"processing file: {media_file}")
@@ -410,31 +418,35 @@ def extract_all_subtitle_tracks_and_update_db(conn):
         info = run_ffprobe(path)
         if not info:
             continue
-        # only add text based subtitles, no pgs or sup
+
         streams = [
             s for s in info.get("streams", [])
-            if s.get("codec_type") == "subtitle" and s.get("codec_name") in ("subrip", "ass", "srt", "ssa", "mov_text",
-                                                                             "webvtt")
+            if s.get("codec_type") == "subtitle" and s.get("codec_name") in ("subrip", "ass", "srt", "ssa", "mov_text", "webvtt")
         ]
 
         if not streams:
             log_database(f"No subtitle streams in {media_file}, skipping")
             continue
+
         log_database(f"Found {len(streams)} subtitle streams in {media_file}")
         all_texts = extract_all_subs_single(path, streams)
         if all_texts is None:
             continue
+
         for idx, (stream, text) in enumerate(zip(streams, all_texts), 1):
             track = idx
             lang = stream.get("tags", {}).get("language", "und")
             codec = stream.get("codec_name")
             log_database(f"Extracting track={track}, lang={lang}, codec={codec}")
+
             if codec not in ("subrip", "ass", "srt", "ssa"):
                 log_database(f"skip unsupported codec {codec}")
                 continue
-            if check_already_indexed(conn, media_file, track, lang):
+
+            if check_already_indexed(conn, os.path.basename(media_file), track, lang):
                 log_database(f"skip already indexed track={track}, lang={lang}")
                 continue
+
             blocks = text.strip().split("\n\n")
             parsed = []
             for blk in blocks:
@@ -450,11 +462,12 @@ def extract_all_subtitle_tracks_and_update_db(conn):
                 if not content:
                     continue
                 parsed.append([lines[0], start, end, content])
+
             conn.executemany(
                 'INSERT INTO subtitles (filename, language, track, content) VALUES (?,?,?,?)',
-                [(media_file, lang, str(track), json.dumps(parsed, ensure_ascii=False))]
+                [(os.path.basename(media_file), lang, str(track), json.dumps(parsed, ensure_ascii=False))]
             )
-            log_database(f"Inserted {len(parsed)} blocks for {media_file}, track={track}, lang={lang}")
+            log_database(f"Inserted {len(parsed)} blocks for {os.path.basename(media_file)}, track={track}, lang={lang}")
             conn.commit()
     conn.commit()
     return conn

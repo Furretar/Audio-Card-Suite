@@ -259,6 +259,9 @@ def silent_run(*args, **kwargs):
     log_command(f"silent_run called with: {args[0]}")
     if sys.platform.startswith("win"):
         kwargs.setdefault("creationflags", subprocess.CREATE_NO_WINDOW)
+    kwargs.setdefault("capture_output", True)
+    kwargs.setdefault("encoding", "utf-8")
+    kwargs.setdefault("errors", "replace")
     return subprocess.run(*args, **kwargs)
 
 def timed_call(func, *args, **kwargs):

@@ -8,6 +8,7 @@
 - [ ] add next and previous lines without a source file, for just text sentence cards
 - [ ] crashes when adding new note type
 - [ ] start search from last found subtitle file
+- [ ] load bar for bulk generation, make run in background silently
 
 
 

@@ -199,7 +199,11 @@ def update_database():
     audio_exts = constants.audio_extensions
     video_exts = constants.video_extensions
 
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
     current_files = set(os.listdir(folder))
+
     current_media = {f for f in current_files if os.path.splitext(f)[1].lower() in audio_exts + video_exts}
 
     cursor = conn.execute('SELECT filename, language, track FROM subtitles')

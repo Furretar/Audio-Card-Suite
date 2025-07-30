@@ -190,6 +190,8 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     timing_tracks_enabled = config["timing_tracks_enabled"]
     if timing_tracks_enabled:
         timing_code = data["timing_lang_code"]
+    else:
+        timing_code = code
     full_source_filename = data["full_source_filename"]
 
     # keep start and end times on opposite edges if user already changed them
@@ -206,49 +208,32 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     subtitle_database = manage_database.get_database()
 
     # get blocks for sound line timings
-    if timing_code:
-        timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database)
-    else:
-        timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
+    timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database)
 
     log_filename(f"start time: {start_time}, end time: {end_time}")
     log_filename(f"getting timing blocks, start_index {start_index}, add to start: {add_to_start}, end_index {end_index}, add to end: {add_to_end}, timing subtitle path: {timing_subtitle_path}")
     timing_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, timing_subtitle_path, start_time, end_time)
+    new_timing_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(timing_blocks, timing_subtitle_path, code, timing_code, config)
 
     if not timing_blocks:
         log_error(f"no timing blocks returned")
         return ""
     log_filename(f"timing blocks: {timing_blocks}")
 
+    new_timing_data = manage_files.extract_sound_line_data(new_timing_sound_line)
+    start_time = new_timing_data["start_time"]
+    end_time = new_timing_data["end_time"]
 
-    # get blocks for sentence line
-    sentence_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
-    log_filename(f"sentence_subtitle_path: {sentence_subtitle_path}")
-    sentence_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, sentence_subtitle_path, start_time, end_time)
-    if not sentence_blocks:
-        log_error(f"no sentence blocks returned")
-        return ""
+    # get blocks for sentence line if applicable
+    if timing_code != code:
+        sentence_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
+        log_filename(f"sentence_subtitle_path: {sentence_subtitle_path}")
+        sentence_blocks = manage_files.get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(sentence_subtitle_path, start_time, end_time)
+        if not sentence_blocks:
+            log_error(f"no sentence blocks returned")
+            return ""
+        _, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, timing_subtitle_path, code, timing_code, config)
 
-
-    # generate sound and sentence lines from blocks
-    sentence_data = extract_subtitle_path_data(sentence_subtitle_path)
-    sentence_code = sentence_data["code"]
-
-    # get blocks from sound line times instead of indexes when using a timing subtitle file
-    if timing_code:
-        new_timing_sound_line, _ = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(timing_blocks, timing_subtitle_path, sentence_code, timing_code, config)
-        new_timing_data = manage_files.extract_sound_line_data(new_timing_sound_line)
-        start_time = new_timing_data["start_time"]
-        end_time = new_timing_data["end_time"]
-        overlapping_blocks = manage_files.get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(sentence_subtitle_path, start_time, end_time)
-        _, raw_sentence = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(overlapping_blocks, sentence_subtitle_path, sentence_code, timing_code, config)
-    # otherwise indexes match and can be used normally
-    else:
-        new_timing_sound_line, _ = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, None, None, config)
-        print(f"new timing sound line: {new_timing_sound_line}")
-        _, raw_sentence = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, sentence_subtitle_path, sentence_code, timing_code, config)
-
-    new_sentence_line = constants.format_text(raw_sentence)
     log_filename(f"new_sentence_line from blocks: {new_sentence_line}")
 
     # pad sound line if applicable
@@ -351,8 +336,6 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
     autoplay = config["autoplay"]
     if not autoplay:
         QTimer.singleShot(100, lambda: on_note_loaded(editor, True))
-
-
 
 def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path, config):
     log_filename(f"received subtitle path: {subtitle_path}")
@@ -625,6 +608,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
     else:
         update_field(image_idx, new_image_line)
 
+    current_note.flush()
     # Only call editor.loadNote() if editor is not None
     if editor is not None:
         editor.loadNote()
@@ -644,7 +628,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
         path = os.path.join(mw.col.media.dir(), match.group(1))
         return (match.group(1), updated) if os.path.exists(path) else (None, updated)
     return None, updated
-
 
 # uses current fields to generate and return update field data
 def get_generate_fields_sound_sentence_image_translation(note_type_name, fields, overwrite, alt_pressed, data):
@@ -738,8 +721,8 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
     if not data:
         log_error(f"data is none")
         return None
-    # if using a timing track, generate sentence line from sound line so it matches
 
+    # if using a timing track, generate sentence line from sound line so it matches
     if timing_tracks_enabled:
         timing_code = data["timing_lang_code"]
         if timing_code:

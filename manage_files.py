@@ -594,6 +594,8 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
     if not code:
         code = "und"
 
+
+
     log_filename(f"searching for blocks with filename: {filename}, code: {code}, track: {track}")
     cursor.execute(
         "SELECT content FROM subtitles WHERE filename = ? AND track = ? AND language = ? ORDER BY rowid",
@@ -634,7 +636,11 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
         return []
 
     usable_blocks = []
-    print(f"starting block at index: {start_index - 1}, {blocks[start_index - 1]}")
+    if 0 <= start_index - 1 < len(blocks):
+        print(f"starting block at index: {start_index - 1}, {blocks[start_index - 1]}")
+    else:
+        print(f"[warning] Invalid access attempt: start_index={start_index}, total_blocks={len(blocks)}")
+        return []
     for i, raw_block in enumerate(blocks[start_index - 1:end_index]):
         if isinstance(raw_block, str):
             parsed = constants.format_subtitle_block(raw_block)

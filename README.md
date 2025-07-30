@@ -1,5 +1,4 @@
 
-- [ ] read every sub folder in source folder, add folder it will ignore for easy management
 - [ ] allow removing from end start times and batch normalization even without source files
 - [ ] run bulk generation in background, have a stop button, display info
 - [ ] show database update progress, add update database button to menu
@@ -8,6 +7,8 @@
 - [ ]  figure out why database doesn't go to 0 when all files are removed
 - [ ] add next and previous lines without a source file, for just text sentence cards
 - [ ] crashes when adding new note type
+- [ ] start search from last found subtitle file
+- [ ] load bar for bulk generation, make run in background silently
 
 
 

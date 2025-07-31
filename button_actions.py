@@ -190,7 +190,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     timing_code = data["timing_lang_code"]
     if not timing_code:
         timing_code = code
-        
+
     print(f"timing code: {timing_code}")
     full_source_filename = data["full_source_filename"]
 
@@ -210,7 +210,6 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     # get blocks for sound line timings
     timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database)
 
-    log_filename(f"start time: {start_time}, end time: {end_time}")
     log_filename(f"getting timing blocks, start_index {start_index}, add to start: {add_to_start}, end_index {end_index}, add to end: {add_to_end}, timing subtitle path: {timing_subtitle_path}")
     timing_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, timing_subtitle_path, start_time, end_time)
     new_timing_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(timing_blocks, timing_subtitle_path, code, timing_code, config)
@@ -306,7 +305,6 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
         sentence_line = fields["sentence_line"]
 
 
-    log_filename(f"calling extract sound line data: {sound_line}")
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
         log_error(f"no valid sound line detected")
@@ -338,7 +336,6 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
         QTimer.singleShot(100, lambda: on_note_loaded(editor, True))
 
 def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path, config):
-    log_filename(f"received subtitle path: {subtitle_path}")
     if sentence_line == new_sentence_line:
         log_error(f"sentence line and new sentence line are the same: {sentence_line}")
         return sound_line, sentence_line
@@ -364,7 +361,6 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
         if not subtitle_path:
             break
 
-        log_filename(f"calling extract sound line data: {new_sound_line}")
         data = manage_files.extract_sound_line_data(new_sound_line)
         if not data:
             break
@@ -402,7 +398,6 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
 
             else:
                 before_removed = ""
-        log_filename(f"calling extract sound line data: {new_sound_line}")
         data = manage_files.extract_sound_line_data(new_sound_line)
         if not data:
             break
@@ -545,9 +540,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
         current_sound_line = current_note.fields[translation_sound_idx if alt_pressed else sound_idx]
         match = re.search(r"\[sound:(.*?)]", current_sound_line)
         return (match.group(1), updated) if match else (None, updated)
-    for name, is_present in fields_status.items():
-        if not is_present:
-            log_filename(f"Missing: {name}")
 
     new_result = get_generate_fields_sound_sentence_image_translation(
         note_type_name, fields, overwrite, alt_pressed, data
@@ -632,8 +624,9 @@ def generate_and_update_fields(editor, note, should_overwrite):
 # uses current fields to generate and return update field data
 def get_generate_fields_sound_sentence_image_translation(note_type_name, fields, overwrite, alt_pressed, data):
     # checks each field, generating and updating if needed. Returns each field, empty if not needed
+    log_error(f"\n\n\n\n-------------------------------------------------------------------------------------------------------------------------------\n\n\n\n")
     sentence_line = fields["sentence_line"]
-    sound_line = fields["sound_line"]
+    sound_line = ""
     image_line = fields["image_line"]
     selected_text = fields["selected_text"]
 
@@ -643,7 +636,9 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
 
     if overwrite:
         if not alt_pressed:
+            log_filename(f"overwriting sound line")
             sound_line = ""
+            data = None
 
     config = constants.extract_config_data()
     log_filename(f"calling extract sound line data: {sound_line}")

@@ -13,7 +13,7 @@ import html
 DEBUG_FILENAME = True
 DEBUG_COMMAND = False
 DEBUG_ERROR = True
-DEBUG_IMAGE = True
+DEBUG_IMAGE = False
 DEBUG_DATABASE = True
 
 # integers

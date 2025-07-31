@@ -71,12 +71,12 @@ def extract_sound_line_data(sound_line):
         image_collection_path = os.path.join(constants.get_collection_dir(), image_filename)
         m4b_image_collection_path = os.path.join(constants.get_collection_dir(), m4b_image_filename)
 
-        log_filename(
-            f"extracting sound_line_data from: {sound_line}\n"
-            f"format detected: {format_type}\n"
-            f"full_source_filename: {full_source_filename}\n"
-            f"timestamp filename: {timestamp_filename}\n"
-        )
+        # log_filename(
+        #     f"extracting sound_line_data from: {sound_line}\n"
+        #     f"format detected: {format_type}\n"
+        #     f"full_source_filename: {full_source_filename}\n"
+        #     f"timestamp filename: {timestamp_filename}\n"
+        # )
 
         log_image(f"image collection path: {image_collection_path}")
 
@@ -507,7 +507,6 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
 
 
 def get_source_path_from_full_filename(full_source_filename) -> str:
-    log_filename(f"received filename: {full_source_filename}")
     all_exts = constants.audio_extensions + constants.video_extensions
 
     basename_no_ext = os.path.splitext(full_source_filename)[0]

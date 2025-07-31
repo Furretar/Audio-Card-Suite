@@ -187,11 +187,11 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     translation_sound_idx = fields["translation_sound_idx"]
     start_index = data["start_index"]
     end_index = data["end_index"]
-    timing_tracks_enabled = config["timing_tracks_enabled"]
-    if timing_tracks_enabled:
-        timing_code = data["timing_lang_code"]
-    else:
+    timing_code = data["timing_lang_code"]
+    if not timing_code:
         timing_code = code
+        
+    print(f"timing code: {timing_code}")
     full_source_filename = data["full_source_filename"]
 
     # keep start and end times on opposite edges if user already changed them

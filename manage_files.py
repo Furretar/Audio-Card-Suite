@@ -149,7 +149,6 @@ def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> s
     mapped_fields = config["mapped_fields"][note_type_name]
     for field_key, mapped_label in mapped_fields.items():
         if mapped_label == label:
-            print(f"returning field key {field_key}, from label: {mapped_label}")
             return field_key
     if label == "Target Subtitle Line":
         log_error(f"could not find Target Subtitle Line in note_type {note_type_name}, mapped field: {mapped_fields}, mapped fields items {mapped_fields.items()}")

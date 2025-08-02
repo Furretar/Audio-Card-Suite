@@ -389,9 +389,6 @@ class AudioToolsDialog(QDialog):
         # Subtitles group with tabs
         subsGroup = QGroupBox("Source Tracks")
         subsLayout = QVBoxLayout()
-        info_label = QLabel("The currently selected tab will have its settings preferred. Tracks will be used if the Language Code cannot be found.")
-        info_label.setWordWrap(True)
-        subsLayout.addWidget(info_label)
         self.timingTracksCheckbox = QCheckBox("Timing Tracks")
         self.timingTracksCheckbox.setChecked(self.settings.get("timing_tracks_enabled", False))
         self.timingTracksCheckbox.stateChanged.connect(self.on_timing_checkbox_changed)
@@ -399,11 +396,29 @@ class AudioToolsDialog(QDialog):
         subsLayout.addWidget(self.timingTracksCheckbox)
         self.tabs = QTabWidget()
 
+        from PyQt6.QtWidgets import QSizePolicy
+
+        # language codes tab
         langCodesTab = QWidget()
         langGrid = QGridLayout()
         self.langCodeCombos = []
         self.langCodeEdits = []
         self.langCodeLabels = []
+
+        codes_info_label = QLabel("Tracks will be used as a fallback if the Language Code cannot be found.")
+        codes_info_label.setWordWrap(True)
+        codes_label = QLabel()
+        codes_label.setText(
+            'If your language is not listed, enter its <a href="https://en.wikipedia.org/wiki/List_of_ISO_639-2_codes">ISO 639-2 language code</a> in the text box.'
+        )
+        codes_label.setOpenExternalLinks(True)
+        codes_label.setWordWrap(True)
+
+        codes_info_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        codes_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+        langGrid.addWidget(codes_info_label, 0, 0, 1, 3)
+        langGrid.addWidget(codes_label, 1, 0, 1, 3)
 
         labels = [
             "Target Language Code:",
@@ -427,24 +442,24 @@ class AudioToolsDialog(QDialog):
         ]
 
         hide_rows_start = 2
+        start_row = 2
 
         for i, label_text in enumerate(labels):
+            row = start_row + i
             label = QLabel(label_text)
             self.langCodeLabels.append(label)
-            langGrid.addWidget(label, i + 1, 0)
+            langGrid.addWidget(label, row, 0)
 
             combo = QComboBox()
             combo.addItems([
                 "None", "Japanese", "Chinese", "English", "Korean", "Cantonese", "German", "Spanish"
             ])
-
             saved_combo_value = self.settings.get(combo_keys[i], "None")
-            print(f"setting language code: {saved_combo_value}")
             if combo.findText(saved_combo_value) == -1:
                 combo.addItem(saved_combo_value)
             combo.setCurrentText(saved_combo_value)
             self.langCodeCombos.append(combo)
-            langGrid.addWidget(combo, i + 1, 1)
+            langGrid.addWidget(combo, row, 1)
 
             edit = QLineEdit()
             edit.setFixedWidth(35)
@@ -453,7 +468,7 @@ class AudioToolsDialog(QDialog):
             saved_edit_value = self.settings.get(edit_keys[i], "")
             edit.setText(saved_edit_value)
             self.langCodeEdits.append(edit)
-            langGrid.addWidget(edit, i + 1, 2)
+            langGrid.addWidget(edit, row, 2)
 
             combo.currentTextChanged.connect(lambda text, idx=i: self.on_lang_code_changed(idx, str(text)))
 
@@ -468,6 +483,12 @@ class AudioToolsDialog(QDialog):
         # Tracks Tab
         tracksTab = QWidget()
         tracksGrid = QGridLayout()
+        tracks_info_label = QLabel("Language Codes will be used as a fallback if the Track does not exist.")
+
+        tracks_info_label.setWordWrap(True)
+        tracksGrid.addWidget(tracks_info_label, 0, 0, 1, 2)
+
+
 
         track_keys = [
             "target_audio_track",
@@ -490,16 +511,14 @@ class AudioToolsDialog(QDialog):
         self.trackSpinners = []
         self.trackLabels = []
 
-        for i, (label_text, key) in enumerate(zip(track_labels, track_keys)):
+        for i, (label_text, key) in enumerate(zip(track_labels, track_keys), start=1):
             label = QLabel(label_text + ":")
             spinner = QSpinBox()
             spinner.setMinimum(0)
             spinner.setMaximum(1000)
             spinner.setValue(self.settings.get(key, 0))
-
             tracksGrid.addWidget(label, i, 0)
             tracksGrid.addWidget(spinner, i, 1)
-
             self.trackLabels.append(label)
             self.trackSpinners.append(spinner)
 
@@ -517,15 +536,7 @@ class AudioToolsDialog(QDialog):
 
         subsLayout.addWidget(self.tabs)
         subsGroup.setLayout(subsLayout)
-        codes_label = QLabel()
-        codes_label.setText(
-            'If your language is not listed, enter its <a href="https://en.wikipedia.org/wiki/List_of_ISO_639-2_codes">ISO 639-2 language code</a> in the text box.'
-        )
-        codes_label.setOpenExternalLinks(True)
-        codes_label.setWordWrap(True)
-        subsLayout.addWidget(codes_label)
         vbox.addWidget(subsGroup)
-
         sourceGroup = QGroupBox("Source")
         sourceLayout = QVBoxLayout()
         sourceGroup.setLayout(sourceLayout)

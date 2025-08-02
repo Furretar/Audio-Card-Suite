@@ -130,7 +130,6 @@ def get_srt_converted_subtitle_from_path(subtitle_path):
         return None
 
 def parse_srt_from_text(srt_text):
-    """Parse SRT format text content - matches the format used in extract_all_subtitle_tracks_and_update_db"""
     try:
         blocks = srt_text.strip().split("\n\n")
         parsed = []
@@ -294,13 +293,36 @@ def update_database():
     extract_all_subtitle_tracks_and_update_db(conn)
 
     # Remove missing media entries
-    cursor = conn.execute('SELECT DISTINCT filename FROM media_tracks')
+    cursor = conn.execute("SELECT DISTINCT filename FROM media_tracks")
     indexed_media = {r[0] for r in cursor}
-
     for mf in sorted(indexed_media - current_media):
-        conn.execute('DELETE FROM media_tracks WHERE filename=?', (mf,))
-        conn.execute('DELETE FROM media_audio_start_times WHERE filename=?', (mf,))
+        conn.execute("DELETE FROM media_tracks WHERE filename=?", (mf,))
+        conn.execute("DELETE FROM media_audio_start_times WHERE filename=?", (mf,))
         log_database(f"Removed media entries for: {mf}")
+
+    # Remove orphaned user-placed subtitle entries (track = -1) whose source files no longer exist
+    # Recompute current subtitle base_names in folder (same logic as above)
+    present_subtitle_basenames = set()
+    for subtitle_file in subtitles_in_folder:
+        name_no_ext = os.path.splitext(subtitle_file)[0]
+        index_backtick = name_no_ext.rfind("`")
+        index_dot = name_no_ext.rfind(".")
+        separator_index = max(index_backtick, index_dot)
+        if separator_index != -1:
+            base_name = name_no_ext[:separator_index]
+        else:
+            base_name = name_no_ext
+        present_subtitle_basenames.add(base_name)
+
+    cursor = conn.execute("SELECT filename, language, track FROM subtitles WHERE track = '-1'")
+    for filename, language, track in cursor:
+        base_name = os.path.splitext(filename)[0]
+        if base_name not in present_subtitle_basenames:
+            conn.execute(
+                "DELETE FROM subtitles WHERE filename=? AND language=? AND track=?",
+                (filename, language, track),
+            )
+            log_database(f"Removed orphaned user subtitle: file={filename}, lang={language}, track={track}")
 
     conn.commit()
     conn.execute("VACUUM;")

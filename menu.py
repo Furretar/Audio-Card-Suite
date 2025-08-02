@@ -1,16 +1,20 @@
+import threading
+
 from aqt import gui_hooks
 from aqt.utils import showInfo
 from aqt.editor import Editor
 from PyQt6.QtCore import Qt
-import os, json
-import time
-from PyQt6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QSizePolicy
+import json
+from PyQt6.QtWidgets import QGroupBox, QLineEdit
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
-
+from aqt.utils import tooltip
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
 )
+
+import manage_database
+
 try:
     from . import manage_files
     from . import button_actions
@@ -227,8 +231,6 @@ class AudioToolsDialog(QDialog):
                 print("User cancelled conversion.")
 
         def confirm_bulk_generate():
-            config = manage_files.get_config()
-
             deck_id = mw.col.decks.get_current_id()
             deck = mw.col.decks.get(deck_id)
             all_note_types = mw.col.models.all()
@@ -268,6 +270,9 @@ class AudioToolsDialog(QDialog):
             dialog.setLayout(layout)
             dialog.exec()
 
+        def update_database_button():
+            tooltip("Updating database...")
+            threading.Thread(target=lambda: constants.timed_call(manage_database.update_database), daemon=True).start()
 
         self.setWindowTitle("Audio Card Suite")
         vbox = QVBoxLayout()
@@ -561,11 +566,11 @@ class AudioToolsDialog(QDialog):
         sourceDirLayout.addWidget(browseBtn)
         sourceLayout.addLayout(sourceDirLayout)
 
-
+        # todo implement
         # Convert button with confirmation dialog
-        convertBtn = QPushButton("Convert Source Videos to Audio")
-        convertBtn.clicked.connect(confirm_conversion)
-        sourceLayout.addWidget(convertBtn)
+        # convertBtn = QPushButton("Convert Source Videos to Audio")
+        # convertBtn.clicked.connect(confirm_conversion)
+        # sourceLayout.addWidget(convertBtn)
 
         # Add source group below subtitles group
         vbox.addWidget(sourceGroup)
@@ -575,6 +580,12 @@ class AudioToolsDialog(QDialog):
         self.bulkGenerateButton.setDefault(True)
         self.bulkGenerateButton.clicked.connect(confirm_bulk_generate)
         hbox2.addWidget(self.bulkGenerateButton)
+
+        self.updateDatabaseButton = QPushButton("Update Database")
+        self.updateDatabaseButton.setDefault(True)
+        self.updateDatabaseButton.clicked.connect(update_database_button)
+        hbox2.addWidget(self.updateDatabaseButton)
+
         hbox2.addStretch(4)
 
         # todo add mpv support

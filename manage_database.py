@@ -1,4 +1,10 @@
 import sys, os
+
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QProgressDialog
+from aqt import mw
+from aqt.utils import tooltip
+
 sys.path.append(os.path.dirname(__file__))
 import os
 import sqlite3
@@ -199,12 +205,12 @@ def update_database():
     ''')
 
     folder = os.path.join(constants.addon_dir, constants.addon_source_folder)
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
     audio_exts = constants.audio_extensions
     video_exts = constants.video_extensions
     media_exts = audio_exts + video_exts
-
-    if not os.path.exists(folder):
-        os.makedirs(folder)
 
     # Recursively get all media files, excluding any folder that contains 'ignore' in its path parts
     current_media_fullpaths = {
@@ -214,10 +220,17 @@ def update_database():
         for f in files
         if os.path.splitext(f)[1].lower() in media_exts
     }
-
-    # Convert to just basename + extension for database usage
     current_media = {os.path.basename(p) for p in current_media_fullpaths}
 
+    subtitle_extensions = constants.subtitle_extensions
+    subtitles_in_folder = {
+        f for root, dirs, files in os.walk(folder)
+        if 'ignore' not in root.lower().split(os.sep)
+        for f in files
+        if os.path.splitext(f)[1].lower() in subtitle_extensions
+    }
+
+    # create tables
     cursor = conn.execute('SELECT filename, language, track FROM subtitles')
     indexed_subs = {f"{r[0]}`track_{r[2]}`{r[1]}.srt" for r in cursor}
 
@@ -234,14 +247,6 @@ def update_database():
                          (vid, lang, track))
             log_database(f"Removed subtitle: file={vid}, track={track}, lang={lang}")
 
-    # Add user placed subtitles (same logic, just base filenames)
-    subtitle_extensions = constants.subtitle_extensions
-    subtitles_in_folder = {
-        f for root, dirs, files in os.walk(folder)
-        if 'ignore' not in root.lower().split(os.sep)
-        for f in files
-        if os.path.splitext(f)[1].lower() in subtitle_extensions
-    }
 
     # Get current media basenames (without extension)
     media_basenames = {os.path.splitext(f)[0] for f in current_media}

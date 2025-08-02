@@ -413,6 +413,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
 
     if not new_result:
         log_error("generate_fields_sound_sentence_image failed to return valid values.")
+
         return None, None
 
     new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line = new_result
@@ -893,6 +894,9 @@ def get_fields_from_editor_or_note(editor_or_note):
     sentence_line = safe_field(sentence_idx)
     translation_line = safe_field(translation_idx)
     translation_sound_line = safe_field(translation_sound_idx)
+
+    if not sentence_line or sentence_line == "":
+        aqt.utils.showInfo(f"Target Sentence field is empty.")
 
     return {
         "sound_line": sound_line,

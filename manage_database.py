@@ -188,10 +188,12 @@ def extract_subtitle_file_data(subtitle_filename):
     }
 
 def update_database():
+    constants.database_updating.set()
     log_database(f"update database called")
     db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
     conn = sqlite3.connect(db_path)
 
+    # create tables
     conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')
     conn.execute('CREATE TABLE IF NOT EXISTS media_tracks (filename TEXT, track INTEGER, language TEXT, type TEXT, PRIMARY KEY(filename, track, type))')
 
@@ -230,23 +232,29 @@ def update_database():
         if os.path.splitext(f)[1].lower() in subtitle_extensions
     }
 
-    # create tables
+    # collect orphaned subtitles
     cursor = conn.execute('SELECT filename, language, track FROM subtitles')
     indexed_subs = {f"{r[0]}`track_{r[2]}`{r[1]}.srt" for r in cursor}
 
-    # Remove subtitles with no media file
+    to_delete = []
     for f in sorted(indexed_subs):
         vid, tpart, lang_s = f.split('`')
         track = tpart[len('track_'):]
         lang = lang_s[:-4]
 
-        media_exists = vid in current_media
+        if vid not in current_media:
+            to_delete.append((vid, lang, track))
 
-        if not media_exists:
-            conn.execute('DELETE FROM subtitles WHERE filename=? AND language=? AND track=?',
-                         (vid, lang, track))
-            log_database(f"Removed subtitle: file={vid}, track={track}, lang={lang}")
+    constants.database_items_left = len(current_media) + len(subtitles_in_folder) + len(to_delete)
 
+    # log and delete them
+    for vid, lang, track in to_delete:
+        conn.execute(
+            "DELETE FROM subtitles WHERE filename=? AND language=? AND track=?",
+            (vid, lang, track),
+        )
+        log_database(f"Removed subtitle: file={vid}, track={track}, lang={lang}")
+        constants.database_items_left -= 1
 
     # Get current media basenames (without extension)
     media_basenames = {os.path.splitext(f)[0] for f in current_media}
@@ -294,6 +302,8 @@ def update_database():
             else:
                 log_database(f"no media basename found for {base_name}")
 
+            constants.database_items_left -= 1
+
     # Extract subtitles from all source files
     extract_all_subtitle_tracks_and_update_db(conn)
 
@@ -331,6 +341,8 @@ def update_database():
 
     conn.commit()
     conn.execute("VACUUM;")
+    constants.database_updating.clear()
+    constants.database_items_left = 0
     return conn
 
 
@@ -496,6 +508,8 @@ def extract_all_subtitle_tracks_and_update_db(conn):
             )
             log_database(f"Inserted {len(parsed)} blocks for {os.path.basename(media_file)}, track={track}, lang={lang}")
             conn.commit()
+        constants.database_items_left -= 1
+
     conn.commit()
     return conn
 

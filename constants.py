@@ -5,6 +5,7 @@ import inspect
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from aqt.utils import showInfo
 import html
@@ -22,6 +23,9 @@ ms_amount = 50
 # files
 addon_dir = os.path.dirname(os.path.abspath(__file__))
 config_dir = os.path.join(addon_dir, "config.json")
+
+database_updating = threading.Event()
+database_items_left = 0
 
 
 temp_ffmpeg_folder = os.path.join(addon_dir, "ffmpeg")

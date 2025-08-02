@@ -9,6 +9,8 @@ import aqt
 from aqt.sound import play, av_player
 from aqt import gui_hooks
 from anki.notes import Note
+from aqt.utils import tooltip
+
 import manage_database
 
 
@@ -37,7 +39,7 @@ image_string = constants.image_string
 
 
 
-# manipulate and update fields
+## manipulate and update fields
 
 # finds the location of the current sentence field, then uses the selected text to find the next line that
 # contains the selection and re-generates every field
@@ -136,6 +138,10 @@ def next_result_button(editor):
         editor._is_generating_fields = False
 
 def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
+    if constants.database_updating.is_set():
+        tooltip(f"Database updating, {constants.database_items_left} files left process.")
+        return
+
     fields = get_fields_from_editor_or_note(editor)
     config = constants.extract_config_data()
     modifiers = QApplication.keyboardModifiers()
@@ -281,8 +287,11 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     if not autoplay:
         QTimer.singleShot(0, play_after_reload)
 
-
 def adjust_sound_tag(editor, start_delta: int, end_delta: int):
+    if constants.database_updating.is_set():
+        tooltip(f"Database updating, {constants.database_items_left} files left process.")
+        return
+
     # check for modifier keys
     config = constants.extract_config_data()
     modifiers = QApplication.keyboardModifiers()
@@ -326,6 +335,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
         if not new_sound_line:
             log_error(f"nothing found from sentence line {sentence_line}, returning")
+            aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{os.path.basename(addon_source_folder)}',\n or any embedded subtitle file.")
             return
 
     editor.note.fields[sound_idx] = new_sound_line
@@ -335,6 +345,149 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
     if not autoplay:
         QTimer.singleShot(100, lambda: on_note_loaded(editor, True))
 
+# play sound hooks and buttons
+def generate_fields_button(editor):
+    if constants.database_updating.is_set():
+        tooltip(f"Database updating, {constants.database_items_left} files left process.")
+        return
+
+    sound_filename, updated = generate_and_update_fields(editor, None, False)
+    if sound_filename and not updated:
+        log_command(f"Playing sound filename: {sound_filename}")
+        QTimer.singleShot(0, lambda: play(sound_filename))
+
+# uses current fields to generate all missing fields
+def generate_and_update_fields(editor, note, should_overwrite):
+    config = constants.extract_config_data()
+
+    # Determine current_note and fields dict depending on whether note or editor is provided
+    if note is not None:
+        current_note = note
+        fields = get_fields_from_editor_or_note(note)  # Make sure this function handles both editor and note
+    elif editor is not None:
+        current_note = editor.note
+        fields = get_fields_from_editor_or_note(editor)
+    else:
+        log_error("No editor or note provided")
+        return None, None
+
+    if not fields:
+        log_error(f"fields is null, fields are not set in menu")
+        return None, None
+
+    sentence_idx = fields["sentence_idx"]
+    sound_idx = fields["sound_idx"]
+    image_idx = fields["image_idx"]
+    translation_idx = fields["translation_idx"]
+    translation_sound_idx = fields["translation_sound_idx"]
+    sound_line = fields["sound_line"]
+    note_type_name = current_note.model()["name"]
+
+    modifiers = QApplication.keyboardModifiers()
+    overwrite = bool(modifiers & Qt.KeyboardModifier.ControlModifier) or should_overwrite
+    alt_pressed = bool(modifiers & Qt.KeyboardModifier.AltModifier)
+
+    data = manage_files.extract_sound_line_data(sound_line)
+    print(f"fields: {fields}")
+    should_generate = should_generate_fields(fields, note_type_name, overwrite, data, config)
+
+    fields_status = {
+        "sound_line": not should_generate["sound_line"],
+        "sentence_line": not should_generate["image_line"],
+        "image_line": not should_generate["image_line"],
+        "translation_line": not should_generate["translation_line"],
+        "translation_sound_line": not should_generate["translation_sound_line"],
+    }
+
+    updated = False
+    if all(fields_status.values()) and not overwrite:
+        log_filename("All fields are filled, returning.")
+        current_sound_line = current_note.fields[translation_sound_idx if alt_pressed else sound_idx]
+        match = re.search(r"\[sound:(.*?)]", current_sound_line)
+        return (match.group(1), updated) if match else (None, updated)
+
+    new_result = get_generate_fields_sound_sentence_image_translation(
+        note_type_name, fields, overwrite, alt_pressed, data
+    )
+    log_filename(f"new result: {new_result}")
+
+    if not new_result:
+        log_error("generate_fields_sound_sentence_image failed to return valid values.")
+        return None, None
+
+    new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line = new_result
+    print(f"after new sentence line: {new_sentence_line}")
+
+    def update_field(idx, new_val):
+        nonlocal updated
+        if new_val and current_note.fields[idx] != new_val:
+            print(f"Updating field {idx} from {current_note.fields[idx]!r} to {new_val!r}")
+            current_note.fields[idx] = new_val
+            updated = True
+        else:
+            print(f"No update needed for field {idx}")
+
+    should_generate = should_generate_fields(fields, note_type_name, overwrite, data, config)
+
+    if should_generate["sentence_line"] and new_sentence_line:
+        update_field(sentence_idx, new_sentence_line)
+
+    if should_generate["translation_line"]:
+        update_field(translation_idx, new_translation_line)
+
+    if should_generate["sound_line"]:
+        log_filename(f"getting altered data from3: {new_sound_line}")
+        data = manage_files.extract_sound_line_data(new_sound_line)
+        altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, config, data)
+        if new_sound_line != current_note.fields[sound_idx] and altered_data:
+            new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line, config, False)
+            current_note.fields[sound_idx] = new_sound_line
+            updated = True
+
+    if should_generate["translation_sound_line"]:
+        log_filename(f"getting sound data from translation: {new_translation_sound_line}")
+        data = manage_files.extract_sound_line_data(new_translation_sound_line)
+        altered_data = manage_files.get_altered_sound_data(new_translation_sound_line, 0, 0, config, data)
+        if new_translation_sound_line != current_note.fields[translation_sound_idx] and altered_data:
+            new_translation_sound_line = manage_files.alter_sound_file_times(altered_data, new_translation_sound_line,
+                                                                             config, True)
+            if not new_translation_sound_line:
+                new_translation_sound_line = ""
+            current_note.fields[translation_sound_idx] = new_translation_sound_line
+            updated = True
+
+    if should_generate["image_line"]:
+        generated_img = manage_files.get_image_line_from_sound_line("", new_sound_line)
+        log_image(f"new image: {generated_img}")
+        if generated_img and isinstance(generated_img, str):
+            current_note.fields[image_idx] = generated_img
+            updated = True
+    else:
+        update_field(image_idx, new_image_line)
+
+    current_note.flush()
+    # Only call editor.loadNote() if editor is not None
+    if editor is not None:
+        editor.loadNote()
+
+    # Use editor.note.fields if editor is present, else current_note.fields
+    sound_field_idx = translation_sound_idx if alt_pressed else sound_idx
+    sound_field_val = None
+    if editor is not None:
+        sound_field_val = editor.note.fields[sound_field_idx]
+    else:
+        sound_field_val = current_note.fields[sound_field_idx]
+
+    match = re.search(r"\[sound:(.*?)]", sound_field_val)
+    log_filename(f"playing sound2: {match.group(1)}" if match else "No sound match")
+
+    if match:
+        path = os.path.join(mw.col.media.dir(), match.group(1))
+        return (match.group(1), updated) if os.path.exists(path) else (None, updated)
+    return None, updated
+
+
+## get and format data
 def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path, config):
     if sentence_line == new_sentence_line:
         log_error(f"sentence line and new sentence line are the same: {sentence_line}")
@@ -490,136 +643,6 @@ def should_generate_fields(fields, note_type_name, overwrite, data, config):
     log_filename(f"should_generate: {should_generate}")
 
     return should_generate
-
-# uses current fields to generate all missing fields
-def generate_and_update_fields(editor, note, should_overwrite):
-    config = constants.extract_config_data()
-
-    # Determine current_note and fields dict depending on whether note or editor is provided
-    if note is not None:
-        current_note = note
-        fields = get_fields_from_editor_or_note(note)  # Make sure this function handles both editor and note
-    elif editor is not None:
-        current_note = editor.note
-        fields = get_fields_from_editor_or_note(editor)
-    else:
-        log_error("No editor or note provided")
-        return None, None
-
-    if not fields:
-        log_error(f"fields is null, fields are not set in menu")
-        return None, None
-
-    sentence_idx = fields["sentence_idx"]
-    sound_idx = fields["sound_idx"]
-    image_idx = fields["image_idx"]
-    translation_idx = fields["translation_idx"]
-    translation_sound_idx = fields["translation_sound_idx"]
-    sound_line = fields["sound_line"]
-    note_type_name = current_note.model()["name"]
-
-    modifiers = QApplication.keyboardModifiers()
-    overwrite = bool(modifiers & Qt.KeyboardModifier.ControlModifier) or should_overwrite
-    alt_pressed = bool(modifiers & Qt.KeyboardModifier.AltModifier)
-
-    data = manage_files.extract_sound_line_data(sound_line)
-    print(f"fields: {fields}")
-    should_generate = should_generate_fields(fields, note_type_name, overwrite, data, config)
-
-    fields_status = {
-        "sound_line": not should_generate["sound_line"],
-        "sentence_line": not should_generate["image_line"],
-        "image_line": not should_generate["image_line"],
-        "translation_line": not should_generate["translation_line"],
-        "translation_sound_line": not should_generate["translation_sound_line"],
-    }
-
-    updated = False
-    if all(fields_status.values()) and not overwrite:
-        log_filename("All fields are filled, returning.")
-        current_sound_line = current_note.fields[translation_sound_idx if alt_pressed else sound_idx]
-        match = re.search(r"\[sound:(.*?)]", current_sound_line)
-        return (match.group(1), updated) if match else (None, updated)
-
-    new_result = get_generate_fields_sound_sentence_image_translation(
-        note_type_name, fields, overwrite, alt_pressed, data
-    )
-    log_filename(f"new result: {new_result}")
-
-    if not new_result:
-        log_error("generate_fields_sound_sentence_image failed to return valid values.")
-        return None, None
-
-    new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line = new_result
-    print(f"after new sentence line: {new_sentence_line}")
-
-    def update_field(idx, new_val):
-        nonlocal updated
-        if new_val and current_note.fields[idx] != new_val:
-            print(f"Updating field {idx} from {current_note.fields[idx]!r} to {new_val!r}")
-            current_note.fields[idx] = new_val
-            updated = True
-        else:
-            print(f"No update needed for field {idx}")
-
-    should_generate = should_generate_fields(fields, note_type_name, overwrite, data, config)
-
-    if should_generate["sentence_line"] and new_sentence_line:
-        update_field(sentence_idx, new_sentence_line)
-
-    if should_generate["translation_line"]:
-        update_field(translation_idx, new_translation_line)
-
-    if should_generate["sound_line"]:
-        log_filename(f"getting altered data from3: {new_sound_line}")
-        data = manage_files.extract_sound_line_data(new_sound_line)
-        altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, config, data)
-        if new_sound_line != current_note.fields[sound_idx] and altered_data:
-            new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line, config, False)
-            current_note.fields[sound_idx] = new_sound_line
-            updated = True
-
-    if should_generate["translation_sound_line"]:
-        log_filename(f"getting sound data from translation: {new_translation_sound_line}")
-        data = manage_files.extract_sound_line_data(new_translation_sound_line)
-        altered_data = manage_files.get_altered_sound_data(new_translation_sound_line, 0, 0, config, data)
-        if new_translation_sound_line != current_note.fields[translation_sound_idx] and altered_data:
-            new_translation_sound_line = manage_files.alter_sound_file_times(altered_data, new_translation_sound_line,
-                                                                             config, True)
-            if not new_translation_sound_line:
-                new_translation_sound_line = ""
-            current_note.fields[translation_sound_idx] = new_translation_sound_line
-            updated = True
-
-    if should_generate["image_line"]:
-        generated_img = manage_files.get_image_line_from_sound_line("", new_sound_line)
-        log_image(f"new image: {generated_img}")
-        if generated_img and isinstance(generated_img, str):
-            current_note.fields[image_idx] = generated_img
-            updated = True
-    else:
-        update_field(image_idx, new_image_line)
-
-    current_note.flush()
-    # Only call editor.loadNote() if editor is not None
-    if editor is not None:
-        editor.loadNote()
-
-    # Use editor.note.fields if editor is present, else current_note.fields
-    sound_field_idx = translation_sound_idx if alt_pressed else sound_idx
-    sound_field_val = None
-    if editor is not None:
-        sound_field_val = editor.note.fields[sound_field_idx]
-    else:
-        sound_field_val = current_note.fields[sound_field_idx]
-
-    match = re.search(r"\[sound:(.*?)]", sound_field_val)
-    log_filename(f"playing sound2: {match.group(1)}" if match else "No sound match")
-
-    if match:
-        path = os.path.join(mw.col.media.dir(), match.group(1))
-        return (match.group(1), updated) if os.path.exists(path) else (None, updated)
-    return None, updated
 
 # uses current fields to generate and return update field data
 def get_generate_fields_sound_sentence_image_translation(note_type_name, fields, overwrite, alt_pressed, data):
@@ -803,7 +826,6 @@ def show_info_msg(msg):
     import aqt
     aqt.utils.showInfo(msg)
 
-# get and format data
 def get_fields_from_editor_or_note(editor_or_note):
     config = constants.extract_config_data()
     if config is None:
@@ -934,6 +956,9 @@ def get_fields_from_note(note):
     sentence_line = note.fields[sentence_idx] if 0 <= sentence_idx < len(note.fields) else ""
     translation_line = note.fields[translation_idx] if 0 <= translation_idx < len(note.fields) else ""
 
+    if not sentence_line or sentence_line == "":
+        aqt.utils.showInfo(f"Target Sentence field is empty.")
+
     return {
         "sound_line": sound_line,
         "sound_idx": sound_idx,
@@ -947,15 +972,9 @@ def get_fields_from_note(note):
         "translation_sound_idx": translation_sound_idx,
     }
 
+
 def is_normalized(sound_line):
     return bool(re.search(r'`-\d+LUFS\.\w+$', sound_line))
-
-# play sound hooks and buttons
-def generate_fields_button(editor):
-    sound_filename, updated = generate_and_update_fields(editor, None, False)
-    if sound_filename and not updated:
-        log_command(f"Playing sound filename: {sound_filename}")
-        QTimer.singleShot(0, lambda: play(sound_filename))
 
 def on_note_loaded(editor, override=False):
     editor.web.eval("window.getSelection().removeAllRanges();")

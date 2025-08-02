@@ -274,6 +274,7 @@ class AudioToolsDialog(QDialog):
             tooltip("Updating database...")
             threading.Thread(target=lambda: constants.timed_call(manage_database.update_database), daemon=True).start()
 
+
         self.setWindowTitle("Audio Card Suite")
         vbox = QVBoxLayout()
 

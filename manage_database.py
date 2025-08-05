@@ -33,7 +33,7 @@ def get_database():
     global conn
     if conn is None:
         db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path, timeout=10, isolation_level=None)
         conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')
     return conn
 
@@ -191,7 +191,7 @@ def update_database():
     constants.database_updating.set()
     log_database(f"update database called")
     db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=10, isolation_level=None)
 
     # create tables
     conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')

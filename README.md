@@ -1,21 +1,17 @@
 
-- [ ] allow removing from end start times and batch normalization even without source files
 - [ ] make ffmpeg commands run in the background, try to fix audio cutting off when spamming the button
 - [ ] figure out why some files arent deleted from collection
-- [ ]  figure out why database doesn't go to 0 when all files are removed
-- [ ] add next and previous lines without a source file, for just text sentence cards
+- [ ] figure out why database doesn't go to 0 when all files are removed
 - [ ] crashes when adding new note type
-- [ ] start search from last found subtitle file
-- [ ] load bar for bulk generation, make run in background silently
-
-
+- [ ]  different profiles with language codes and tracks for every note type
 
 low priority
-- [ ]  different language codes and tracks for different note types
+- [ ] add checkbox to allow trimming audio and batch normalization even without source files
+- [ ] add checkbox to use just subtitle file without a source file to make text sentence cards
+- [ ] optimize next result by starting search from last found subtitle file
+- [ ] add track to sound line so it doesnt have to search for the subtitle file
 - [ ] open mpv option
-- [ ]  add/subtract 1db for each audio
 - [ ]  generate waveform
-- [ ]  add track to sound line so it doesnt have to search for the subtitle file
 - [ ] implement 4 character sha code for file disambiguation, use few kilobytes from audio track for hash, add hash to subtitle files to link them to file, this will allow files with the same name to remain unchanged, allowing torrent seeding etc
 
 

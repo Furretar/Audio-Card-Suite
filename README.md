@@ -1,7 +1,5 @@
 
 - [ ] allow removing from end start times and batch normalization even without source files
-- [ ] run bulk generation in background, have a stop button, display info
-- [ ] show database update progress, add update database button to menu
 - [ ] make ffmpeg commands run in the background, try to fix audio cutting off when spamming the button
 - [ ] figure out why some files arent deleted from collection
 - [ ]  figure out why database doesn't go to 0 when all files are removed

@@ -5,6 +5,7 @@
 - [ ] crashes when adding new note type
 - [ ] different profiles with language codes and tracks for every note type
 - [ ] checkbox to remove buttons at the top
+- [ ] make it search and add files in folders correctly
 
 low priority
 - [ ] add checkbox to allow trimming audio and batch normalization even without source files

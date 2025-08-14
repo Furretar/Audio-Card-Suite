@@ -3,7 +3,8 @@
 - [ ] figure out why some files arent deleted from collection
 - [ ] figure out why database doesn't go to 0 when all files are removed
 - [ ] crashes when adding new note type
-- [ ]  different profiles with language codes and tracks for every note type
+- [ ] different profiles with language codes and tracks for every note type
+- [ ] checkbox to remove buttons at the top
 
 low priority
 - [ ] add checkbox to allow trimming audio and batch normalization even without source files

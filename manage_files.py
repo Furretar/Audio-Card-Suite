@@ -269,8 +269,11 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
 
 
     log_error(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
+    showInfo(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
+
     if config["selected_tab_index"] == 0:
         log_error(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {full_source_filename}\nPlease check your settings.")
+        showInfo(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {full_source_filename}\nPlease check your settings.")
     return None
 
 # returns newly generated formatted image line if image field is empty, otherwise returns current image

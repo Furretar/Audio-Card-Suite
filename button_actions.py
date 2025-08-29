@@ -407,7 +407,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
 
     if not new_result:
         log_error("generate_fields_sound_sentence_image failed to return valid values.")
-
         return None, None
 
     new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line = new_result

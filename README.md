@@ -5,10 +5,12 @@
 - [ ] figure out why some files arent deleted from collection
 - [ ] figure out why database doesn't go to 0 when all files are removed
 - [ ] crashes when adding new note type
-- [ ] different profiles with language codes and tracks for every note type
+- [ ] different profiles with language codes and tracks for every note type/
+- [ ] make it not call the japanese audio chinese, remove language code?
 - [ ] checkbox to remove buttons at the top
 - [ ] make it search and add files in folders correctly
 - [ ] sort subtitles by date used, allows user to keep all media in source folder without micromanaging
+- [ ] option to auto detect languages for subs with no language code
 
 
 low priority

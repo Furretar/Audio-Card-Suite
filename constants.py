@@ -65,9 +65,10 @@ BACKTICK_PATTERN = re.compile(
 
 addon_dir = addon_dir
 default_source_dir = os.path.join(addon_dir, "Sources")
+select_note_type_string = "Please Select a Note Type"
 
 default_settings = {
-    "default_model": "Please Select a Note Type",
+    "default_model": f"{select_note_type_string}",
     "source_folder": f"{default_source_dir}",
     "default_deck": "Default",
     "audio_ext": "mp3",

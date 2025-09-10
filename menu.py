@@ -644,24 +644,13 @@ class AudioToolsDialog(QDialog):
             menu.addAction(action)
         menu.exec(self.modelButton.mapToGlobal(self.modelButton.rect().bottomLeft()))
 
-    def show_model_menu(self):
-        menu = QMenu(self)
-        for m in mw.col.models.all():
-            name = m["name"]
-            action = QAction(name, menu)
-            # capture `name` in the default‐arg of the lambda
-            action.triggered.connect(lambda checked, nm=name: self.select_model(nm))
-            menu.addAction(action)
-        menu.exec(self.modelButton.mapToGlobal(self.modelButton.rect().bottomLeft()))
 
-    def select_model(self, model_name: str):
-        self.modelButton.setText(model_name)
-
-        self.settings["default_model"] = model_name
-
-        self.save_settings()
 
     def mapFields(self, model_name):
+        if model_name == constants.select_note_type_string:
+            showInfo(f"Please select a note type.")
+            return
+
         fm = FieldMapping(model_name, self.configManager, parent=self)
         fm.exec()
 
@@ -779,17 +768,25 @@ class FieldMapping(QDialog):
     def __init__(self, name, configManager, parent=None):
         QDialog.__init__(self, parent)
         self.configManager = configManager
+
+
         self.mappedFields = self.configManager.getMappedFields(name)
         print(f"self.configManager.getMappedFields({name}): {self.configManager.getMappedFields(name)}")
         self.name = name
+
         self.initUI()
 
     def initUI(self):
+        if not self.name or self.name == constants.select_note_type_string:
+            showInfo(f"Please select a note type.")
+            return
+
         self.setWindowTitle(self.name)
         vbox = QVBoxLayout()
         self.fields = []
 
         groupBox = QGroupBox("Map Fields")
+
         m = mw.col.models.by_name(self.name)
         fields = mw.col.models.field_names(m)
         grid = QGridLayout()

@@ -106,8 +106,6 @@ class AudioToolsDialog(QDialog):
         self.tabs.currentChanged.connect(self.on_tab_changed)
         self.setMinimumSize(546, 746)
 
-
-
     def load_settings(self):
         config_file_path = os.path.join(constants.addon_dir, "config.json")
         if not os.path.exists(config_file_path):
@@ -122,62 +120,36 @@ class AudioToolsDialog(QDialog):
                 config = create_default_config()
 
         default_settings = create_default_config()
-        self.settings = default_settings.copy()
-        self.settings.update(config)
+
+        # Treat only these keys as global defaults (kept at top level)
+        GLOBAL_KEYS = [
+            "default_model",
+            "source_folder",
+            "default_deck",
+            "selected_tab_index",
+            "autoplay",
+        ]
+
+        # Start with an empty dict, then copy global keys (from config if present, else defaults)
+        self.settings = {}
+        for k in GLOBAL_KEYS:
+            if k in config:
+                self.settings[k] = config[k]
+            else:
+                # only provide default for truly global keys
+                if k in default_settings:
+                    self.settings[k] = default_settings[k]
+
+        # Copy any other keys from config (these will be per-model sections or legacy top-level keys)
+        for key, value in config.items():
+            if key in GLOBAL_KEYS:
+                continue
+            # keep whatever is in config (per-model dicts will be copied here)
+            self.settings[key] = value
+
         print("Loaded settings from config:")
         print(json.dumps(self.settings, indent=2))
         print(f"normalize_audio in settings: {self.settings.get('normalize_audio')}")
-
-    def apply_model_settings(self, note_type_name):
-        settings = self.settings.get(note_type_name, {})
-
-        # Spinboxes
-        self.imageHeightEdit.setValue(settings.get("image_height", constants.default_settings["image_height"]))
-        self.padStartEditTarget.setValue(settings.get("pad_start_target", 0))
-        self.padEndEditTarget.setValue(settings.get("pad_end_target", 0))
-        self.padStartEditTranslation.setValue(settings.get("pad_start_translation", 0))
-        self.padEndEditTranslation.setValue(settings.get("pad_end_translation", 0))
-
-        # Audio options
-        audio_ext = settings.get("audio_ext", "mp3")
-        idx = self.audioExtCombo.findText(audio_ext)
-        if idx >= 0:
-            self.audioExtCombo.setCurrentIndex(idx)
-        self.bitrateEdit.setValue(settings.get("bitrate", 192))
-        self.normalize_checkbox.setChecked(settings.get("normalize_audio", True))
-        self.lufsSpinner.setValue(settings.get("lufs", -16))
-        self.sourceDirEdit.setText(settings.get("source_folder", constants.default_settings["source_folder"]))
-
-
-        # Track spinners
-        for i, key in enumerate([
-            "target_audio_track",
-            "target_subtitle_track",
-            "translation_audio_track",
-            "translation_subtitle_track",
-            "target_timing_track",
-            "translation_timing_track"
-        ]):
-            self.trackSpinners[i].setValue(settings.get(key, 0))
-
-        self.timingTracksCheckbox.setChecked(settings.get("timing_tracks_enabled", False))
-
-        # Language code combos
-        for i, key in enumerate([
-            "target_language_code", "translation_language_code",
-            "target_timing_code", "translation_timing_code"
-        ]):
-            code = settings.get(key, "")
-            name = language_codes.PyLangISO639_2.code_to_name(code)
-            self.langCodeCombos[i].setCurrentText(name if name else "None")
-
-        # Mapped fields (comboboxes)
-        if hasattr(self, "fields"):
-            mapped_fields = settings.get("mapped_fields", {})
-            for field_name, combo in self.fields:
-                value = mapped_fields.get(field_name, "None")
-                combo.setCurrentText(value)
-
 
     def save_settings(self):
         print("save_settings called")
@@ -196,7 +168,7 @@ class AudioToolsDialog(QDialog):
         self.settings[note_type_name]["bitrate"] = self.bitrateEdit.value()
         self.settings[note_type_name]["normalize_audio"] = self.normalize_checkbox.isChecked()
         self.settings[note_type_name]["lufs"] = self.lufsSpinner.value()
-        self.settings[note_type_name]["source_folder"] = self.sourceDirEdit.text()
+        self.settings["source_folder"] = self.sourceDirEdit.text()
 
         for i, key in enumerate([
             "target_audio_track",
@@ -641,7 +613,7 @@ class AudioToolsDialog(QDialog):
 
         # Save on text change
         self.sourceDirEdit.textChanged.connect(
-            lambda text: self.settings.setdefault(self.modelButton.text(), {}).update({"source_folder": text})
+            lambda text: self.settings.update({"source_folder": text})
         )
 
         browseBtn = QPushButton("Open Folder")
@@ -723,7 +695,7 @@ class AudioToolsDialog(QDialog):
         self.selectedModel = model
         self.modelButton.setText(model["name"])
         self.settings["default_model"] = model["name"]
-        self.apply_model_settings(model["name"])
+        self.apply_settings_to_ui()
 
     def show_model_menu(self):
         menu = QMenu(self)
@@ -745,7 +717,8 @@ class AudioToolsDialog(QDialog):
         fm.exec()
 
     def on_tab_changed(self, index):
-        self.settings["selected_tab_index"] = index
+        note_type_name = self.modelButton.text()
+        self.settings[note_type_name]["selected_tab_index"] = index
         print(f"saving settings, tab change")
         self.save_settings()
 
@@ -764,28 +737,31 @@ class AudioToolsDialog(QDialog):
             *self.trackSpinners,
             *self.langCodeEdits,
             self.timingTracksCheckbox,
+            self.sourceDirEdit,
         ]
         for w in widgets:
             w.blockSignals(True)
 
-        self.imageHeightEdit.setValue(self.settings.get("image_height", constants.default_settings["image_height"]))
-        self.padStartEditTarget.setValue(
-            self.settings.get("pad_start_target", constants.default_settings["pad_start_target"]))
-        self.padEndEditTarget.setValue(
-            self.settings.get("pad_end_target", constants.default_settings["pad_end_target"]))
-        self.padStartEditTranslation.setValue(
-            self.settings.get("pad_start_translation", constants.default_settings["pad_start_translation"]))
-        self.padEndEditTranslation.setValue(
-            self.settings.get("pad_end_translation", constants.default_settings["pad_end_translation"]))
+        note_type_name = self.modelButton.text()
 
-        idx = self.audioExtCombo.findText(self.settings["audio_ext"])
+        self.imageHeightEdit.setValue(self.settings.get(note_type_name, {}).get("image_height", constants.default_settings["image_height"]))
+        self.padStartEditTarget.setValue(self.settings.get(note_type_name, {}).get("pad_start_target", constants.default_settings["pad_start_target"]))
+        self.padEndEditTarget.setValue(self.settings.get(note_type_name, {}).get("pad_end_target", constants.default_settings["pad_end_target"]))
+        self.padStartEditTranslation.setValue(self.settings.get(note_type_name, {}).get("pad_start_translation", constants.default_settings["pad_start_translation"]))
+        self.padEndEditTranslation.setValue(self.settings.get(note_type_name, {}).get("pad_end_translation", constants.default_settings["pad_end_translation"]))
+
+        idx = self.audioExtCombo.findText(self.settings.get(note_type_name, {}).get("audio_ext", constants.default_settings["audio_ext"]))
         if idx >= 0:
             self.audioExtCombo.setCurrentIndex(idx)
 
-        self.bitrateEdit.setValue(self.settings.get("bitrate", constants.default_settings["bitrate"]))
-        self.normalize_checkbox.setChecked(
-            self.settings.get("normalize_audio", constants.default_settings["normalize_audio"]))
-        self.lufsSpinner.setValue(self.settings.get("lufs", constants.default_settings["lufs"]))
+        self.bitrateEdit.setValue(self.settings.get(note_type_name, {}).get("bitrate", constants.default_settings["bitrate"]))
+        self.normalize_checkbox.setChecked(self.settings.get(note_type_name, {}).get("normalize_audio", constants.default_settings["normalize_audio"]))
+        self.lufsSpinner.setValue(self.settings.get(note_type_name, {}).get("lufs", constants.default_settings["lufs"]))
+
+        self.sourceDirEdit.setText(self.settings.get("source_folder", constants.default_settings.get("source_folder", "")))
+
+        self.tabs.setCurrentIndex(self.settings.get(note_type_name, {}).get("selected_tab_index", constants.default_settings["selected_tab_index"]))
+
 
         tracks = [
             "target_audio_track",
@@ -795,10 +771,11 @@ class AudioToolsDialog(QDialog):
             "target_timing_track",
             "translation_timing_track"
         ]
-        for i, track in enumerate(tracks):
-            self.trackSpinners[i].setValue(self.settings.get(track, 0))
 
-        self.timingTracksCheckbox.setChecked(self.settings.get("timing_tracks_enabled", False))
+        for i, track in enumerate(tracks):
+            self.trackSpinners[i].setValue(self.settings.get(note_type_name, {}).get(track, 0))
+
+        self.timingTracksCheckbox.setChecked(self.settings.get(note_type_name, {}).get("timing_tracks_enabled", False))
 
         for w in widgets:
             w.blockSignals(False)

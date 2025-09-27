@@ -71,13 +71,6 @@ def extract_sound_line_data(sound_line):
         image_collection_path = os.path.join(constants.get_collection_dir(), image_filename)
         m4b_image_collection_path = os.path.join(constants.get_collection_dir(), m4b_image_filename)
 
-        # log_filename(
-        #     f"extracting sound_line_data from: {sound_line}\n"
-        #     f"format detected: {format_type}\n"
-        #     f"full_source_filename: {full_source_filename}\n"
-        #     f"timestamp filename: {timestamp_filename}\n"
-        # )
-
         log_image(f"image collection path: {image_collection_path}")
 
         return {
@@ -181,9 +174,11 @@ def extract_subtitle_path_data(subtitle_path):
 
 # todo: add another section to subtitle file names so the method knows which pattern to search for
 # searches all possible name patterns using the base filename, track, and code
-def get_subtitle_file_from_database(full_source_filename, track, code, config, database):
+def get_subtitle_file_from_database(full_source_filename, track, code, config, database, note_type_name):
+    if not code:
+        code = "und"
     def find_subtitle():
-        selected_tab_index = config["selected_tab_index"]
+        selected_tab_index = config.get(note_type_name, {}).get("selected_tab_index", config.get("selected_tab_index", 1))
         log_filename(f"received filename: {full_source_filename}, track/code: {track}/{code}")
         sub_source_path = get_source_path_from_full_filename(full_source_filename)
 
@@ -271,13 +266,13 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
     log_error(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
     # todo showInfo(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
 
-    if config["selected_tab_index"] == 0:
+    if config[note_type_name]["selected_tab_index"] == 0:
         log_error(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {full_source_filename}\nPlease check your settings.")
         # showInfo(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {full_source_filename}\nPlease check your settings.")
     return None
 
 # returns newly generated formatted image line if image field is empty, otherwise returns current image
-def get_image_line_from_sound_line(image_line, sound_line):
+def get_image_line_from_sound_line(image_line, sound_line, image_height):
     # check if any field already has an image
     if image_line:
         return image_line
@@ -308,7 +303,8 @@ def get_image_line_from_sound_line(image_line, sound_line):
         video_source_path,
         start_time,
         image_collection_path,
-        m4b_image_collection_path
+        m4b_image_collection_path,
+        image_height
     )
 
     log_image(f"No image found, extracting from source: {image_path}")
@@ -326,7 +322,7 @@ def get_image_line_from_sound_line(image_line, sound_line):
         return ""
 
 # returns a translation line based on overlapping timings from the target's sound line, also returns the translation subtitle file
-def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, config, sound_line_data):
+def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, config, sound_line_data, note_type_name):
     if not target_sound_line:
         log_error("get_translation_line_from_sound_line received None sound_line.")
         return "", ""
@@ -336,15 +332,15 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
         log_error(f"extract_sound_line_data returned None.")
         return "", ""
 
-    translation_audio_track = config["translation_audio_track"]
-    translation_language_code = config["translation_language_code"]
+    translation_audio_track = config[note_type_name]["translation_audio_track"]
+    translation_language_code = config[note_type_name]["translation_language_code"]
     start_time = sound_line_data["start_time"]
     end_time = sound_line_data["end_time"]
     full_source_filename = sound_line_data["full_source_filename"]
     subtitle_database = manage_database.get_database()
 
     # get translation subtitle file and the subtitle blocks that overlap timings with the sound line
-    translation_subtitle_path = get_subtitle_file_from_database(full_source_filename, translation_audio_track, translation_language_code, config, subtitle_database)
+    translation_subtitle_path = get_subtitle_file_from_database(full_source_filename, translation_audio_track, translation_language_code, config, subtitle_database, note_type_name)
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
 
     # adds text from each block and formats it, remove curly braces, html formatting, etc.
@@ -356,7 +352,7 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
     return translation_line, translation_subtitle_path
 
 # generates a new sound line with the blocks overlapping from another sound line
-def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, audio_language_code, use_translation_data):
+def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, audio_language_code, use_translation_data, note_type_name):
     if not target_sound_line:
         log_error(f"received None sound_line. ")
         return ""
@@ -367,21 +363,21 @@ def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, 
         log_error(f"extract_sound_line_data returned None.")
         return ""
 
-    timing_tracks_enabled = config["timing_tracks_enabled"]
+    timing_tracks_enabled = config[note_type_name]["timing_tracks_enabled"]
     if use_translation_data:
         if timing_tracks_enabled:
-            timing_audio_track = config["translation_timing_track"]
-            timing_language_code = config["translation_timing_code"]
+            timing_audio_track = config[note_type_name]["translation_timing_track"]
+            timing_language_code = config[note_type_name]["translation_timing_code"]
         else:
-            timing_audio_track = config["translation_audio_track"]
-            timing_language_code = config["translation_language_code"]
+            timing_audio_track = config[note_type_name]["translation_audio_track"]
+            timing_language_code = config[note_type_name]["translation_language_code"]
     else:
         if timing_tracks_enabled:
-            timing_audio_track = config["target_timing_track"]
-            timing_language_code = config["target_timing_code"]
+            timing_audio_track = config[note_type_name]["target_timing_track"]
+            timing_language_code = config[note_type_name]["target_timing_code"]
         else:
-            timing_audio_track = config["target_audio_track"]
-            timing_language_code = config["target_language_code"]
+            timing_audio_track = config[note_type_name]["target_audio_track"]
+            timing_language_code = config[note_type_name]["target_language_code"]
 
 
     filename_base = sound_line_data["filename_base"]
@@ -407,7 +403,7 @@ def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, 
         last_end = to_hmsms_format(overlapping_blocks[-1][2])
         start_index = overlapping_blocks[0][0]
         end_index = overlapping_blocks[-1][0]
-        audio_ext = config["audio_ext"]
+        audio_ext = config[note_type_name]["audio_ext"]
         subtitle_data = extract_subtitle_path_data(timing_subtitle_path)
         timing_language_code = subtitle_data["code"]
 
@@ -661,11 +657,11 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
     return usable_blocks
 
 
-def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config):
+def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config, note_type_name):
     log_filename(f"getting block from sentence line: {sentence_line}")
 
-    target_language_code = config["target_language_code"]
-    target_audio_track = str(config["target_audio_track"])
+    target_language_code = config[note_type_name]["target_language_code"]
+    target_audio_track = str(config[note_type_name]["target_audio_track"])
 
     sentence_line = sentence_line or ""
     normalized_sentence = normalize_text(sentence_line)
@@ -674,6 +670,8 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
     subtitle_database = manage_database.get_database()
     cursor = subtitle_database.execute("SELECT filename, language, track, content FROM subtitles")
     rows = cursor.fetchall()
+
+    print(f"rows len: {len(rows)}")
 
     # search subs placed by user first, then target code, target track, then everything else
     def priority(lang, trk):
@@ -742,7 +740,7 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
 
 
 # option to provide codes to choose what's displayed in the sentence line
-def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, sentence_code, timing_code, config):
+def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, sentence_code, timing_code, config, note_type_name):
     if not subtitle_path:
         log_error("Error: subtitle_path is None")
         return None, None
@@ -773,13 +771,13 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
     end_time = to_hmsms_format(blocks[-1][2])
     print(f"start time: {blocks[0][1]}, end time: {blocks[-1][2]}")
 
-    audio_ext = config["audio_ext"]
+    audio_ext = config[note_type_name]["audio_ext"]
     subtitle_data = extract_subtitle_path_data(subtitle_path)
 
 
-    normalize_audio = config["normalize_audio"]
+    normalize_audio = config[note_type_name]["normalize_audio"]
     if normalize_audio:
-        lufs = config["lufs"]
+        lufs = config[note_type_name]["lufs"]
     else:
         lufs = None
 
@@ -810,7 +808,7 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
 # todo: make more efficient by only searching files after the current file
 # finds the location of the current sentence field, then uses the selected text to find the next line that
 # contains the selection and re-generates every field
-def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, config, sound_line_data,):
+def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, config, sound_line_data, note_type_name):
     log_filename(f"extracting sound_line_data from sound_line: {sound_line}")
 
     if not sound_line_data:
@@ -819,8 +817,8 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
 
     target_index = sound_line_data["start_index"]
     filename_base = sound_line_data["filename_base"]
-    track = config["target_subtitle_track"]
-    code = config["target_language_code"]
+    track = config[note_type_name]["target_subtitle_track"]
+    code = config[note_type_name]["target_language_code"]
     normalized_target_text = normalize_text(selected_text or sentence_line)
     print(f"Searching for: {normalized_target_text}")
 
@@ -898,7 +896,7 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
     return search_blocks(after_current=False)
 
 
-def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collection_path, m4b_image_collection_path) -> str:
+def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collection_path, m4b_image_collection_path, image_height) -> str:
     if os.path.exists(m4b_image_collection_path):
         log_image(f"image already exists: {m4b_image_collection_path}")
         return m4b_image_collection_path
@@ -931,8 +929,6 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
             log_error("Cover extraction failed: output file not found")
             return ""
 
-
-
     timestamp = convert_hmsms_to_ffmpeg_time_notation(image_timestamp)
     cmd = [
         ffmpeg_path, "-y",
@@ -940,8 +936,10 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
         "-i", source_path,
         "-frames:v", "1",
         "-q:v", "15",
+        "-vf", f"scale=-2:min(ih\\,{image_height})",
         image_collection_path
     ]
+
     log_image(f"Extracting image:\n{' '.join(cmd)}")
     result = constants.silent_run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
     if result.returncode != 0:
@@ -951,7 +949,7 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
     log_command(f"Extracted image: {image_collection_path}")
     return image_collection_path
 
-def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, collection_path, sound_line, config, sound_line_data, use_translation_data) -> list:
+def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, collection_path, sound_line, config, sound_line_data, use_translation_data, note_type_name) -> list:
     if not source_path:
         log_error(f"source path is null")
         return []
@@ -959,14 +957,14 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
     log_command(f"FFmpeg source path: {source_path}")
     log_command(f"FFmpeg sound line: {sound_line}")
 
-    lufs = config["lufs"]
-    bitrate = config["bitrate"]
-    normalize_audio = config["normalize_audio"]
-    target_code = config["target_language_code"]
-    translation_code = config["translation_language_code"]
-    target_track = config["target_audio_track"]
-    translation_track = config["translation_audio_track"]
-    selected_tab_index = config.get("selected_tab_index", 0)
+    lufs = config[note_type_name]["lufs"]
+    bitrate = config[note_type_name]["bitrate"]
+    normalize_audio = config[note_type_name]["normalize_audio"]
+    target_code = config[note_type_name]["target_language_code"]
+    translation_code = config[note_type_name]["translation_language_code"]
+    target_track = config[note_type_name]["target_audio_track"]
+    translation_track = config[note_type_name]["translation_audio_track"]
+    selected_tab_index = config[note_type_name].get("selected_tab_index", 0)
     log_filename(f"Extracting sound_line_data from sound_line: {sound_line}")
 
     ffmpeg_path, ffprobe_path = constants.get_ffmpeg_exe_path()
@@ -1093,9 +1091,9 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
     return cmd
 
 
-def ffmpeg_extract_full_audio(source_file_path, config) -> str:
+def ffmpeg_extract_full_audio(source_file_path, config, note_type_name) -> str:
     ffmpeg_path, _ = constants.get_ffmpeg_exe_path()
-    audio_ext = config["audio_ext"]
+    audio_ext = config[note_type_name]["audio_ext"]
 
     base, _ = os.path.splitext(source_file_path)
     output_path = base + f".{audio_ext}"
@@ -1129,9 +1127,9 @@ def ffmpeg_extract_full_audio(source_file_path, config) -> str:
         return ""
 
 
-def create_just_normalize_audio_command(source_path, config):
-    lufs = config["lufs"]
-    bitrate = config["bitrate"]
+def create_just_normalize_audio_command(source_path, config, note_type_name):
+    lufs = config[note_type_name]["lufs"]
+    bitrate = config[note_type_name]["bitrate"]
 
     print(f"source path test: {source_path}")
     ffmpeg_path, _ = constants.get_ffmpeg_exe_path()
@@ -1360,8 +1358,8 @@ def build_filename_and_sound_line(filename_base, source_file_extension, audio_co
     return timestamp, sound_line
 
 
-def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, config, sound_line_data) -> dict:
-    normalize_audio = config["normalize_audio"]
+def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, config, sound_line_data, note_type_name) -> dict:
+    normalize_audio = config[note_type_name]["normalize_audio"]
 
     log_filename(f"extracting sound_line_data from sound_line: {sound_line}")
     if not sound_line_data:
@@ -1398,7 +1396,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
     lang_code = sound_line_data.get("lang_code")
 
     if normalize_audio:
-        lufs = config["lufs"]
+        lufs = config[note_type_name]["lufs"]
     else:
         lufs = None
 
@@ -1431,7 +1429,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
         "full_source_filename": full_source_filename,
     }
 
-def alter_sound_file_times(altered_data, sound_line, config, use_translation_data):
+def alter_sound_file_times(altered_data, sound_line, config, use_translation_data, note_type_name):
     if not altered_data:
         log_error("altered sound_line_data is empty")
         return None
@@ -1461,7 +1459,8 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
         sound_line,
         config,
         extract_sound_line_data(altered_data["new_sound_line"]),
-        use_translation_data
+        use_translation_data,
+        note_type_name
     )
 
     if not cmd:

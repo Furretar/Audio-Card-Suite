@@ -184,7 +184,12 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     start_index = data["start_index"]
     end_index = data["end_index"]
     timing_code = data["timing_lang_code"]
-    if not timing_code:
+    print(f"timing code: {timing_code}, code: {code}")
+
+    if not timing_code and not code:
+        timing_code = "und"
+        code = "und"
+    elif not timing_code:
         timing_code = code
 
     # keep start and end times on opposite edges
@@ -199,6 +204,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         end_time = None
 
     full_source_filename = data["full_source_filename"]
+    print(f"2 sending code: {timing_code}")
     timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database)
 
     if not timing_subtitle_path:
@@ -221,6 +227,10 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     if timing_code != code:
         sentence_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database)
         log_filename(f"sentence_subtitle_path: {sentence_subtitle_path}")
+
+        if not sentence_subtitle_path:
+            aqt.utils.showInfo(f"No subtitle file found matching {full_source_filename}|`track_{track}`|code:'{code}'")
+
         sentence_blocks = manage_files.get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(sentence_subtitle_path, start_time, end_time)
         if not sentence_blocks:
             log_error(f"no sentence blocks returned")

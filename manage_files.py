@@ -195,7 +195,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
             return None
 
         if not code or code.lower() == "none":
-            log_error(f"Invalid subtitle language code: {code!r}")
+            log_error(f"Invalid subtitle language code: {code}")
             return None
 
         cursor = database.cursor()

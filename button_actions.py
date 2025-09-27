@@ -824,12 +824,29 @@ def show_info_msg(msg):
     aqt.utils.showInfo(msg)
 
 def get_fields_from_editor_or_note(editor_or_note):
+
+    if hasattr(editor_or_note, "note"):
+        note = editor_or_note.note
+    else:
+        note = editor_or_note
+
+    # determine model / model name (minimal addition)
+    if hasattr(note, "model"):
+        note_type_name = note.model()['name'] if callable(note.model) else note.model['name']
+    elif hasattr(note, "modelName"):
+        note_type_name = note.modelName
+    else:
+        aqt.utils.showInfo("Cannot determine note type/model.")
+        return {}
+
+
     config = constants.extract_config_data()
     if config is None:
         log_error("Config missing required fields, cannot proceed.")
         return {}
 
-    mapped_fields = config.get("mapped_fields", {})
+    mapped_fields = config[note_type_name].get("mapped_fields", {})
+    print(f"mapped_fields: {mapped_fields}")
     if not mapped_fields:
         print("mapped_fields is empty or missing")
         aqt.utils.showInfo(f"No fields are mapped")
@@ -838,8 +855,7 @@ def get_fields_from_editor_or_note(editor_or_note):
     note = editor_or_note.note if hasattr(editor_or_note, "note") else editor_or_note
     note_type = note.note_type()
     note_type_name = note_type['name']
-    field_map = mapped_fields.get(note_type_name)
-    if not field_map:
+    if not mapped_fields:
         log_error(f"No field map found for note type '{note_type_name}'")
         return {}
 
@@ -854,7 +870,7 @@ def get_fields_from_editor_or_note(editor_or_note):
     lookup = {}
     missing = []
     for lbl in required_labels:
-        fld = next((f for f, lab in field_map.items() if lab == lbl), None)
+        fld = next((f for f, lab in mapped_fields.items() if lab == lbl), None)
         if fld:
             lookup[lbl] = fld
         else:

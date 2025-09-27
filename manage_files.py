@@ -146,7 +146,7 @@ def get_config():
 # returns the name of the users field that is set to use a label
 # ex. "Target Subtitle Line" might return "Expression" field
 def get_field_key_from_label(note_type_name: str, label: str, config: dict) -> str:
-    mapped_fields = config["mapped_fields"][note_type_name]
+    mapped_fields = config[note_type_name].get("mapped_fields", {})
     for field_key, mapped_label in mapped_fields.items():
         if mapped_label == label:
             return field_key
@@ -711,7 +711,17 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
 
         normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
 
-        max_window = 10
+        if len(sentence_line) <= 10:
+            max_window = max(1, len(sentence_line))
+        elif len(sentence_line) <= 100:
+            max_window = max(1, 10 + len(sentence_line) // 10)
+        elif len(sentence_line) <= 1000:
+            max_window = max(1, len(sentence_line) // 10)
+        else:
+            max_window = 100
+
+        print(f"window: {max_window}")
+
         joined_lines = normalized_lines
 
         for i in range(len(joined_lines) - max_window + 1):

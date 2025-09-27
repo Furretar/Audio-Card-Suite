@@ -81,6 +81,8 @@ class ConfigManager:
         with open(self.config_path, "w", encoding="utf-8") as f:
             json.dump(self.data, f, indent=2)
 
+
+
     def getMappedFields(self, model_name):
         return self.data.get("mapped_fields", {}).get(model_name, {})
 
@@ -128,16 +130,24 @@ class AudioToolsDialog(QDialog):
 
     def save_settings(self):
         print("save_settings called")
-        self.settings["image_height"] = self.imageHeightEdit.value()
-        self.settings["pad_start_target"] = self.padStartEditTarget.value()
-        self.settings["pad_end_target"] = self.padEndEditTarget.value()
-        self.settings["pad_start_translation"] = self.padStartEditTranslation.value()
-        self.settings["pad_end_translation"] = self.padEndEditTranslation.value()
-        self.settings["audio_ext"] = self.audioExtCombo.currentText()
-        self.settings["bitrate"] = self.bitrateEdit.value()
-        self.settings["normalize_audio"] = self.normalize_checkbox.isChecked()
-        self.settings["lufs"] = self.lufsSpinner.value()
-        self.settings["source_folder"] = self.sourceDirEdit.text()
+
+
+
+        model_name = self.modelButton.text()
+
+        if model_name not in self.settings:
+            self.settings[model_name] = {}
+
+        self.settings[model_name]["image_height"] = self.imageHeightEdit.value()
+        self.settings[model_name]["pad_start_target"] = self.padStartEditTarget.value()
+        self.settings[model_name]["pad_end_target"] = self.padEndEditTarget.value()
+        self.settings[model_name]["pad_start_translation"] = self.padStartEditTranslation.value()
+        self.settings[model_name]["pad_end_translation"] = self.padEndEditTranslation.value()
+        self.settings[model_name]["audio_ext"] = self.audioExtCombo.currentText()
+        self.settings[model_name]["bitrate"] = self.bitrateEdit.value()
+        self.settings[model_name]["normalize_audio"] = self.normalize_checkbox.isChecked()
+        self.settings[model_name]["lufs"] = self.lufsSpinner.value()
+        self.settings[model_name]["source_folder"] = self.sourceDirEdit.text()
 
         for i, key in enumerate([
             "target_audio_track",
@@ -242,7 +252,7 @@ class AudioToolsDialog(QDialog):
             layout = QVBoxLayout(dialog)
 
             message = QLabel(
-                f"All cards of note type '{note_type}' in the deck '{deck['name']}' will have fields generated."
+                f"All cards in the deck '{deck['name']}' will have fields generated."
             )
             layout.addWidget(message)
 
@@ -277,17 +287,13 @@ class AudioToolsDialog(QDialog):
 
         self.setWindowTitle("Audio Card Suite")
         vbox = QVBoxLayout()
-
         importGroup = QGroupBox("Import Options")
 
         self.modelButton = QPushButton()
         default_model = self.settings.get("default_model")
-        current_model = mw.col.models.current()["name"]
         self.modelButton.setText(default_model)
 
-
         self.modelButton.setAutoDefault(False)
-
         self.modelButton.clicked.connect(self.show_model_menu)
 
         self.modelFieldsButton = QPushButton("⚙️")
@@ -602,7 +608,7 @@ class AudioToolsDialog(QDialog):
         self.on_audio_ext_changed(self.audioExtCombo.currentText())
 
 
-        # save settings anytime a change is made
+        # save settings any time a change is made
         self.sourceDirEdit.textChanged.connect(self.save_settings)
         self.imageHeightEdit.valueChanged.connect(self.save_settings)
         self.bitrateEdit.valueChanged.connect(self.save_settings)

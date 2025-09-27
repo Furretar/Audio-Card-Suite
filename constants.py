@@ -57,7 +57,7 @@ BACKTICK_PATTERN = re.compile(
     r'`(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'
     r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'
     r'(?P<subtitle_range>\d+-\d+)'
-    r'(?:`(?P<normalize_tag>[^`]+))?'
+    r'(?:`(?P<normalize_tag>[^`]+))?' 
     r'\.(?P<sound_file_extension>\w+)]$',
     re.IGNORECASE
 )

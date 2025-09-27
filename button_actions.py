@@ -332,7 +332,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
             aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{os.path.basename(addon_source_folder)}',\n or any embedded subtitle file.")
             return
 
-
+    print(f"sound line: {new_sound_line}")
     editor.note.fields[sound_idx] = new_sound_line
     editor.loadNote()
 
@@ -365,8 +365,12 @@ def generate_and_update_fields(editor, note, should_overwrite):
         log_error("No editor or note provided")
         return None, None
 
+    note_type_name = current_note.model()["name"]
+
     if not fields:
-        log_error(f"fields is null, fields are not set in menu")
+        log_error(f"No fields set for the note type '{note_type_name}'.")
+        aqt.utils.showInfo(f"No fields set for the note type '{note_type_name}'.")
+
         return None, None
 
     sentence_idx = fields["sentence_idx"]
@@ -375,7 +379,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
     translation_idx = fields["translation_idx"]
     translation_sound_idx = fields["translation_sound_idx"]
     sound_line = fields["sound_line"]
-    note_type_name = current_note.model()["name"]
 
     modifiers = QApplication.keyboardModifiers()
     overwrite = bool(modifiers & Qt.KeyboardModifier.ControlModifier) or should_overwrite
@@ -458,10 +461,11 @@ def generate_and_update_fields(editor, note, should_overwrite):
     else:
         update_field(image_idx, new_image_line)
 
-    current_note.flush()
     # Only call editor.loadNote() if editor is not None
     if editor is not None:
         editor.loadNote()
+    else:
+        note.col.update_note(current_note)
 
     # Use editor.note.fields if editor is present, else current_note.fields
     sound_field_idx = translation_sound_idx if alt_pressed else sound_idx
@@ -888,7 +892,7 @@ def get_fields_from_editor_or_note(editor_or_note):
     translation_sound_line = safe_field(translation_sound_idx)
 
     if not sentence_line or sentence_line == "":
-        aqt.utils.showInfo(f"Target Sentence field is empty.")
+        log_error(f"Target Sentence field is empty.")
 
     return {
         "sound_line": sound_line,

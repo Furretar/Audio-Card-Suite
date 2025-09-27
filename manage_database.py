@@ -215,22 +215,25 @@ def update_database():
     media_exts = audio_exts + video_exts
 
     # Recursively get all media files, excluding any folder that contains 'ignore' in its path parts
-    current_media_fullpaths = {
+    media_paths_in_folder = {
         os.path.join(root, f)
         for root, dirs, files in os.walk(folder)
         if 'ignore' not in root.lower().split(os.sep)
         for f in files
         if os.path.splitext(f)[1].lower() in media_exts
     }
-    current_media = {os.path.basename(p) for p in current_media_fullpaths}
+    current_media = {os.path.basename(p) for p in media_paths_in_folder}
 
     subtitle_extensions = constants.subtitle_extensions
-    subtitles_in_folder = {
-        f for root, dirs, files in os.walk(folder)
+    subtitle_paths_in_folder = {
+        os.path.join(root, f)
+        for root, dirs, files in os.walk(folder)
         if 'ignore' not in root.lower().split(os.sep)
         for f in files
         if os.path.splitext(f)[1].lower() in subtitle_extensions
     }
+
+    subtitles_in_folder = {os.path.basename(p) for p in subtitle_paths_in_folder}
 
     # collect orphaned subtitles
     cursor = conn.execute('SELECT filename, language, track FROM subtitles')
@@ -238,22 +241,23 @@ def update_database():
 
     to_delete = []
     for f in sorted(indexed_subs):
-        vid, tpart, lang_s = f.split('`')
+        basename, tpart, lang_s = f.split('`')
         track = tpart[len('track_'):]
         lang = lang_s[:-4]
 
-        if vid not in current_media:
-            to_delete.append((vid, lang, track))
+        if basename not in current_media:
+            log_database(f"deleting sub: {basename}")
+            to_delete.append((basename, lang, track))
 
     constants.database_items_left = len(current_media) + len(subtitles_in_folder) + len(to_delete)
 
     # log and delete them
-    for vid, lang, track in to_delete:
+    for basename, lang, track in to_delete:
         conn.execute(
             "DELETE FROM subtitles WHERE filename=? AND language=? AND track=?",
-            (vid, lang, track),
+            (basename, lang, track),
         )
-        log_database(f"Removed subtitle: file={vid}, track={track}, lang={lang}")
+        log_database(f"Removed subtitle: file={basename}, track={track}, lang={lang}")
         constants.database_items_left -= 1
 
     # Get current media basenames (without extension)
@@ -266,23 +270,21 @@ def update_database():
     indexed_subtitle_basenames = {os.path.splitext(f)[0] for f in indexed_subtitle_files}
 
     log_database(f"current subtitles in folder: {subtitles_in_folder}")
-    for subtitle_file in subtitles_in_folder:
-        name_no_ext = os.path.splitext(subtitle_file)[0]
+    for subtitle_path in subtitle_paths_in_folder:
+        filename = os.path.basename(subtitle_path)
 
-        index_backtick = name_no_ext.rfind('`')
-        index_dot = name_no_ext.rfind('.')
-        separator_index = max(index_backtick, index_dot)
+        name_no_ext, ext = os.path.splitext(filename)
 
-        if separator_index != -1:
-            base_name = name_no_ext[:separator_index]
-            lang_code = name_no_ext[separator_index + 1:]
+        match = re.match(r"^(.*?)(?:\.([a-zA-Z]{3}))?$", name_no_ext)
+        if match:
+            base_name = match.group(1)
+            lang_code = match.group(2) if match.group(2) else "und"
         else:
-            base_name = name_no_ext
+            base_name = os.path.splitext(name_no_ext)[0]
             lang_code = "und"
 
         if base_name not in indexed_subtitle_basenames:
             if base_name in media_basenames:
-                subtitle_path = os.path.join(folder, subtitle_file)
 
                 # There might be multiple media files with this base_name but different extensions
                 for media_file in (m for m in current_media if os.path.splitext(m)[0] == base_name):
@@ -291,7 +293,7 @@ def update_database():
                         if not parsed:
                             log_database(f"No valid subtitle content found in {subtitle_path}")
                             continue
-
+                        print(f"lang code: {lang_code}")
                         conn.execute(
                             'INSERT INTO subtitles (filename, language, track, content) VALUES (?, ?, ?, ?)',
                             (media_file, lang_code, "-1", json.dumps(parsed, ensure_ascii=False))

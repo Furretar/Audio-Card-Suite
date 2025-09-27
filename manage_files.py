@@ -269,11 +269,11 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
 
 
     log_error(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
-    showInfo(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
+    # todo showInfo(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
 
     if config["selected_tab_index"] == 0:
         log_error(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {full_source_filename}\nPlease check your settings.")
-        showInfo(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {full_source_filename}\nPlease check your settings.")
+        # showInfo(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {full_source_filename}\nPlease check your settings.")
     return None
 
 # returns newly generated formatted image line if image field is empty, otherwise returns current image
@@ -687,9 +687,10 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
         return 3
 
     rows.sort(key=lambda row: priority(row[1], row[2]))
-
     for db_filename, lang, trk, content_json in rows:
+        print(f"got here11")
         # don't check subtitles with this priority set
+        print(f"lang: {lang}, trk: {trk}, priority: {priority(lang, trk)}")
         if priority(lang, trk) == 3:
             continue
         log_filename(f"Checking subtitle file: {db_filename}, lang={lang}, track={trk}")

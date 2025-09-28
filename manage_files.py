@@ -391,7 +391,7 @@ def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, 
 
     print(f"4 sending code: {timing_language_code}")
     timing_subtitle_path = get_subtitle_file_from_database(
-        full_source_filename, timing_audio_track, timing_language_code, config, subtitle_database)
+        full_source_filename, timing_audio_track, timing_language_code, config, subtitle_database, note_type_name)
 
     overlapping_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(
         timing_subtitle_path, sound_line_data["start_time"], sound_line_data["end_time"]

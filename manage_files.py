@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import json
 import html
@@ -194,66 +195,139 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
             log_error(f"Invalid subtitle language code: {code}")
             return None
 
-        cursor = database.cursor()
-
         # try exact match
         log_filename(f"trying exact match")
-        query = "SELECT 1 FROM subtitles WHERE filename = ? AND track = ? AND language = ? LIMIT 1"
-        cursor.execute(query, (full_source_filename, str(track), code))
+        cursor = database.execute('''
+        SELECT s.filename, s.language, s.track, s.content
+        FROM subtitles s
+        JOIN subtitle_access a ON s.filename = a.filename
+        WHERE s.filename = ? AND s.track = ? AND s.language = ?
+        ORDER BY a.last_accessed DESC
+        ''', (full_source_filename, str(track), code))
         result = cursor.fetchone()
+
         if result:
             tagged_subtitle_file = f"{full_source_filename}`track_{track}`{code}.srt"
             tagged_subtitle_path = os.path.join(constants.addon_source_folder, tagged_subtitle_file)
             if os.path.exists(tagged_subtitle_path):
                 log_filename(f"tagged_subtitle_path: {tagged_subtitle_path}")
+
+                # Update last_accessed for this access
+                database.execute('''
+                INSERT INTO subtitle_access(filename, last_accessed)
+                VALUES (?, CURRENT_TIMESTAMP)
+                ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
+                ''', (full_source_filename,))
+
                 return tagged_subtitle_path
 
         # try matching basename (user placed file)
         log_filename(f"trying to match basename with filename: {full_source_filename}")
         cursor = database.cursor()
-        query = "SELECT 1 FROM subtitles WHERE filename = ? AND track = '-1' AND language = 'und' LIMIT 1"
+        query = '''
+        SELECT s.filename
+        FROM subtitles s
+        JOIN subtitle_access a ON s.filename = a.filename
+        WHERE s.filename = ? AND s.track = '-1' AND s.language = 'und'
+        ORDER BY a.last_accessed DESC
+        LIMIT 1
+        '''
         cursor.execute(query, (full_source_filename,))
-        if cursor.fetchone():
+        result = cursor.fetchone()
+
+        if result:
             log_filename(f"Found subtitle in DB for {full_source_filename} with track=-1 and language=und")
+
+            # Update last_accessed for this access
+            database.execute('''
+            INSERT INTO subtitle_access(filename, last_accessed)
+            VALUES (?, CURRENT_TIMESTAMP)
+            ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
+            ''', (full_source_filename,))
+
             return f"{full_source_filename}.srt"
 
         # prioritize finding the code if that tab is selected
         log_filename(f"trying match code")
         like_pattern = f"{full_source_filename}%"
         if selected_tab_index == 0:
-            query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ? AND language = ?"
+            query = '''
+            SELECT s.filename, s.track, s.language
+            FROM subtitles s
+            JOIN subtitle_access a ON s.filename = a.filename
+            WHERE s.filename LIKE ? AND s.language = ?
+            ORDER BY a.last_accessed DESC
+            LIMIT 1
+            '''
             cursor.execute(query, (like_pattern, code))
             row = cursor.fetchone()
             if row:
                 base_filename, found_track, found_code = row
                 subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
                 subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-                log_filename(f"[tab 0] subtitle_path (by code): {subtitle_path}")
+                log_filename(f"[tab 0] subtitle_path (by code, recent-first): {subtitle_path}")
+
+                # Update last_accessed for this access
+                database.execute('''
+                INSERT INTO subtitle_access(filename, last_accessed)
+                VALUES (?, CURRENT_TIMESTAMP)
+                ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
+                ''', (base_filename,))
+
                 return subtitle_path
 
         # search for track
         log_filename(f"trying to match track")
-        query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ?"
+        query = '''
+        SELECT s.filename, s.track, s.language
+        FROM subtitles s
+        JOIN subtitle_access a ON s.filename = a.filename
+        WHERE s.filename LIKE ?
+        ORDER BY a.last_accessed DESC
+        '''
         cursor.execute(query, (like_pattern,))
         rows = cursor.fetchall()
         for db_filename, db_track, db_lang in rows:
             if db_filename.startswith(full_source_filename) and f"`track_{track}`" in db_filename:
                 subtitle_filename = f"{db_filename}`track_{track}`{db_lang}.srt"
                 subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-                log_filename(f"[tab {selected_tab_index}] subtitle_path (by track): {subtitle_path}")
+                log_filename(f"[tab {selected_tab_index}] subtitle_path (by track, recent-first): {subtitle_path}")
+
+                # Update last_accessed for this access
+                database.execute('''
+                INSERT INTO subtitle_access(filename, last_accessed)
+                VALUES (?, CURRENT_TIMESTAMP)
+                ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
+                ''', (db_filename,))
+
                 return subtitle_path
 
         # search for code as a fallback if track was not found
         log_filename(f"trying code as fallback")
         if selected_tab_index != 0:
-            query = "SELECT filename, track, language FROM subtitles WHERE filename LIKE ? AND language = ?"
+            query = '''
+            SELECT s.filename, s.track, s.language
+            FROM subtitles s
+            JOIN subtitle_access a ON s.filename = a.filename
+            WHERE s.filename LIKE ? AND s.language = ?
+            ORDER BY a.last_accessed DESC
+            LIMIT 1
+            '''
             cursor.execute(query, (like_pattern, code))
             row = cursor.fetchone()
             if row:
                 base_filename, found_track, found_code = row
                 subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
                 subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-                log_filename(f"[tab 1+] subtitle_path (fallback by code): {subtitle_path}")
+                log_filename(f"[tab 1+] subtitle_path (fallback by code, recent-first): {subtitle_path}")
+
+                # Update last_accessed for this access
+                database.execute('''
+                INSERT INTO subtitle_access(filename, last_accessed)
+                VALUES (?, CURRENT_TIMESTAMP)
+                ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
+                ''', (base_filename,))
+
                 return subtitle_path
 
         return None
@@ -454,7 +528,14 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
         code = "und"
 
     # Try exact match first (using base without extension)
-    query = "SELECT content, filename FROM subtitles WHERE filename=? AND track=? AND language=?"
+    query = '''
+    SELECT s.content, s.filename
+    FROM subtitles s
+    JOIN subtitle_access a ON s.filename = a.filename
+    WHERE s.filename=? AND s.track=? AND s.language=?
+    ORDER BY a.last_accessed DESC
+    LIMIT 1
+    '''
     params = [base_no_ext, str(track), code]
     cursor = db.execute(query, params)
     row = cursor.fetchone()
@@ -462,11 +543,26 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
     # If no exact match, try LIKE query to find filename starting with base_no_ext (ignore extension differences)
     if row is None:
         like_pattern = base_no_ext + "%"
-        query_like = "SELECT content, filename FROM subtitles WHERE filename LIKE ? AND track=? AND language=?"
+        query_like = '''
+        SELECT s.content, s.filename
+        FROM subtitles s
+        JOIN subtitle_access a ON s.filename = a.filename
+        WHERE s.filename LIKE ? AND s.track=? AND s.language=?
+        ORDER BY a.last_accessed DESC
+        LIMIT 1
+        '''
         cursor = db.execute(query_like, (like_pattern, str(track), code))
         row = cursor.fetchone()
         if row:
-            print(f"[DEBUG] Found subtitle via LIKE match: {row[1]}")
+            print(f"[DEBUG] Found subtitle via LIKE match (recent-first): {row[1]}")
+
+    # Optionally, update last_accessed after fetching
+    if row:
+        db.execute('''
+        INSERT INTO subtitle_access(filename, last_accessed)
+        VALUES (?, CURRENT_TIMESTAMP)
+        ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
+        ''', (row[1],))
 
     if row is None:
         log_error(f"No subtitle content found in DB for filename={base_no_ext} track={track} language={code}")
@@ -546,13 +642,26 @@ def get_subtitle_track_number_by_code(source_path, code):
     db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
     conn = manage_database.get_database()
     filename = os.path.basename(source_path)
-    cursor = conn.execute(
-        "SELECT track FROM media_tracks WHERE filename = ? AND language = ? AND type = 'subtitle' ORDER BY track",
-        (filename, code.lower())
-    )
+
+    cursor = conn.execute('''
+    SELECT m.track
+    FROM media_tracks m
+    JOIN subtitle_access a ON m.filename = a.filename
+    WHERE m.filename = ? AND m.language = ? AND m.type = 'subtitle'
+    ORDER BY a.last_accessed DESC
+    LIMIT 1
+    ''', (filename, code.lower()))
+
     row = cursor.fetchone()
     if row:
+        # Update last_accessed for this access
+        conn.execute('''
+        INSERT INTO subtitle_access(filename, last_accessed)
+        VALUES (?, CURRENT_TIMESTAMP)
+        ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
+        ''', (filename,))
         return row[0]
+
     return None
 
 def get_subtitle_code_by_track_number(source_path, track_number):
@@ -597,10 +706,13 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
 
 
     log_filename(f"searching for blocks with filename: {filename}, code: {code}, track: {track}")
-    cursor.execute(
-        "SELECT content FROM subtitles WHERE filename = ? AND track = ? AND language = ? ORDER BY rowid",
-        (filename, track, code)
-    )
+    cursor.execute('''
+    SELECT s.content
+    FROM subtitles s
+    JOIN subtitle_access a ON s.filename = a.filename
+    WHERE s.filename = ? AND s.track = ? AND s.language = ?
+    ORDER BY a.last_accessed DESC
+    ''', (filename, track, code))
     row = cursor.fetchone()
 
     if row is None:
@@ -660,11 +772,11 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
     return usable_blocks
 
 
+# write here
 def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config, note_type_name):
     log_filename(f"getting block from sentence line: {sentence_line}")
 
     note_config = config.get(note_type_name, {})
-
     target_language_code = note_config.get("target_language_code")
     if not target_language_code:
         log_error(f"Target language code not set for note type: '{note_type_name}'")
@@ -677,29 +789,24 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
     log_filename(f"Normalized sentence to match: '{normalized_sentence}'")
 
     subtitle_database = manage_database.get_database()
-    cursor = subtitle_database.execute("SELECT filename, language, track, content FROM subtitles")
+    cursor = subtitle_database.execute('''
+        SELECT
+            s.filename,
+            s.language,
+            s.track,
+            s.content,
+            COALESCE(a.last_accessed, '1970-01-01 00:00:00') AS last_accessed
+        FROM subtitles s
+        LEFT JOIN subtitle_access a ON s.filename = a.filename
+        WHERE (s.language = 'und' AND s.track = '-1') OR s.language = ? OR s.track = ?
+        ORDER BY last_accessed DESC, s.filename COLLATE NOCASE ASC
+    ''', (target_language_code, target_audio_track))
     rows = cursor.fetchall()
-
     print(f"rows len: {len(rows)}")
 
-    # search subs placed by user first, then target code, target track, then everything else
-    def priority(lang, trk):
-        trk = str(trk)
-        if lang == "und" and trk == "-1":
-            return 0
-        if lang == target_language_code:
-            return 1
-        if trk == target_audio_track:
-            return 2
-        return 3
-
-    rows.sort(key=lambda row: priority(row[1], row[2]))
-    for db_filename, lang, trk, content_json in rows:
-        print(f"got here11")
-        # don't check subtitles with this priority set
-        print(f"lang: {lang}, trk: {trk}, priority: {priority(lang, trk)}")
-        if priority(lang, trk) == 3:
-            continue
+    for db_filename, lang, trk, content_json, last_accessed in rows:
+        print(f"timestamp: {last_accessed}")
+        print(f"lang: {lang}, trk: {trk}")
         log_filename(f"Checking subtitle file: {db_filename}, lang={lang}, track={trk}")
         try:
             raw_blocks = json.loads(content_json)
@@ -735,13 +842,18 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
             window = joined_lines[i:i + max_window]
             joined = ''.join(window)
             if normalized_sentence in joined:
+                subtitle_database.execute(
+                    "UPDATE subtitle_access SET last_accessed = CURRENT_TIMESTAMP WHERE filename = ?",
+                    (db_filename,)
+                )
+                subtitle_database.commit()
+
                 subtitle_name = f"{db_filename}"
                 if lang != "und" or str(trk) != "-1":
                     subtitle_name += f"`track_{trk}`{lang}"
                 subtitle_name += ".srt"
                 actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
                 return usable_blocks[i + max_window - 1], actual_path
-
 
     log_command("No subtitle match found across blocks.")
     return None, None
@@ -834,10 +946,13 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
     def search_blocks(after_current: bool):
         found_current = not after_current
 
-        db   = manage_database.get_database()
-        rows = db.execute(
-            "SELECT filename, language, track, content FROM subtitles"
-        ).fetchall()
+        db = manage_database.get_database()
+        rows = db.execute('''
+            SELECT s.filename, s.language, s.track, s.content
+            FROM subtitles s
+            JOIN subtitle_access a ON s.filename = a.filename
+            ORDER BY a.last_accessed DESC
+        ''').fetchall()
 
         def priority(lang, trk):
             trk = str(trk)

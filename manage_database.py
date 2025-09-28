@@ -34,8 +34,22 @@ def get_database():
     if conn is None:
         db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
         conn = sqlite3.connect(db_path, timeout=10, isolation_level=None)
-        conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')
+        conn.execute('''
+        CREATE TABLE IF NOT EXISTS subtitles (
+            filename TEXT,
+            language TEXT,
+            track INTEGER,
+            content TEXT
+        )
+        ''')
+        conn.execute('''
+        CREATE TABLE IF NOT EXISTS subtitle_access (
+            filename TEXT PRIMARY KEY,
+            last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
     return conn
+
 
 def close_database():
     global conn
@@ -206,6 +220,13 @@ def update_database():
     )
     ''')
 
+    conn.execute('''
+    CREATE TABLE IF NOT EXISTS subtitle_access (
+        filename TEXT PRIMARY KEY,
+        last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
     folder = os.path.join(constants.addon_dir, constants.addon_source_folder)
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -257,6 +278,10 @@ def update_database():
             "DELETE FROM subtitles WHERE filename=? AND language=? AND track=?",
             (basename, lang, track),
         )
+        conn.execute(
+            "DELETE FROM subtitle_access WHERE filename=?",
+            (basename,)
+        )
         log_database(f"Removed subtitle: file={basename}, track={track}, lang={lang}")
         constants.database_items_left -= 1
 
@@ -298,6 +323,13 @@ def update_database():
                             'INSERT INTO subtitles (filename, language, track, content) VALUES (?, ?, ?, ?)',
                             (media_file, lang_code, "-1", json.dumps(parsed, ensure_ascii=False))
                         )
+
+                        conn.execute('''
+                        INSERT INTO subtitle_access(filename, last_accessed)
+                        VALUES (?, CURRENT_TIMESTAMP)
+                        ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
+                        ''', (media_file,))
+
                         log_database(f"Added subtitle content for {subtitle_path} linked to media {media_file} ({len(parsed)} entries)")
                     except Exception as e:
                         log_database(f"Failed to add subtitle content from {subtitle_path}: {e}")
@@ -315,6 +347,7 @@ def update_database():
     for mf in sorted(indexed_media - current_media):
         conn.execute("DELETE FROM media_tracks WHERE filename=?", (mf,))
         conn.execute("DELETE FROM media_audio_start_times WHERE filename=?", (mf,))
+        conn.execute("DELETE FROM subtitle_access WHERE filename=?", (mf,))
         log_database(f"Removed media entries for: {mf}")
 
     # Remove orphaned user-placed subtitle entries (track = -1) whose source files no longer exist
@@ -338,6 +371,10 @@ def update_database():
             conn.execute(
                 "DELETE FROM subtitles WHERE filename=? AND language=? AND track=?",
                 (filename, language, track),
+            )
+            conn.execute(
+                "DELETE FROM subtitle_access WHERE filename=?",
+                (filename,)
             )
             log_database(f"Removed orphaned user subtitle: file={filename}, lang={language}, track={track}")
 
@@ -508,6 +545,11 @@ def extract_all_subtitle_tracks_and_update_db(conn):
                 'INSERT INTO subtitles (filename, language, track, content) VALUES (?,?,?,?)',
                 [(os.path.basename(media_file), lang, str(track), json.dumps(parsed, ensure_ascii=False))]
             )
+            conn.execute('''
+            INSERT INTO subtitle_access(filename, last_accessed)
+            VALUES (?, CURRENT_TIMESTAMP)
+            ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
+            ''', (os.path.basename(media_file),))
             log_database(f"Inserted {len(parsed)} blocks for {os.path.basename(media_file)}, track={track}, lang={lang}")
             conn.commit()
         constants.database_items_left -= 1
@@ -601,3 +643,16 @@ def print_all_subtitle_names():
         print(f"{filename} | Track: {track} | Language: {language}")
 
 print_all_subtitle_names()
+
+def print_subtitles_by_last_accessed():
+    conn = get_database()
+
+    cursor = conn.execute('''
+        SELECT filename, last_accessed
+        FROM subtitle_access
+        ORDER BY last_accessed DESC
+    ''')
+
+    for filename, last_accessed in cursor:
+        print(f"{last_accessed} - {filename}")
+print_subtitles_by_last_accessed()

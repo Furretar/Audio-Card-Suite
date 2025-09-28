@@ -176,6 +176,7 @@ def extract_subtitle_path_data(subtitle_path):
 # searches all possible name patterns using the base filename, track, and code
 def get_subtitle_file_from_database(full_source_filename, track, code, config, database, note_type_name):
     if not code:
+        print(f"no code received")
         code = "und"
     def find_subtitle():
         selected_tab_index = config.get(note_type_name, {}).get("selected_tab_index", config.get("selected_tab_index", 1))
@@ -340,6 +341,7 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
     subtitle_database = manage_database.get_database()
 
     # get translation subtitle file and the subtitle blocks that overlap timings with the sound line
+    print(f"3 sending code: {translation_language_code}")
     translation_subtitle_path = get_subtitle_file_from_database(full_source_filename, translation_audio_track, translation_language_code, config, subtitle_database, note_type_name)
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
 
@@ -387,6 +389,7 @@ def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, 
     subtitle_database = manage_database.get_database()
     print(f"full source filename2: {full_source_filename}")
 
+    print(f"4 sending code: {timing_language_code}")
     timing_subtitle_path = get_subtitle_file_from_database(
         full_source_filename, timing_audio_track, timing_language_code, config, subtitle_database)
 

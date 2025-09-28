@@ -45,7 +45,7 @@ image_string = constants.image_string
 # contains the selection and re-generates every field
 def next_result_button(editor):
     current_note = editor.note
-    note_type_name = current_note.model()["name"]
+    note_type_name = current_note.note_type()["name"]
 
     if constants.database_updating.is_set():
         tooltip(f"Database updating, {constants.database_items_left} files left process.")
@@ -138,7 +138,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         tooltip(f"Database updating, {constants.database_items_left} files left process.")
 
     current_note = editor.note
-    note_type_name = current_note.model()["name"]
+    note_type_name = current_note.note_type()["name"]
 
     fields = get_fields_from_editor_or_note(editor)
     config = constants.extract_config_data()
@@ -150,19 +150,19 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         sound_idx = fields["translation_sound_idx"]
         sentence_idx = fields["translation_idx"]
         translation_idx = ""
-        track = config.get("translation_subtitle_track")
-        code = config.get("translation_language_code")
-        pad_start = config["pad_start_translation"]
-        pad_end = config["pad_end_translation"]
+        track = config[note_type_name].get("translation_subtitle_track")
+        code = config[note_type_name].get("translation_language_code")
+        pad_start = config[note_type_name]["pad_start_translation"]
+        pad_end = config[note_type_name]["pad_end_translation"]
 
     else:
         sound_idx = fields["sound_idx"]
         sentence_idx = fields["sentence_idx"]
         translation_idx = fields["translation_idx"]
-        track = config.get("target_subtitle_track")
-        code = config.get("target_language_code")
-        pad_start = config["pad_start_target"]
-        pad_end = config["pad_end_target"]
+        track = config[note_type_name].get("target_subtitle_track")
+        code = config[note_type_name].get("target_language_code")
+        pad_start = config[note_type_name]["pad_start_target"]
+        pad_end = config[note_type_name]["pad_end_target"]
 
     if add_to_start == 0:
         pad_start = 0
@@ -187,15 +187,18 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         log_error(f"still no data from sound line: {sound_line}, returning")
         return ""
 
+    print(f"data: {data}")
     start_index = data["start_index"]
     end_index = data["end_index"]
     timing_code = data["timing_lang_code"]
     print(f"timing code: {timing_code}, code: {code}")
 
     if not timing_code and not code:
+        print(f"no timing code and no code")
         timing_code = "und"
         code = "und"
     elif not timing_code:
+        print(f"no timing code")
         timing_code = code
 
     # keep start and end times on opposite edges
@@ -295,7 +298,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int):
     current_note = editor.note
-    note_type_name = current_note.model()["name"]
+    note_type_name = current_note.note_type()["name"]
 
     if constants.database_updating.is_set():
         tooltip(f"Database updating, {constants.database_items_left} files left process.")
@@ -340,6 +343,8 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
     if not new_sound_line:
         log_error("No new sound tag returned, checking database.")
         block, subtitle_path = manage_files.get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config, note_type_name)
+        if not block:
+            return
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config, note_type_name)
         if new_sound_line:
             new_sound_line_data = manage_files.extract_sound_line_data(new_sound_line)
@@ -386,7 +391,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
         log_error("No editor or note provided")
         return None, None
 
-    note_type_name = current_note.model()["name"]
+    note_type_name = current_note.note_type()["name"]
 
     if not fields:
         log_error(f"No fields set for the note type '{note_type_name}'.")
@@ -691,6 +696,8 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
     new_sentence_line = ""
     track = config["target_subtitle_track"]
     code = config["target_language_code"]
+    if not code:
+        code = "und"
     pad_start_target = config["pad_start_target"]
     pad_end_target = config["pad_end_target"]
     pad_start_translation = config["pad_start_translation"]
@@ -730,7 +737,10 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
 
         if not subtitle_path:
             log_error(f"subtitle path null2")
-            aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{os.path.basename(addon_source_folder)}',\n or any embedded subtitle file with the code `{code}` or track `{track}`.")
+            if not code:
+                aqt.utils.showInfo(f"Target language code is not set.")
+            else:
+                aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{os.path.basename(addon_source_folder)}',\n or any embedded subtitle file with the code `{code}` or track `{track}`.")
             return None
 
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block,subtitle_path,None,None,config, note_type_name)
@@ -855,7 +865,7 @@ def get_fields_from_editor_or_note(editor_or_note):
 
     # determine model / model name (minimal addition)
     if hasattr(note, "model"):
-        note_type_name = note.model()['name'] if callable(note.model) else note.model['name']
+        note_type_name = note.note_type()['name'] if callable(note.model) else note.model['name']
     elif hasattr(note, "modelName"):
         note_type_name = note.modelName
     else:
@@ -964,7 +974,7 @@ def get_fields_from_note(note):
     config = constants.extract_config_data()
     mapped_fields = config.get("mapped_fields", {})
 
-    note_type_name = note.model()["name"]
+    note_type_name = note.note_type()["name"]
     if note_type_name not in mapped_fields:
         log_error(f"fields not mapped for note type '{note_type_name}'")
         return {}

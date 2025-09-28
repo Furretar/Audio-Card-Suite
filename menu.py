@@ -170,14 +170,18 @@ class AudioToolsDialog(QDialog):
         self.settings[note_type_name]["lufs"] = self.lufsSpinner.value()
         self.settings["source_folder"] = self.sourceDirEdit.text()
 
-        for i, key in enumerate([
+        tracks = [
             "target_audio_track",
             "target_subtitle_track",
             "translation_audio_track",
             "translation_subtitle_track",
             "target_timing_track",
             "translation_timing_track"
-        ]):
+        ]
+
+        for i, key in enumerate(tracks):
+            default_value = self.settings.get(note_type_name, {}).get(key, constants.default_settings[key])
+            self.trackSpinners[i].setValue(default_value)
             self.settings[note_type_name][key] = self.trackSpinners[i].value()
 
         self.settings[note_type_name]["timing_tracks_enabled"] = self.timingTracksCheckbox.isChecked()
@@ -718,6 +722,8 @@ class AudioToolsDialog(QDialog):
 
     def on_tab_changed(self, index):
         note_type_name = self.modelButton.text()
+        if note_type_name not in self.settings:
+            self.settings[note_type_name] = {}
         self.settings[note_type_name]["selected_tab_index"] = index
         print(f"saving settings, tab change")
         self.save_settings()

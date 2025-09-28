@@ -266,7 +266,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
     log_error(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
     # todo showInfo(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
 
-    if config[note_type_name]["selected_tab_index"] == 0:
+    if config.get(note_type_name, {}).get("selected_tab_index", 0) == 0:
         log_error(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {full_source_filename}\nPlease check your settings.")
         # showInfo(f"Both the code `{code}` and track `track_{track}` do not exist for the file: {full_source_filename}\nPlease check your settings.")
     return None
@@ -660,8 +660,14 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
 def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config, note_type_name):
     log_filename(f"getting block from sentence line: {sentence_line}")
 
-    target_language_code = config[note_type_name]["target_language_code"]
-    target_audio_track = str(config[note_type_name]["target_audio_track"])
+    note_config = config.get(note_type_name, {})
+
+    target_language_code = note_config.get("target_language_code")
+    if not target_language_code:
+        log_error(f"Target language code not set for note type: '{note_type_name}'")
+        return None, None
+
+    target_audio_track = str(note_config.get("target_audio_track", 0))
 
     sentence_line = sentence_line or ""
     normalized_sentence = normalize_text(sentence_line)

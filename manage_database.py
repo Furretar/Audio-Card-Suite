@@ -318,7 +318,6 @@ def update_database():
                         if not parsed:
                             log_database(f"No valid subtitle content found in {subtitle_path}")
                             continue
-                        print(f"lang code: {lang_code}")
                         conn.execute(
                             'INSERT INTO subtitles (filename, language, track, content) VALUES (?, ?, ?, ?)',
                             (media_file, lang_code, "-1", json.dumps(parsed, ensure_ascii=False))

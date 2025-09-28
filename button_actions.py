@@ -187,18 +187,14 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         log_error(f"still no data from sound line: {sound_line}, returning")
         return ""
 
-    print(f"data: {data}")
     start_index = data["start_index"]
     end_index = data["end_index"]
     timing_code = data["timing_lang_code"]
-    print(f"timing code: {timing_code}, code: {code}")
 
     if not timing_code and not code:
-        print(f"no timing code and no code")
         timing_code = "und"
         code = "und"
     elif not timing_code:
-        print(f"no timing code")
         timing_code = code
 
     # keep start and end times on opposite edges
@@ -217,7 +213,8 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database, note_type_name)
 
     if not timing_subtitle_path:
-        aqt.utils.showInfo(f"No subtitle file found matching the source file '{full_source_filename}'.")
+        # aqt.utils.showInfo(f"No subtitle file found matching the source file '{full_source_filename}'.")
+        log_error(f"No subtitle file found matching the source file '{full_source_filename}'.")
 
     log_filename(f"getting timing blocks, start_index {start_index}, add to start: {add_to_start}, end_index {end_index}, add to end: {add_to_end}, timing subtitle path: {timing_subtitle_path}")
     timing_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, timing_subtitle_path, start_time, end_time)
@@ -356,10 +353,9 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
             new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line, config, alt_pressed, note_type_name)
         else:
             log_error(f"nothing found from sentence line {sentence_line}, returning")
-            aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{os.path.basename(addon_source_folder)}',\n or any embedded subtitle file.")
+            aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file.")
             return
 
-    print(f"sound line: {new_sound_line}")
     editor.note.fields[sound_idx] = new_sound_line
     editor.loadNote()
 
@@ -412,7 +408,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
     alt_pressed = bool(modifiers & Qt.KeyboardModifier.AltModifier)
 
     data = manage_files.extract_sound_line_data(sound_line)
-    print(f"fields: {fields}")
     should_generate = should_generate_fields(fields, note_type_name, overwrite, data, config)
 
     fields_status = {
@@ -440,16 +435,12 @@ def generate_and_update_fields(editor, note, should_overwrite):
         return None, None
 
     new_sound_line, new_sentence_line, new_image_line, new_translation_line, new_translation_sound_line = new_result
-    print(f"after new sentence line: {new_sentence_line}")
 
     def update_field(idx, new_val):
         nonlocal updated
         if new_val and current_note.fields[idx] != new_val:
-            print(f"Updating field {idx} from {current_note.fields[idx]!r} to {new_val!r}")
             current_note.fields[idx] = new_val
             updated = True
-        else:
-            print(f"No update needed for field {idx}")
 
     should_generate = should_generate_fields(fields, note_type_name, overwrite, data, config)
 
@@ -639,7 +630,6 @@ def should_generate_fields(fields, note_type_name, overwrite, data, config):
         if should_generate_image_line:
             source_file_extension = data["source_file_extension"]
             audio_extensions = constants.audio_extensions
-            print(f"source file extension: {source_file_extension}")
             if source_file_extension in audio_extensions:
                 should_generate_image_line = False
 
@@ -647,7 +637,6 @@ def should_generate_fields(fields, note_type_name, overwrite, data, config):
         if should_generate_translation_line or should_generate_translation_sound_line:
             full_source_filename = data["full_source_filename"]
             conn = manage_database.get_database()
-            print(f"searching for subtitle files with name: {full_source_filename}")
             cursor = conn.execute('''
                                   SELECT COUNT(*)
                                   FROM subtitles
@@ -742,7 +731,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
             if not code:
                 aqt.utils.showInfo(f"Target language code is not set.")
             else:
-                aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{os.path.basename(addon_source_folder)}',\n or any embedded subtitle file with the code `{code}` or track `{track}`.")
+                aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file with the code `{code}` or track `{track}`.")
             return None
 
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block,subtitle_path,None,None,config, note_type_name)
@@ -885,7 +874,6 @@ def get_fields_from_editor_or_note(editor_or_note):
         return {}
 
     mapped_fields = config[note_type_name].get("mapped_fields", {})
-    print(f"mapped_fields: {mapped_fields}")
     if not mapped_fields:
         # aqt.utils.showInfo(f"No fields are mapped")
         return {}

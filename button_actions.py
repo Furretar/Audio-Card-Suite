@@ -77,7 +77,7 @@ def next_result_button(editor):
     data = manage_files.extract_sound_line_data(sound_line)
 
     # gets next matching subtitle block using selected text and current fields
-    block, subtitle_path = manage_files.get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, config, data)
+    block, subtitle_path = manage_files.get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, config, data, note_type_name)
 
     if not block or not subtitle_path:
         log_error(f"didn't find another result for: {selected_text}")
@@ -85,7 +85,7 @@ def next_result_button(editor):
         return ""
 
     # generate new sound and sentence line using the block just retrieved
-    next_sound_line, next_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config)
+    next_sound_line, next_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config, note_type_name)
 
     # Check if we've wrapped around to the same result
     new_data = manage_files.extract_sound_line_data(next_sound_line)

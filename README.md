@@ -10,7 +10,8 @@
 - [ ] figure out why database doesn't go to 0 when all files are removed
 - [ ] checkbox to remove buttons at the top
 - [ ] option to auto detect languages for subs with no language code
-- [ ] check if image for audiobooks already exists for optimal batch generation 
+- [ ] check if image for audiobooks already exists for optimal batch generation
+- [ ] make next result not search for subtitle based on last accessed, breaks search, also make it remove the image
 
 
 

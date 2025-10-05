@@ -934,7 +934,6 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
             SELECT s.filename, s.language, s.track, s.content
             FROM subtitles s
             JOIN subtitle_access a ON s.filename = a.filename
-            ORDER BY a.last_accessed DESC
         ''').fetchall()
 
         def priority(lang, trk):

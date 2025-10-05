@@ -853,9 +853,7 @@ def get_fields_from_editor_or_note(editor_or_note):
 
     # determine model / model name (minimal addition)
     if hasattr(note, "model"):
-        note_type_name = note.note_type()['name'] if callable(note.model) else note.model['name']
-    elif hasattr(note, "modelName"):
-        note_type_name = note.modelName
+        note_type_name = note.note_type()['name']
     else:
         aqt.utils.showInfo("Cannot determine note type/model.")
         return {}
@@ -1062,8 +1060,8 @@ def bulk_generate(deck, note_type):
                 log_command(f"  ID: {deck['id']}, Name: {deck['name']}")
 
             log_command("\nAvailable note types:")
-            for model in mw.col.models.all():
-                log_command(f"  Name: {model['name']}, ID: {model['id']}")
+            for note_type in mw.col.note_types.all():
+                log_command(f"  Name: {note_type['name']}, ID: {note_type['id']}")
 
         log_command(f"note ids: {note_ids}")
         for note_id in note_ids:

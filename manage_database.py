@@ -292,6 +292,8 @@ def update_database():
         "SELECT DISTINCT filename FROM subtitles WHERE track = '-1'"
     )
     indexed_subtitle_files = {row[0] for row in cursor}
+
+
     indexed_subtitle_basenames = {os.path.splitext(f)[0] for f in indexed_subtitle_files}
 
     log_database(f"current subtitles in folder: {subtitles_in_folder}")
@@ -353,14 +355,7 @@ def update_database():
     # Recompute current subtitle base_names in folder (same logic as above)
     present_subtitle_basenames = set()
     for subtitle_file in subtitles_in_folder:
-        name_no_ext = os.path.splitext(subtitle_file)[0]
-        index_backtick = name_no_ext.rfind("`")
-        index_dot = name_no_ext.rfind(".")
-        separator_index = max(index_backtick, index_dot)
-        if separator_index != -1:
-            base_name = name_no_ext[:separator_index]
-        else:
-            base_name = name_no_ext
+        base_name = os.path.splitext(subtitle_file)[0]  # just strip extension
         present_subtitle_basenames.add(base_name)
 
     cursor = conn.execute("SELECT filename, language, track FROM subtitles WHERE track = '-1'")
@@ -375,7 +370,8 @@ def update_database():
                 "DELETE FROM subtitle_access WHERE filename=?",
                 (filename,)
             )
-            log_database(f"Removed orphaned user subtitle: file={filename}, lang={language}, track={track}")
+            log_database(f"Removed orphaned user subtitle: file={filename}, lang={language}, track={track}\n"
+                         f"base name: {base_name} not in present sub basenames: {present_subtitle_basenames}")
 
     conn.commit()
     conn.execute("VACUUM;")
@@ -641,7 +637,7 @@ def print_all_subtitle_names():
     for filename, track, language in cursor:
         print(f"{filename} | Track: {track} | Language: {language}")
 
-print_all_subtitle_names()
+# print_all_subtitle_names()
 
 def print_subtitles_by_last_accessed():
     conn = get_database()
@@ -654,4 +650,4 @@ def print_subtitles_by_last_accessed():
 
     for filename, last_accessed in cursor:
         print(f"{last_accessed} - {filename}")
-print_subtitles_by_last_accessed()
+# print_subtitles_by_last_accessed()

@@ -764,11 +764,11 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
 
     note_config = config.get(note_type_name, {})
     target_language_code = note_config.get("target_language_code")
-    if not target_language_code:
-        log_error(f"Target language code not set for note type: '{note_type_name}'")
-        return None, None
-
     target_audio_track = str(note_config.get("target_audio_track", 0))
+
+    if not target_language_code and target_audio_track == "0":
+        log_error(f"Target language code and track not set for note type: '{note_type_name}'")
+        return None, None
 
     sentence_line = sentence_line or ""
     normalized_sentence = normalize_text(sentence_line)
@@ -1061,14 +1061,14 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
     log_command(f"FFmpeg source path: {source_path}")
     log_command(f"FFmpeg sound line: {sound_line}")
 
-    lufs = config[note_type_name]["lufs"]
-    bitrate = config[note_type_name]["bitrate"]
-    normalize_audio = config[note_type_name]["normalize_audio"]
-    target_code = config[note_type_name]["target_language_code"]
-    translation_code = config[note_type_name]["translation_language_code"]
-    target_track = config[note_type_name]["target_audio_track"]
-    translation_track = config[note_type_name]["translation_audio_track"]
-    selected_tab_index = config[note_type_name].get("selected_tab_index", 0)
+    lufs = config.get(note_type_name, {}).get("lufs", -14)
+    bitrate = config.get(note_type_name, {}).get("bitrate", 192)
+    normalize_audio = config.get(note_type_name, {}).get("normalize_audio", True)
+    target_code = config.get(note_type_name, {}).get("target_language_code", "")
+    translation_code = config.get(note_type_name, {}).get("translation_language_code", "")
+    target_track = config.get(note_type_name, {}).get("target_audio_track", "")
+    translation_track = config.get(note_type_name, {}).get("translation_audio_track", "")
+    selected_tab_index = config.get(note_type_name, {}).get("selected_tab_index", 0)
     log_filename(f"Extracting sound_line_data from sound_line: {sound_line}")
 
     ffmpeg_path, ffprobe_path = constants.get_ffmpeg_exe_path()
@@ -1137,7 +1137,9 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
 
         if audio_track_index is None and streams:
             basename = os.path.basename(source_path)
-            showInfo(f"No audio track found for `{basename}` with the code '{code}' or track '{track}'")
+            if not code:
+                code = "und"
+            showInfo(f"No audio track found for `{basename}` with the code '{code}' or track '{track}'.")
             return []
 
     except Exception as e:

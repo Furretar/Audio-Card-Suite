@@ -15,8 +15,8 @@ import manage_database
 
 
 import manage_files
-from manage_files import get_field_key_from_label, alter_sound_file_times, get_altered_sound_data, \
-    extract_sound_line_data, extract_subtitle_path_data
+from manage_files import get_field_key_from_label, get_altered_sound_data, \
+    extract_sound_line_data
 import constants
 from constants import (
     log_filename,
@@ -454,7 +454,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
         altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, config, data, note_type_name)
         if new_sound_line != current_note.fields[sound_idx] and altered_data:
             new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line, config, False, note_type_name)
-            current_note.fields[sound_idx] = new_sound_line
+            current_note.fields[sound_idx] = new_sound_line or ""
             updated = True
 
     if should_generate["translation_sound_line"]:
@@ -465,7 +465,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
             new_translation_sound_line = manage_files.alter_sound_file_times(altered_data, new_translation_sound_line, config, True, note_type_name)
             if not new_translation_sound_line:
                 new_translation_sound_line = ""
-            current_note.fields[translation_sound_idx] = new_translation_sound_line
+            current_note.fields[translation_sound_idx] = new_translation_sound_line or ""
             updated = True
 
     if should_generate["image_line"]:
@@ -682,14 +682,15 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
     subtitle_path = ""
     new_sound_line = ""
     new_sentence_line = ""
-    track = config[note_type_name]["target_subtitle_track"]
-    code = config[note_type_name]["target_language_code"]
+    track = config.get(note_type_name, {}).get("target_subtitle_track", "")
+    code = config.get(note_type_name, {}).get("target_language_code", "")
     if not code:
         code = "und"
-    pad_start_target = config[note_type_name]["pad_start_target"]
-    pad_end_target = config[note_type_name]["pad_end_target"]
-    pad_start_translation = config[note_type_name]["pad_start_translation"]
-    pad_end_translation = config[note_type_name]["pad_end_translation"]
+
+    pad_start_target = config.get(note_type_name, {}).get("pad_start_target", 0)
+    pad_end_target = config.get(note_type_name, {}).get("pad_end_target", 0)
+    pad_start_translation = config.get(note_type_name, {}).get("pad_start_translation", 0)
+    pad_end_translation = config.get(note_type_name, {}).get("pad_end_translation", 0)
 
     # get sound and sentence line
     if data:

@@ -180,8 +180,6 @@ class AudioToolsDialog(QDialog):
         ]
 
         for i, key in enumerate(tracks):
-            default_value = self.settings.get(note_type_name, {}).get(key, constants.default_settings[key])
-            self.trackSpinners[i].setValue(default_value)
             self.settings[note_type_name][key] = self.trackSpinners[i].value()
 
         self.settings[note_type_name]["timing_tracks_enabled"] = self.timingTracksCheckbox.isChecked()

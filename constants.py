@@ -7,6 +7,8 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
+
 from aqt.utils import showInfo
 import html
 
@@ -50,18 +52,18 @@ video_extensions = [
 subtitle_extensions = {".srt", ".vtt", ".ass", ".ssa"}
 
 BACKTICK_PATTERN = re.compile(
-    r'^\[sound:'
-    r'(?P<filename_base>[^`.]+)'
-    r'(?P<source_file_extension>\.[a-z0-9]+)?'
-    r'(?:`(?P<lang_code>[a-z]{3})(?:-(?P<timing_lang_code>[a-z]{3}))?)?'
-    r'`(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'
-    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'
-    r'(?P<subtitle_range>\d+-\d+)'
-    r'(?:`(?P<normalize_tag>[^`]+))?' 
-    r'\.(?P<sound_file_extension>\w+)]$',
+    r'^(?:\[sound:)?'                               # optional opening "[sound:"
+    r'(?P<filename_base>[^`.]+)'                    # filename base
+    r'(?P<source_file_extension>\.[a-z0-9]+)?'     # optional extension
+    r'(?:`(?P<lang_code>[a-z]{3})(?:-(?P<timing_lang_code>[a-z]{3}))?)?'  # optional lang codes
+    r'`(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'  # start time
+    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'     # end time
+    r'(?P<subtitle_range>\d+-\d+)'                 # subtitle range
+    r'(?:`(?P<normalize_tag>[^`]+))?'             # optional normalization tag
+    r'\.(?P<sound_file_extension>\w+)'             # sound file extension
+    r'(?:\])?$',                                   # optional closing "]"
     re.IGNORECASE
 )
-
 
 addon_dir = addon_dir
 default_source_dir = os.path.join(addon_dir, "Sources")
@@ -118,7 +120,8 @@ def log_filename(message):
         func = frame.function
         file = os.path.basename(frame.filename)
         line = frame.lineno
-        print(f"{file}:{line} in {func}:\n{message.strip()}\n")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{timestamp}] {file}:{line} in {func}:\n{message.strip()}\n")
 
 def log_command(message):
     if DEBUG_COMMAND:
@@ -126,7 +129,8 @@ def log_command(message):
         func = frame.function
         file = os.path.basename(frame.filename)
         line = frame.lineno
-        print(f"{file}:{line} in {func}:\n[command] {message.strip()}\n")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{timestamp}] {file}:{line} in {func}:\n[command] {message.strip()}\n")
 
 def log_error(message):
     if DEBUG_ERROR:
@@ -134,7 +138,8 @@ def log_error(message):
         func = frame.function
         file = os.path.basename(frame.filename)
         line = frame.lineno
-        print(f"{file}:{line} in {func}:\n[error] {message.strip()}\n")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{timestamp}] {file}:{line} in {func}:\n[error] {message.strip()}\n")
 
 def log_image(message):
     if DEBUG_IMAGE:
@@ -142,7 +147,8 @@ def log_image(message):
         func = frame.function
         file = os.path.basename(frame.filename)
         line = frame.lineno
-        print(f"{file}:{line} in {func}:\n[image] {message.strip()}\n")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{timestamp}] {file}:{line} in {func}:\n[image] {message.strip()}\n")
 
 def log_database(message):
     if DEBUG_DATABASE:
@@ -150,7 +156,8 @@ def log_database(message):
         func = frame.function
         file = os.path.basename(frame.filename)
         line = frame.lineno
-        print(f"{file}:{line} in {func}:\n[database] {message.strip()}\n")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{timestamp}] {file}:{line} in {func}:\n[database] {message.strip()}\n")
 
 
 def get_ffmpeg_exe_path():

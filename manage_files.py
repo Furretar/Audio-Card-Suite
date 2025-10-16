@@ -27,6 +27,7 @@ log_database,
 # performs only string operations
 def extract_sound_line_data(sound_line):
     format_type = detect_format(sound_line)
+    print(f"format_type: {format_type} for: {sound_line}")
 
     if format_type == "backtick":
         match = constants.BACKTICK_PATTERN.match(sound_line)
@@ -97,6 +98,8 @@ def extract_sound_line_data(sound_line):
     if not sound_line:
         log_error("extract_sound_line_data received None or empty string")
         return None
+
+    log_error(f"no data extracted from sound line: {sound_line}")
     return None
 
 # returns all current config values as a dict
@@ -480,7 +483,7 @@ def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, 
         subtitle_data = extract_subtitle_path_data(timing_subtitle_path)
         timing_language_code = subtitle_data["code"]
 
-        log_filename(f"building sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {audio_language_code}, timing langauge code: {timing_language_code}")
+        log_filename(f"building new timing sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {audio_language_code}, timing langauge code: {timing_language_code}")
         timestamp, sound_line = build_filename_and_sound_line(filename_base, source_file_extension, audio_language_code, timing_language_code, first_start, last_end, start_index, end_index, None, audio_ext)
 
         log_filename(f"timing sound line: {sound_line}")
@@ -1466,6 +1469,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
 
     log_filename(f"extracting sound_line_data from sound_line: {sound_line}")
     if not sound_line_data:
+        log_error(f"sound line data is empty for: {sound_line}")
         return {}
 
     orig_start_ms = time_hmsms_to_milliseconds(sound_line_data["start_time"])
@@ -1507,7 +1511,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
     timing_lang_code = sound_line_data["timing_lang_code"]
 
     log_filename(
-        f"building sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {lang_code}, timing langauge code: {timing_lang_code}")
+        f"building altered sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {lang_code}, timing langauge code: {timing_lang_code}")
 
     new_filename, _ = build_filename_and_sound_line(filename_base, source_file_extension, lang_code, timing_lang_code, new_start_time, new_end_time, start_index, end_index, lufs, sound_file_extension)
     new_filename = new_filename.replace('[', '((').replace(']', '))')

@@ -354,8 +354,9 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
             aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file.")
             return
 
-    editor.note.fields[sound_idx] = new_sound_line
-    editor.loadNote()
+    if new_sound_line:
+        editor.note.fields[sound_idx] = new_sound_line
+        editor.loadNote()
 
     autoplay = config["autoplay"]
     if not autoplay:
@@ -852,11 +853,11 @@ def get_fields_from_editor_or_note(editor_or_note):
     else:
         note = editor_or_note
 
-    # determine model / model name (minimal addition)
-    if hasattr(note, "model"):
+    # determine note_type
+    if hasattr(note, "note_type"):
         note_type_name = note.note_type()['name']
     else:
-        aqt.utils.showInfo("Cannot determine note type/model.")
+        aqt.utils.showInfo("Cannot determine note type.")
         return {}
 
 

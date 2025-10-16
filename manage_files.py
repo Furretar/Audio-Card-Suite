@@ -950,7 +950,6 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
             for fn, lang, trk, content_json in sorted(rows, key=lambda row: priority(row[1], row[2]))
             if priority(lang, trk) < 3
         ]
-        log_filename(f"next result sub candidates: {candidates}")
 
         for fn, lang, trk, content_json in candidates:
             log_filename(f"checking for next result: {fn}, {lang}, {trk}")
@@ -1480,7 +1479,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
 
     if new_end_ms <= new_start_ms:
         log_error(f"Invalid time range: {to_hmsms_format(new_start_ms)}-{to_hmsms_format(new_end_ms)}")
-        showInfo(f"Invalid time range: {to_hmsms_format(new_start_ms)}-{to_hmsms_format(new_end_ms)}.\nCheck your padded timings.")
+        showInfo(f"Invalid time range: {to_hmsms_format(new_start_ms)}-{to_hmsms_format(new_end_ms)}.\nPadded timings may be the problem.")
         return {
             "new_sound_line": sound_line,
             "new_start_time": None,

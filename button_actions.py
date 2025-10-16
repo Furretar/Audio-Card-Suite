@@ -511,7 +511,7 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
         return None, None
 
     # check before and after selected text for more lines to add
-    leftover_sentence = manage_files.normalize_text(sentence_line)
+    leftover_sentence = constants.normalize_text(sentence_line)
 
     # try to find the longest matching block between the two strings
     matcher = difflib.SequenceMatcher(None, leftover_sentence, new_sentence_line)
@@ -524,6 +524,7 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
         after_removed = leftover_sentence.strip()
     new_sound_line = sound_line
     while before_removed or after_removed:
+        print(f"before: {before_removed} - after: {after_removed}")
         if not subtitle_path:
             break
 
@@ -550,7 +551,7 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
                 return None, None
             before_block = before_blocks[0] if before_blocks else None
             before_line = before_block[3]
-            before_line_clean = before_line
+            before_line_clean = constants.normalize_text(before_line)
             # and add the previous line if the previous line is in leftover line, or if leftover line is in previous line
             if (
                 before_line_clean in before_removed
@@ -579,7 +580,7 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
                 return None, None
             after_block = after_blocks[0] if after_blocks else None
             after_line = after_block[3]
-            after_line_clean = after_line.replace('\n', '').strip()
+            after_line_clean = constants.normalize_text(after_line)
             # and add the next line if the next line is in leftover line, or if leftover line is in next line
             if (
                 after_line_clean in after_removed
@@ -735,9 +736,6 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
     log_filename(f"calling context_aware_sentence_sound_line_generate with sentence_line: {sentence_line}" + (f", new sentence line: {new_sentence_line}" if selected_text else ""))
     new_sound_line, new_sentence_line = context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line, new_sound_line, subtitle_path, config, note_type_name)
 
-    if new_sentence_line:
-        new_sentence_line = constants.format_text(new_sentence_line)
-
     # get new timed sound line from target sound line
     timing_tracks_enabled = config["timing_tracks_enabled"]
     if timing_tracks_enabled:
@@ -762,6 +760,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
             end_time = data["end_time"]
             overlapping_blocks = manage_files.get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, start_time, end_time)
             _, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(overlapping_blocks, subtitle_path, None, timing_code,config, note_type_name)
+    print(f"new sentence line aaa: {new_sentence_line}")
 
     # pad target sound line if applicable
     pad_target_timings = (
@@ -800,7 +799,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
         new_data = manage_files.extract_sound_line_data(new_sound_line)
         new_translation_line, translation_subtitle_path = manage_files.get_translation_line_and_subtitle_from_target_sound_line(new_sound_line, config, new_data, note_type_name)
         if new_translation_line:
-            new_translation_line = constants.format_text(new_translation_line)
+            new_translation_line = constants.normalize_text(new_translation_line)
     else:
         new_translation_line = ""
         translation_subtitle_path = ""

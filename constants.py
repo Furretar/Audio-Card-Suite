@@ -175,15 +175,13 @@ def get_ffmpeg_exe_path():
              "or place ffmpeg.exe in the addon folder under: ffmpeg/bin/ffmpeg.exe")
     return None, None
 
-def format_text(s):
-    if not s:
-        log_error(f"text is null")
-        return None
-
+def normalize_text(s):
     s = html.unescape(s)
-    s = re.sub(r'<[^>]+>', '', s)
+    s = re.sub(r'<.*?>', '', s)
+    s = re.sub(r'（.*?）|\(.*?\)', '', s)
+    s = s.replace('\xa0', '')  # Non-breaking space
+    s = re.sub(r'[\u2000-\u200B\u3000\s]+', '', s)
     return s.strip()
-
 
 def get_audio_start_time_ms_for_track(source_path, audio_stream_index):
     try:

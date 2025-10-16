@@ -27,7 +27,6 @@ log_database,
 # performs only string operations
 def extract_sound_line_data(sound_line):
     format_type = detect_format(sound_line)
-    print(f"format_type: {format_type} for: {sound_line}")
 
     if format_type == "backtick":
         match = constants.BACKTICK_PATTERN.match(sound_line)
@@ -423,7 +422,7 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
     # adds text from each block and formats it, remove curly braces, html formatting, etc.
     translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
     translation_line = re.sub(r"\{.*?}", "", translation_line)
-    translation_line = constants.format_text(translation_line.strip())
+    translation_line = constants.normalize_text(translation_line.strip())
     log_filename(f"getting translation line: {translation_line}, tl audio track/code: {translation_audio_track}/{translation_language_code}, path from database: {translation_subtitle_path}")
 
     return translation_line, translation_subtitle_path
@@ -774,7 +773,7 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
         return None, None
 
     sentence_line = sentence_line or ""
-    normalized_sentence = normalize_text(sentence_line)
+    normalized_sentence = constants.normalize_text(sentence_line)
     log_filename(f"Normalized sentence to match: '{normalized_sentence}'")
 
     subtitle_database = manage_database.get_database()
@@ -809,7 +808,7 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
             elif isinstance(raw_block, list) and len(raw_block) == 4:
                 usable_blocks.append(raw_block)
 
-        normalized_lines = [normalize_text(b[3]) for b in usable_blocks]
+        normalized_lines = [constants.normalize_text(b[3]) for b in usable_blocks]
 
         if len(sentence_line) <= 10:
             max_window = max(1, len(sentence_line))
@@ -905,7 +904,9 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
         f"building sound line with filename: {filename_base}, and extension: {file_extension}, audio langauge code: {code}, timing langauge code: {timing_code}")
 
     timestamp, new_sound_line = build_filename_and_sound_line(filename_base, file_extension, code, timing_code, start_time, end_time, start_index, end_index, lufs, audio_ext)
+    print(f"blocks: {blocks}")
     combined_text = "\n\n".join(b[3].strip() for b in blocks if len(b) > 3)
+    print(f"combined text: {combined_text}")
     log_filename(f"generated sound_line: {new_sound_line}\nsentence line: {combined_text}")
 
     return new_sound_line, combined_text
@@ -924,7 +925,7 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
     filename_base = sound_line_data["filename_base"]
     track = config[note_type_name]["target_subtitle_track"]
     code = config[note_type_name]["target_language_code"]
-    normalized_target_text = normalize_text(selected_text or sentence_line)
+    normalized_target_text = constants.normalize_text(selected_text or sentence_line)
     log_filename(f"Searching for: {normalized_target_text}")
 
     def search_blocks(after_current: bool):
@@ -986,7 +987,7 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
 
                 subtitle_filename = f"{fn}`track_{track}`{code}.srt"
                 subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-                if normalized_target_text in normalize_text(text):
+                if normalized_target_text in constants.normalize_text(text):
                     log_filename(f"Match found in block {block_idx} of {base_candidate}, path is: {subtitle_path}")
                     return b, subtitle_path
 
@@ -1327,13 +1328,7 @@ def get_audio_start_time_ms(source_file_path: str) -> int:
         log_error(f"ffprobe failed: {e}")
         return 0
 
-def normalize_text(s):
-    s = html.unescape(s)
-    s = re.sub(r'<.*?>', '', s)
-    s = re.sub(r'（.*?）|\(.*?\)', '', s)
-    s = s.replace('\xa0', '')  # Non-breaking space
-    s = re.sub(r'[\u2000-\u200B\u3000\s]+', '', s)
-    return s
+
 
 def timestamp_to_dot_format(ts: str) -> str:
     ts = ts.replace(',', '.')

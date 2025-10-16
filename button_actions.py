@@ -187,6 +187,8 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         log_error(f"still no data from sound line: {sound_line}, returning")
         return ""
 
+    print(f"data: {data} from sound line: {sound_line}")
+
     start_index = data["start_index"]
     end_index = data["end_index"]
     timing_code = data["timing_lang_code"]
@@ -216,6 +218,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         log_error(f"No subtitle file found matching the source file '{full_source_filename}'.")
 
     log_filename(f"getting timing blocks, start_index {start_index}, add to start: {add_to_start}, end_index {end_index}, add to end: {add_to_end}, timing subtitle path: {timing_subtitle_path}")
+
     timing_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - add_to_start, end_index + add_to_end, timing_subtitle_path, start_time, end_time)
     new_timing_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(timing_blocks, timing_subtitle_path, code, timing_code, config, note_type_name)
 
@@ -261,16 +264,17 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     new_timing_sound_line = manage_files.alter_sound_file_times(altered_data, new_timing_sound_line, config, alt_pressed, note_type_name)
 
     # generate new translation line
-
-
     if not alt_pressed:
         translation_line, _ = manage_files.get_translation_line_and_subtitle_from_target_sound_line(new_timing_sound_line, config, new_data, note_type_name)
         editor.note.fields[translation_idx] = str(translation_line or "")
 
     # update sound field with new sound line
-    new_field = re.sub(r"\[sound:.*?]", new_timing_sound_line, sound_line)
-    editor.note.fields[sound_idx] = str(new_field)
-    editor.note.fields[sentence_idx] = str(new_sentence_line)
+    if new_timing_sound_line:
+        new_field = re.sub(r"\[sound:.*?]", new_timing_sound_line, sound_line)
+        editor.note.fields[sound_idx] = str(new_field)
+        editor.note.fields[sentence_idx] = str(new_sentence_line)
+    else:
+        log_error(f"could not add or remove line")
 
     # apply and save the changes to the note
     generate_and_update_fields(editor, None, False)
@@ -502,6 +506,7 @@ def generate_and_update_fields(editor, note, should_overwrite) -> tuple[str, str
 
 ## get and format data
 def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path, config, note_type_name):
+    print(f"aaa sound line: {sound_line}")
     if sentence_line == new_sentence_line:
         log_error(f"sentence line and new sentence line are the same: {sentence_line}")
         return sound_line, sentence_line
@@ -545,6 +550,8 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
 
         # get the previous block if there's still text left over before the current sentence line
         if before_removed:
+
+            print(f"getting before blocks, start index: {start_index - 1}, end index: {end_index - 1}")
             before_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - 1, start_index - 1, subtitle_path, None, None)
             if not before_blocks:
                 log_error(f"no blocks extracted from: {subtitle_path}")
@@ -560,12 +567,14 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
                 or before_removed in before_line_clean
             ):
                 before_removed = before_removed.replace(before_line_clean, "", 1).replace(before_line, "", 1).strip()
+                print(f"getting setence blocks: start index: {start_index - 1}")
                 sentence_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - 1, end_index, subtitle_path, None, None)
                 new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, subtitle_path, lang_code, timing_lang_code, config, note_type_name)
 
             else:
                 before_removed = ""
         data = manage_files.extract_sound_line_data(new_sound_line)
+        print(f"data2: {data} from sound line: {new_sound_line}")
         if not data:
             break
         start_index = data.get("start_index")
@@ -574,6 +583,8 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
 
         # get the next block if there's still text left over after the current sentence line
         if after_removed:
+            print(f"getting after blocks, start index: {start_index + 1}, end index: {end_index + 1}")
+
             after_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(end_index + 1, end_index + 1, subtitle_path, None, None)
             if not after_blocks:
                 log_error(f"no blocks extracted from: {subtitle_path}")
@@ -589,6 +600,7 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
                 or after_removed in after_line_clean
             ):
                 after_removed = after_removed.replace(after_line_clean, "", 1).replace(after_line, "", 1).strip()
+                print(f"getting after blocks2, start index: {start_index}, end index: {end_index + 1}")
                 sentence_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index, end_index + 1, subtitle_path, None, None)
                 new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, subtitle_path, lang_code, timing_lang_code, config, note_type_name)
             else:
@@ -705,6 +717,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
 
         start_index = data["start_index"]
         end_index = data["end_index"]
+        print(f"getting subtitle blocks1 start index: {start_index}, end index: {end_index}")
         blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path, None, None)
         if blocks:
             new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, None, None, config, note_type_name)

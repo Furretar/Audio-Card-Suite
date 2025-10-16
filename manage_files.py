@@ -420,9 +420,8 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
 
     # adds text from each block and formats it, remove curly braces, html formatting, etc.
-    translation_line = "\n\n".join(block[3] for block in overlapping_translation_blocks)
+    translation_line = "\n".join(block[3] for block in overlapping_translation_blocks)
     translation_line = re.sub(r"\{.*?}", "", translation_line)
-    translation_line = constants.normalize_text(translation_line.strip())
     log_filename(f"getting translation line: {translation_line}, tl audio track/code: {translation_audio_track}/{translation_language_code}, path from database: {translation_subtitle_path}")
 
     return translation_line, translation_subtitle_path
@@ -905,8 +904,7 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
 
     timestamp, new_sound_line = build_filename_and_sound_line(filename_base, file_extension, code, timing_code, start_time, end_time, start_index, end_index, lufs, audio_ext)
     print(f"blocks: {blocks}")
-    combined_text = "\n\n".join(b[3].strip() for b in blocks if len(b) > 3)
-    print(f"combined text: {combined_text}")
+    combined_text = "\n".join(b[3].strip() for b in blocks if len(b) > 3)
     log_filename(f"generated sound_line: {new_sound_line}\nsentence line: {combined_text}")
 
     return new_sound_line, combined_text

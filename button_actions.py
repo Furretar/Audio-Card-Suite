@@ -327,24 +327,28 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
         sound_idx = fields["sound_idx"]
         sentence_line = fields["sentence_line"]
 
+    generated = False
 
-
+    # generate a new sound line if no valid sound line is detected
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
         log_error(f"no valid sound line detected")
         sound_line, _ = generate_and_update_fields(editor, None, True)
         data = manage_files.extract_sound_line_data(sound_line)
+        generated = True
 
     log_filename(f"getting altered data from1: {sound_line}")
     altered_data = manage_files.get_altered_sound_data(sound_line, -start_delta, end_delta, config, data, note_type_name)
-    if altered_data["new_sound_line"] == sound_line:
+
+    # return if nothing changed
+    if altered_data and altered_data["new_sound_line"] == sound_line:
         return
 
     log_filename(f"sending data to alter sound file times: {altered_data}")
     new_sound_line = manage_files.alter_sound_file_times(altered_data, sound_line, config, alt_pressed, note_type_name)
 
     # generate a new sound line if first try failed
-    if not new_sound_line:
+    if not new_sound_line and not generated:
         log_error(f"no source for sound line detected: {sound_line}")
         sound_line, _ = generate_and_update_fields(editor, None, True)
         data = manage_files.extract_sound_line_data(sound_line)

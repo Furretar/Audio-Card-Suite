@@ -136,7 +136,7 @@ def get_srt_converted_subtitle_from_path(subtitle_path):
             'pipe:1'  # output to stdout
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = constants.silent_run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
 
         if result.returncode != 0:
             log_database(f"ffmpeg conversion failed for {subtitle_path}: {result.stderr}")

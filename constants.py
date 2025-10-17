@@ -195,7 +195,8 @@ def get_audio_start_time_ms_for_track(source_path, audio_stream_index):
             "-of", "json",
             source_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = silent_run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+
         info = json.loads(result.stdout)
 
         streams = info.get("streams", [])

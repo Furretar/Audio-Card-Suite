@@ -73,7 +73,7 @@ def next_result_button(editor):
         generate_and_update_fields(editor, None, False)
         return ""
 
-    log_filename(f"calling extract sound line data: {sound_line}")
+    log_filename(f"calling extract sound line data 1: {sound_line}")
     data = manage_files.extract_sound_line_data(sound_line)
 
     # gets next matching subtitle block using selected text and current fields
@@ -106,7 +106,7 @@ def next_result_button(editor):
                 return ""
 
     # generate sound file using next sound line
-    log_filename(f"calling extract sound line data: {next_sound_line}")
+    log_filename(f"calling extract sound line data 2: {next_sound_line}")
     altered_data = manage_files.get_altered_sound_data(next_sound_line, 0, 0, config, new_data, note_type_name)
     next_sound_line = manage_files.alter_sound_file_times(altered_data, next_sound_line, config, False, note_type_name)
 
@@ -378,7 +378,7 @@ def generate_fields_button(editor):
         QTimer.singleShot(0, lambda: play(sound_filename))
 
 # uses current fields to generate all missing fields
-def generate_and_update_fields(editor, note, should_overwrite) -> tuple[str, str]:
+def generate_and_update_fields(editor, note, should_overwrite):
     config = constants.extract_config_data()
 
     # Determine current_note and fields dict depending on whether note or editor is provided
@@ -484,6 +484,12 @@ def generate_and_update_fields(editor, note, should_overwrite) -> tuple[str, str
             updated = True
     else:
         update_field(image_idx, new_image_line)
+
+    # tag the note with the source file name
+    filename_base = re.sub(r'^\[sound:|]$', '', new_sound_line.split("`", 1)[0].strip())
+    filename_base_underscore = filename_base.replace(" ", "_")
+    if filename_base_underscore not in editor.note.tags:
+        editor.note.add_tag(filename_base_underscore)
 
     # Only call editor.loadNote() if editor is not None
     if editor is not None:
@@ -692,7 +698,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
             data = None
 
     config = constants.extract_config_data()
-    log_filename(f"calling extract sound line data: {sound_line}")
+    log_filename(f"calling extract sound line data 1: {sound_line}")
     subtitle_path = ""
     new_sound_line = ""
     new_sentence_line = ""
@@ -815,7 +821,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
         aqt.utils.showInfo(f"Target Audio not detected, cannot generate Translation or Translation Audio.")
         return ""
     if should_generate_translation_line or should_generate_translation_sound_line:
-        log_filename(f"calling extract sound line data: {new_sound_line}")
+        log_filename(f"calling extract sound line data 2: {new_sound_line}")
         new_data = manage_files.extract_sound_line_data(new_sound_line)
         new_translation_line, translation_subtitle_path = manage_files.get_translation_line_and_subtitle_from_target_sound_line(new_sound_line, config, new_data, note_type_name)
         if new_translation_line:

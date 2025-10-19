@@ -102,7 +102,7 @@ def next_result_button(editor):
 
             if full_source_filename == old_full_source_filename and old_start_index >= start_index and old_end_index <= end_index:
                 log_filename("Next result is the same as current result")
-                show_info_msg(f"This is the only result for: {selected_text}")
+                show_info_msg(f"This is the only result for: '{selected_text}'")
                 return ""
 
     # generate sound file using next sound line
@@ -115,8 +115,8 @@ def next_result_button(editor):
         filename_base = re.sub(r'^\[sound:|]$', '', next_sound_line.split("`", 1)[0].strip())
         prev_filename_base = re.sub(r'^\[sound:|]$', '', sound_line.split("`", 1)[0].strip())
 
-        filename_base_underscore = filename_base.replace(" ", "_")
-        prev_base_underscore = prev_filename_base.replace(" ", "_")
+        filename_base_underscore = filename_base.replace(" ", "_").replace("((", "[").replace("))", "]")
+        prev_base_underscore = prev_filename_base.replace(" ", "_").replace("((", "[").replace("))", "]")
 
         if filename_base_underscore != prev_base_underscore:
             editor.note.remove_tag(prev_base_underscore)
@@ -237,7 +237,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         log_filename(f"sentence_subtitle_path: {sentence_subtitle_path}")
 
         if not sentence_subtitle_path:
-            aqt.utils.showInfo(f"No subtitle file found matching {full_source_filename}|`track_{track}`|code:'{code}'")
+            aqt.utils.showInfo(f"No subtitle file found matching {full_source_filename}|`track_{track}'|code:'{code}'")
 
         sentence_blocks = manage_files.get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(sentence_subtitle_path, start_time, end_time)
         if not sentence_blocks:
@@ -487,7 +487,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
 
     # tag the note with the source file name
     filename_base = re.sub(r'^\[sound:|]$', '', new_sound_line.split("`", 1)[0].strip())
-    filename_base_underscore = filename_base.replace(" ", "_")
+    filename_base_underscore = filename_base.replace(" ", "_").replace("((", "[").replace("))", "]")
     if filename_base_underscore not in editor.note.tags:
         editor.note.add_tag(filename_base_underscore)
 
@@ -722,7 +722,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
         # return if subtitle path could not be found
         if not subtitle_path:
             log_error(f"subtitle path null1")
-            aqt.utils.showInfo(f"No subtitles found with the track `{track}`, code `{code}`, and base name '{full_source_filename}'.")
+            aqt.utils.showInfo(f"No subtitles found with the track '{track}', code '{code}', and base name '{full_source_filename}'.")
             return None
 
         start_index = data["start_index"]
@@ -752,8 +752,8 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
                 aqt.utils.showInfo(f"Target language code is not set.")
             else:
                 search_text = selected_text if selected_text else sentence_line
-                log_error(f"Could not find `{search_text}` in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file with the code `{code}` or track `{track}`.")
-                aqt.utils.showInfo(f"Could not find `{search_text}` in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file with the code `{code}` or track `{track}`.")
+                log_error(f"Could not find '{search_text}' in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file with the code '{code}' or track '{track}'.")
+                aqt.utils.showInfo(f"Could not find '{search_text}' in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file with the code '{code}' or track '{track}'.")
             return None
 
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block,subtitle_path,None,None,config, note_type_name)

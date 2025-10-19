@@ -742,9 +742,12 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
         if not subtitle_path:
             log_error(f"subtitle path null2")
             if not code:
+                log_error(f"Target language code is not set.")
                 aqt.utils.showInfo(f"Target language code is not set.")
             else:
-                aqt.utils.showInfo(f"Could not find `{sentence_line}` in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file with the code `{code}` or track `{track}`.")
+                search_text = selected_text if selected_text else sentence_line
+                log_error(f"Could not find `{search_text}` in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file with the code `{code}` or track `{track}`.")
+                aqt.utils.showInfo(f"Could not find `{search_text}` in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file with the code `{code}` or track `{track}`.")
             return None
 
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block,subtitle_path,None,None,config, note_type_name)

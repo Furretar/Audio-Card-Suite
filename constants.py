@@ -181,6 +181,7 @@ def normalize_text(s):
     s = re.sub(r'（.*?）|\(.*?\)', '', s)
     s = s.replace('\xa0', '')  # Non-breaking space
     s = re.sub(r'[\u2000-\u200B\u3000\s]+', '', s)
+    s = re.sub(r'[‐‑‒–—―]+', '', s)
     return s.strip()
 
 def get_audio_start_time_ms_for_track(source_path, audio_stream_index):

@@ -1000,6 +1000,9 @@ def add_custom_controls(editor: Editor) -> None:
 
     create_default_config()
 
+    config = constants.extract_config_data()
+    show_buttons = config.get("show_buttons", True)
+
     # === BUTTONS ===
     buttons_container = QWidget()
     buttons_layout = QVBoxLayout(buttons_container)
@@ -1010,56 +1013,36 @@ def add_custom_controls(editor: Editor) -> None:
     timing_btn_layout = QHBoxLayout(timing_btn_row)
     timing_btn_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
     timing_btn_layout.setSpacing(BUTTON_ROW_SPACING)
-    timing_btn_layout.addWidget(
-        make_button("Start +50ms", lambda: constants.timed_call(button_actions.adjust_sound_tag, editor, -ms_amount, 0)))
-    timing_btn_layout.addWidget(
-        make_button("Start -50ms", lambda: constants.timed_call(button_actions.adjust_sound_tag, editor, ms_amount, 0),
-                    danger=True))
-    timing_btn_layout.addWidget(
-        make_button("End -50ms", lambda: constants.timed_call(button_actions.adjust_sound_tag, editor, 0, -ms_amount),
-                    danger=True))
-    timing_btn_layout.addWidget(
-        make_button("End +50ms", lambda: constants.timed_call(button_actions.adjust_sound_tag, editor, 0, ms_amount)))
+    timing_btn_layout.addWidget(make_button("Start +50ms", lambda: constants.timed_call(button_actions.adjust_sound_tag, editor, -ms_amount, 0)))
+    timing_btn_layout.addWidget(make_button("Start -50ms", lambda: constants.timed_call(button_actions.adjust_sound_tag, editor, ms_amount, 0), danger=True))
+    timing_btn_layout.addWidget(make_button("End -50ms", lambda: constants.timed_call(button_actions.adjust_sound_tag, editor, 0, -ms_amount), danger=True))
+    timing_btn_layout.addWidget(make_button("End +50ms", lambda: constants.timed_call(button_actions.adjust_sound_tag, editor, 0, ms_amount)))
     buttons_layout.addWidget(timing_btn_row)
 
     add_remove_row = QWidget()
     add_remove_layout = QHBoxLayout(add_remove_row)
     add_remove_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
     add_remove_layout.setSpacing(BUTTON_ROW_SPACING)
-    add_remove_layout.addWidget(make_button("Add Previous Line",
-                                            lambda: constants.timed_call(button_actions.add_and_remove_edge_lines_update_note,
-                                                               editor, 1, 0)))
-    add_remove_layout.addWidget(make_button("Remove First Line",
-                                            lambda: constants.timed_call(button_actions.add_and_remove_edge_lines_update_note,
-                                                               editor, -1, 0), danger=True))
-    add_remove_layout.addWidget(make_button("Remove Last Line",
-                                            lambda: constants.timed_call(button_actions.add_and_remove_edge_lines_update_note,
-                                                               editor, 0, -1), danger=True))
-    add_remove_layout.addWidget(make_button("Add Next Line",
-                                            lambda: constants.timed_call(button_actions.add_and_remove_edge_lines_update_note,
-                                                               editor, 0, 1)))
+    add_remove_layout.addWidget(make_button("Add Previous Line", lambda: constants.timed_call(button_actions.add_and_remove_edge_lines_update_note, editor, 1, 0)))
+    add_remove_layout.addWidget(make_button("Remove First Line", lambda: constants.timed_call(button_actions.add_and_remove_edge_lines_update_note, editor, -1, 0), danger=True))
+    add_remove_layout.addWidget(make_button("Remove Last Line", lambda: constants.timed_call(button_actions.add_and_remove_edge_lines_update_note, editor, 0, -1), danger=True))
+    add_remove_layout.addWidget(make_button("Add Next Line", lambda: constants.timed_call(button_actions.add_and_remove_edge_lines_update_note,editor, 0, 1)))
     buttons_layout.addWidget(add_remove_row)
 
     generate_btn_row = QWidget()
     generate_btn_layout = QHBoxLayout(generate_btn_row)
     generate_btn_layout.setContentsMargins(*BUTTON_ROW_MARGINS)
     generate_btn_layout.setSpacing(BUTTON_ROW_SPACING)
-    generate_btn_layout.addWidget(
-        make_button("Generate Fields", lambda: constants.timed_call(button_actions.generate_fields_button, editor)))
-    generate_btn_layout.addWidget(
-        make_button("Next Result", lambda: constants.timed_call(button_actions.next_result_button, editor)))
-
+    generate_btn_layout.addWidget(make_button("Generate Fields", lambda: constants.timed_call(button_actions.generate_fields_button, editor)))
+    generate_btn_layout.addWidget( make_button("Next Result", lambda: constants.timed_call(button_actions.next_result_button, editor)))
 
     buttons_layout.addWidget(generate_btn_row)
-
     main_layout.insertWidget(0, buttons_container)
     editor._custom_controls_container_buttons = buttons_container
 
-    # === SPINBOXES + CHECKBOXES ===
-    spinboxes_container = QWidget()
-    spinboxes_layout = QVBoxLayout(spinboxes_container)
-    spinboxes_layout.setContentsMargins(*CONTAINER_MARGINS)
-    spinboxes_layout.setSpacing(CONTAINER_SPACING)
+    if not show_buttons:
+        buttons_container.setVisible(False)
+
 
     # Row 4: Checkboxes row (autoplay + track menu)
     checkboxes_row = QWidget()
@@ -1067,13 +1050,37 @@ def add_custom_controls(editor: Editor) -> None:
     checkboxes_layout.setContentsMargins(*ROW_MARGINS)
     checkboxes_layout.setSpacing(ROW_SPACING)
 
-    config = constants.extract_config_data()
     autoplay_checkbox = QCheckBox("Autoplay")
     autoplay_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
     autoplay_checkbox.setChecked(config["autoplay"])
     set_auto_play_audio(editor, config.get("autoplay", False))
     autoplay_checkbox.clicked.connect(lambda _: handle_autoplay_toggle_and_save(editor))
     checkboxes_layout.addWidget(autoplay_checkbox)
+
+    show_buttons_checkbox = QCheckBox("Show Buttons")
+    show_buttons_checkbox.setMinimumWidth(CHECKBOX_MIN_WIDTH)
+
+    # Initialize state
+    print(f'setting show buttons to {show_buttons}')
+    show_buttons_checkbox.setChecked(show_buttons)
+    print(f'show_buttons_checkbox: {show_buttons_checkbox.isChecked()}')
+
+    editor._show_buttons_enabled = show_buttons
+
+    # When toggled, update both the UI and config
+    show_buttons_checkbox.clicked.connect(lambda checked: display_buttons(editor, checked))
+
+    checkboxes_layout.addWidget(show_buttons_checkbox)
+
+
+
+
+    # === SPINBOXES + CHECKBOXES ===
+    spinboxes_container = QWidget()
+    spinboxes_layout = QVBoxLayout(spinboxes_container)
+    spinboxes_layout.setContentsMargins(*CONTAINER_MARGINS)
+    spinboxes_layout.setSpacing(CONTAINER_SPACING)
+
 
     # Push everything to the left before adding the button on the right
     checkboxes_layout.addStretch()
@@ -1087,6 +1094,7 @@ def add_custom_controls(editor: Editor) -> None:
     spinboxes_layout.addWidget(checkboxes_row)
     main_layout.addWidget(spinboxes_container)
     editor._custom_controls_container_spinboxes = spinboxes_container
+    editor.buttons_container = buttons_container
 gui_hooks.editor_did_init.append(add_custom_controls)
 
 def on_profile_loaded():
@@ -1108,3 +1116,11 @@ def handle_autoplay_toggle_and_save(editor: Editor):
     cfg = constants.extract_config_data()
     cfg["autoplay"] = new_state
     save_config(cfg)
+
+def display_buttons(editor: Editor, visible):
+    editor._show_buttons_enabled = visible
+    cfg = constants.extract_config_data()
+    cfg["show_buttons"] = visible
+    save_config(cfg)
+    if hasattr(editor, "buttons_container"):
+        editor.buttons_container.setVisible(visible)

@@ -513,11 +513,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
         return (match.group(1), updated) if os.path.exists(path) else (None, updated)
     return None, updated
 
-test1 = "陳謝するように——土下座したのだった。"
-test2 = "深く深く、陳謝するように──土下座したのだった。"
-print(f"{constants.normalize_text(test1)} in {constants.normalize_text(test2)}")
-print(constants.normalize_text(test1) in constants.normalize_text(test2))
-
 ## get and format data
 def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path, config, note_type_name):
     print(f"aaa sound line: {sound_line}")

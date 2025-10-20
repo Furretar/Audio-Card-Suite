@@ -97,6 +97,7 @@ default_settings = {
     "timing_tracks_enabled": False,
     "selected_tab_index": 0,
     "autoplay": False,
+    "show_buttons": True,
 }
 
 # menu

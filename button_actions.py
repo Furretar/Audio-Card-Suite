@@ -513,6 +513,10 @@ def generate_and_update_fields(editor, note, should_overwrite):
         return (match.group(1), updated) if os.path.exists(path) else (None, updated)
     return None, updated
 
+test1 = "陳謝するように——土下座したのだった。"
+test2 = "深く深く、陳謝するように──土下座したのだった。"
+print(f"{constants.normalize_text(test1)} in {constants.normalize_text(test2)}")
+print(constants.normalize_text(test1) in constants.normalize_text(test2))
 
 ## get and format data
 def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path, config, note_type_name):
@@ -568,15 +572,12 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
                 return None, None
             before_block = before_blocks[0] if before_blocks else None
             before_line = before_block[3]
-            before_line_clean = constants.normalize_text(before_line)
             # and add the previous line if the previous line is in leftover line, or if leftover line is in previous line
             if (
-                before_line_clean in before_removed
-                or before_line in before_removed
-                or before_removed in before_line
-                or before_removed in before_line_clean
+                constants.normalize_text(before_line) in constants.normalize_text(before_removed)
+                or constants.normalize_text(before_removed) in constants.normalize_text(before_line)
             ):
-                before_removed = before_removed.replace(before_line_clean, "", 1).replace(before_line, "", 1).strip()
+                before_removed = before_removed.replace(constants.normalize_text(before_line), "", 1).replace(before_line, "", 1).strip()
                 print(f"getting setence blocks: start index: {start_index - 1}")
                 sentence_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index - 1, end_index, subtitle_path, None, None)
                 new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, subtitle_path, lang_code, timing_lang_code, config, note_type_name)
@@ -601,15 +602,12 @@ def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line,
                 return None, None
             after_block = after_blocks[0] if after_blocks else None
             after_line = after_block[3]
-            after_line_clean = constants.normalize_text(after_line)
             # and add the next line if the next line is in leftover line, or if leftover line is in next line
             if (
-                after_line_clean in after_removed
-                or after_line in after_removed
-                or after_removed in after_line
-                or after_removed in after_line_clean
+                constants.normalize_text(after_line) in constants.normalize_text(after_removed)
+                or constants.normalize_text(after_removed) in constants.normalize_text(after_line)
             ):
-                after_removed = after_removed.replace(after_line_clean, "", 1).replace(after_line, "", 1).strip()
+                after_removed = after_removed.replace(constants.normalize_text(after_line), "", 1).replace(after_line, "", 1).strip()
                 print(f"getting after blocks2, start index: {start_index}, end index: {end_index + 1}")
                 sentence_blocks = manage_files.get_subtitle_blocks_from_index_range_and_path(start_index, end_index + 1, subtitle_path, None, None)
                 new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(sentence_blocks, subtitle_path, lang_code, timing_lang_code, config, note_type_name)

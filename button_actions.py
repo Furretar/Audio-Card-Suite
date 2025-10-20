@@ -374,7 +374,9 @@ def generate_fields_button(editor):
     sound_filename, _ = generate_and_update_fields(editor, None, False)
     if sound_filename:
         log_command(f"Playing sound filename: {sound_filename}")
-        play(sound_filename)
+        QTimer.singleShot(50, lambda: play(sound_filename))
+
+
 
 # uses current fields to generate all missing fields
 def generate_and_update_fields(editor, note, should_overwrite):

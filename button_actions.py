@@ -372,8 +372,8 @@ def generate_fields_button(editor):
     if constants.database_updating.is_set():
         tooltip(f"Database updating, {constants.database_items_left} files left process.")
 
-    sound_filename, updated = generate_and_update_fields(editor, None, False)
-    if sound_filename and not updated:
+    sound_filename, _ = generate_and_update_fields(editor, None, False)
+    if sound_filename:
         log_command(f"Playing sound filename: {sound_filename}")
         QTimer.singleShot(0, lambda: play(sound_filename))
 
@@ -877,7 +877,7 @@ def get_fields_from_editor_or_note(editor_or_note):
 
     config = constants.extract_config_data()
     if config is None:
-        log_error("Config missing required fields, cannot proceed.")
+        log_error("Config missing required fields.")
         return {}
 
     if note_type_name not in config:

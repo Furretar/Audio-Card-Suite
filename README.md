@@ -21,6 +21,7 @@ low priority
 hash to subtitle files to link them to file, this will allow files with the same name to remain unchanged, allowing torrent seeding etc
 rrent fields
 - [ ] option to auto detect languages for subs with no language code
+- [ ] option to stop subtitle search, useful if you know you want something in the first subtitle but it didn't match immediately.
 
 
 

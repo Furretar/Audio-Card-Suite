@@ -14,7 +14,7 @@ import html
 
 # logging functions
 DEBUG_FILENAME = True
-DEBUG_COMMAND = False
+DEBUG_COMMAND = True
 DEBUG_ERROR = True
 DEBUG_IMAGE = False
 DEBUG_DATABASE = True

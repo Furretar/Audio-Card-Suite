@@ -3,17 +3,11 @@ from PyQt6.QtWidgets import QApplication
 import difflib
 import os
 import re
-import html
 from aqt import mw
 import aqt
 from aqt.sound import play, av_player
-from aqt import gui_hooks
-from anki.notes import Note
 from aqt.utils import tooltip
-
 import manage_database
-
-
 import manage_files
 from manage_files import get_field_key_from_label, get_altered_sound_data, \
     extract_sound_line_data
@@ -25,6 +19,7 @@ from constants import (
     log_database,
     log_command, addon_source_folder,
 )
+from PyQt6.QtCore import QTimer
 
 # constants
 ms_amount = constants.ms_amount
@@ -279,22 +274,21 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     # apply and save the changes to the note
     generate_and_update_fields(editor, None, False)
 
-    def play_after_reload():
-        if alt_pressed:
-            play_sound = editor.note.fields[translation_sound_idx]
-        else:
-            play_sound = editor.note.fields[sound_idx]
-        log_filename(f"playing sound: {play_sound}")
-        match = re.search(r"\[sound:(.*?)]", play_sound)
-        if match:
-            sound_filename = match.group(1)
-            QTimer.singleShot(0, lambda: play(sound_filename))
-
     editor.loadNote()
 
     autoplay = config["autoplay"]
     if not autoplay:
-        QTimer.singleShot(0, play_after_reload)
+        play_sound = editor.note.fields[sound_idx]
+        log_filename(f"playing sound: {play_sound}")
+        match = re.search(r"\[sound:(.*?)]", play_sound)
+        if match:
+            sound_filename = match.group(1)
+            QTimer.singleShot(50, lambda: play(sound_filename))
+
+
+
+
+
 
 def adjust_sound_tag(editor, start_delta: int, end_delta: int):
     log_error(f"\n\n\n\n-------------------------------------------------------------------------------------------------------------------------------\n\n\n\n")
@@ -365,7 +359,12 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
 
     autoplay = config["autoplay"]
     if not autoplay:
-        QTimer.singleShot(100, lambda: on_note_loaded(editor, True))
+        play_sound = editor.note.fields[sound_idx]
+        log_filename(f"playing sound: {play_sound}")
+        match = re.search(r"\[sound:(.*?)]", play_sound)
+        if match:
+            sound_filename = match.group(1)
+            QTimer.singleShot(50, lambda: play(sound_filename))
 
 # play sound hooks and buttons
 def generate_fields_button(editor):
@@ -375,7 +374,7 @@ def generate_fields_button(editor):
     sound_filename, _ = generate_and_update_fields(editor, None, False)
     if sound_filename:
         log_command(f"Playing sound filename: {sound_filename}")
-        QTimer.singleShot(0, lambda: play(sound_filename))
+        play(sound_filename)
 
 # uses current fields to generate all missing fields
 def generate_and_update_fields(editor, note, should_overwrite):
@@ -913,9 +912,6 @@ def get_fields_from_editor_or_note(editor_or_note):
         else:
             missing.append(lbl)
 
-    if missing:
-        log_error(f"The following labels are not mapped for note type '{note_type_name}':\n" + "\n".join(missing))
-
     fields = note_type["flds"]
 
     def field_index(label_string):
@@ -1049,7 +1045,7 @@ def on_note_loaded(editor, override=False):
             if match:
                 filename = match.group(1)
                 log_command(f"Playing sound from field {sound_idx}: {filename}")
-                QTimer.singleShot(50, lambda fn=filename: play(fn))
+                play(filename)
 
 
 # bulk generation

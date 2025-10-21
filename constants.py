@@ -290,3 +290,7 @@ def get_collection_dir():
     if not mw or not mw.col:
         print("Collection is not loaded yet.")
     return mw.col.media.dir()
+
+def is_add_editor(editor):
+    from aqt.addcards import AddCards
+    return isinstance(editor.parentWindow, AddCards)

@@ -182,8 +182,6 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         log_error(f"still no data from sound line: {sound_line}, returning")
         return ""
 
-    print(f"data: {data} from sound line: {sound_line}")
-
     start_index = data["start_index"]
     end_index = data["end_index"]
     timing_code = data["timing_lang_code"]
@@ -259,7 +257,8 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     new_timing_sound_line = manage_files.alter_sound_file_times(altered_data, new_timing_sound_line, config, alt_pressed, note_type_name)
 
     # generate new translation line
-    if not alt_pressed:
+    if not alt_pressed and translation_idx and translation_idx > -1:
+        print(f'aaa translation idx: {fields["translation_idx"]}')
         translation_line, _ = manage_files.get_translation_line_and_subtitle_from_target_sound_line(new_timing_sound_line, config, new_data, note_type_name)
         editor.note.fields[translation_idx] = str(translation_line or "")
 
@@ -385,7 +384,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
     # Determine current_note and fields dict depending on whether note or editor is provided
     if note is not None:
         current_note = note
-        fields = get_fields_from_editor_or_note(note)  # Make sure this function handles both editor and note
+        fields = get_fields_from_editor_or_note(note)
     elif editor is not None:
         current_note = editor.note
         fields = get_fields_from_editor_or_note(editor)
@@ -398,7 +397,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
     if not fields:
         log_error(f"No fields set for the note type '{note_type_name}'.")
         aqt.utils.showInfo(f"No fields set for the note type '{note_type_name}'.")
-
         return None, None
 
     sentence_idx = fields["sentence_idx"]
@@ -489,8 +487,12 @@ def generate_and_update_fields(editor, note, should_overwrite):
     # tag the note with the source file name
     filename_base = re.sub(r'^\[sound:|]$', '', new_sound_line.split("`", 1)[0].strip())
     filename_base_underscore = filename_base.replace(" ", "_").replace("((", "[").replace("))", "]")
-    if filename_base_underscore not in editor.note.tags:
-        editor.note.add_tag(filename_base_underscore)
+
+    # Use editor.note if available, otherwise fall back to note
+    target_note = editor.note if editor is not None else note
+
+    if filename_base_underscore not in target_note.tags:
+        target_note.add_tag(filename_base_underscore)
 
     # Only call editor.loadNote() if editor is not None
     if editor is not None:
@@ -500,7 +502,6 @@ def generate_and_update_fields(editor, note, should_overwrite):
 
     # Use editor.note.fields if editor is present, else current_note.fields
     sound_field_idx = translation_sound_idx if alt_pressed else sound_idx
-    sound_field_val = None
     if editor is not None:
         sound_field_val = editor.note.fields[sound_field_idx]
     else:
@@ -875,7 +876,6 @@ def get_fields_from_editor_or_note(editor_or_note):
         aqt.utils.showInfo("Cannot determine note type.")
         return {}
 
-
     config = constants.extract_config_data()
     if config is None:
         log_error("Config missing required fields.")
@@ -945,6 +945,8 @@ def get_fields_from_editor_or_note(editor_or_note):
     if not sentence_line or sentence_line == "":
         log_error(f"Target Sentence field is empty.")
 
+    tags = note.tags
+
     return {
         "sound_line": sound_line,
         "sound_idx": sound_idx,
@@ -957,6 +959,7 @@ def get_fields_from_editor_or_note(editor_or_note):
         "translation_sound_line": translation_sound_line,
         "translation_sound_idx": translation_sound_idx,
         "selected_text": str(editor_or_note.web.selectedText().strip()) if hasattr(editor_or_note, "web") else "",
+        "tags": tags,
     }
 
 def index_of_field(field_name, fields):

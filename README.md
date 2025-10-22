@@ -6,6 +6,7 @@
 - [ ] check if image for audiobooks already exists for optimal batch generation
 - [ ] save config and log somewhere to help me debug reports
 - [ ] if theres only 1 audio track then dont worry about the user set track
+- [ ] make it possible to put (()) in filenames
 
 
 

@@ -294,3 +294,20 @@ def get_collection_dir():
 def is_add_editor(editor):
     from aqt.addcards import AddCards
     return isinstance(editor.parentWindow, AddCards)
+
+def format_anki_safe_filename(text, revert):
+    unsafe_chars = {'꞉', '～'}
+    found = [c for c in text if c in unsafe_chars]
+    if found:
+        unique_found = sorted(set(found))
+        showInfo(f"Incompatible characters detected in filename:\n"
+                 f"{text}\n"
+                 f"Please remove or replace: '{' '.join(unique_found)}'")
+        return ""
+
+    if not revert:
+        text = text.replace('[', '((').replace(']', '))')
+    else:
+        text = text.replace('((', '[').replace('))', ']')
+
+    return text

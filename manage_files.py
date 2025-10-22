@@ -36,7 +36,9 @@ def extract_sound_line_data(sound_line):
 
         groups = match.groupdict()
         filename_base = groups["filename_base"]
-        filename_base = filename_base.replace('((', '[').replace('))', ']')
+        filename_base = constants.format_anki_safe_filename(filename_base, revert=True)
+        if not filename_base:
+            return None
 
         source_file_extension = groups.get("source_file_extension") or ""
         lang_code = groups.get("lang_code") or ""
@@ -65,7 +67,10 @@ def extract_sound_line_data(sound_line):
 
         timestamp_filename = "`".join(meta_parts) + f".{sound_file_extension}"
         audio_collection_path = os.path.join(constants.get_collection_dir(), timestamp_filename)
-        audio_collection_path = audio_collection_path.replace('[', '((').replace(']', '))')
+        audio_collection_path = constants.format_anki_safe_filename(audio_collection_path, revert=False)
+        if not audio_collection_path:
+            return None
+
 
         m4b_image_filename = f"{filename_base}{source_file_extension}.jpg"
         image_filename = f"{filename_base}.{sound_file_extension}`{start_time}.jpg"
@@ -1503,11 +1508,12 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
     sound_file_extension = sound_line_data["sound_file_extension"]
     timing_lang_code = sound_line_data["timing_lang_code"]
 
-    log_filename(
-        f"building altered sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {lang_code}, timing langauge code: {timing_lang_code}")
+    log_filename(f"building altered sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {lang_code}, timing langauge code: {timing_lang_code}")
 
     new_filename, _ = build_filename_and_sound_line(filename_base, source_file_extension, lang_code, timing_lang_code, new_start_time, new_end_time, start_index, end_index, lufs, sound_file_extension)
-    new_filename = new_filename.replace('[', '((').replace(']', '))')
+    new_filename = constants.format_anki_safe_filename(new_filename, revert=False)
+    if not new_filename:
+        return None
 
     new_path = os.path.join(constants.get_collection_dir(), new_filename)
     new_sound_line = f"[sound:{new_filename}]"
@@ -1548,7 +1554,7 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
     log_filename(f"full source filename4: {full_source_filename}")
     source_path = get_source_path_from_full_filename(full_source_filename)
     if not source_path:
-        log_error(f"source not found for: {full_source_filename}")
+        log_error(f"Source file not found for: {full_source_filename}.")
         return None
 
     cmd = create_ffmpeg_extract_audio_command(

@@ -110,8 +110,12 @@ def next_result_button(editor):
         filename_base = re.sub(r'^\[sound:|]$', '', next_sound_line.split("`", 1)[0].strip())
         prev_filename_base = re.sub(r'^\[sound:|]$', '', sound_line.split("`", 1)[0].strip())
 
-        filename_base_underscore = filename_base.replace(" ", "_").replace("((", "[").replace("))", "]")
-        prev_base_underscore = prev_filename_base.replace(" ", "_").replace("((", "[").replace("))", "]")
+        filename_base_underscore = constants.format_anki_safe_filename(filename_base, revert=True).replace(" ", "_")
+        if not filename_base_underscore:
+            return ""
+        prev_base_underscore = constants.format_anki_safe_filename(prev_filename_base, revert=True).replace(" ", "_")
+        if not filename_base_underscore:
+            return ""
 
         if filename_base_underscore != prev_base_underscore:
             editor.note.remove_tag(prev_base_underscore)
@@ -462,6 +466,11 @@ def generate_and_update_fields(editor, note, should_overwrite):
             current_note.fields[sound_idx] = new_sound_line or ""
             updated = True
 
+        if not new_sound_line:
+            full_source_filename = altered_data["full_source_filename"]
+            aqt.utils.showInfo(f"Source file not found for: {full_source_filename}.")
+            return None, False
+
     if should_generate["translation_sound_line"]:
         log_filename(f"getting sound data from translation: {new_translation_sound_line}")
         data = manage_files.extract_sound_line_data(new_translation_sound_line)
@@ -486,7 +495,9 @@ def generate_and_update_fields(editor, note, should_overwrite):
 
     # tag the note with the source file name
     filename_base = re.sub(r'^\[sound:|]$', '', new_sound_line.split("`", 1)[0].strip())
-    filename_base_underscore = filename_base.replace(" ", "_").replace("((", "[").replace("))", "]")
+    filename_base_underscore = constants.format_anki_safe_filename(filename_base, revert=True).replace(" ", "_")
+    if not filename_base_underscore:
+        return None, False
 
     # Use editor.note if available, otherwise fall back to note
     target_note = editor.note if editor is not None else note

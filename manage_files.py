@@ -103,7 +103,7 @@ def extract_sound_line_data(sound_line):
         log_error("extract_sound_line_data received None or empty string")
         return None
 
-    log_error(f"no data extracted from sound line: {sound_line}")
+    log_error(f"no data extracted from sound line: {sound_line}, format type: {format_type}")
     return None
 
 # returns all current config values as a dict

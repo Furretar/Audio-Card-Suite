@@ -847,6 +847,7 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
 
                 # search for the correct block if the subtitle line is smaller than the search window
                 if i == 0:
+                    log_filename(f"subtitle line at index smaller than search window ({max_window})")
                     start_index = joined.index(normalized_sentence)
                     pos = 0
                     for offset, line in enumerate(window):
@@ -856,7 +857,6 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
                         pos = next_pos
 
                 # otherwise the last block will contain the correct line
-                print(f"i: {i}, max window: {max_window}")
                 return usable_blocks[i + max_window - 1], actual_path
 
     log_command("No subtitle match found across blocks.")

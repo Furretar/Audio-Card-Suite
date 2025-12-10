@@ -106,6 +106,8 @@ class AudioToolsDialog(QDialog):
         self.tabs.currentChanged.connect(self.on_tab_changed)
         self.setMinimumSize(546, 746)
 
+
+
     def load_settings(self):
         config_file_path = os.path.join(constants.addon_dir, "config.json")
         if not os.path.exists(config_file_path):
@@ -307,6 +309,20 @@ class AudioToolsDialog(QDialog):
 
         def update_database_button():
             tooltip("Updating database...")
+            threading.Thread(target=lambda: constants.timed_call(manage_database.update_database), daemon=True).start()
+
+        def reload_database_button():
+            tooltip("Reloading database...")
+
+            db_path = os.path.join(constants.addon_dir, "subtitles_index.db")
+
+            try:
+                os.remove(db_path)
+            except PermissionError:
+                tooltip(f"Cannot reload, database currently in use.")
+            except FileNotFoundError:
+                pass
+
             threading.Thread(target=lambda: constants.timed_call(manage_database.update_database), daemon=True).start()
 
 
@@ -644,22 +660,22 @@ class AudioToolsDialog(QDialog):
         self.bulkGenerateButton = QPushButton("Bulk Generate")
         self.bulkGenerateButton.setDefault(True)
         self.bulkGenerateButton.clicked.connect(confirm_bulk_generate)
+        self.bulkGenerateButton.setToolTip("Generates fields on every note in the current deck. Will skip notes with filled fields.")
         hbox2.addWidget(self.bulkGenerateButton)
 
         self.updateDatabaseButton = QPushButton("Update Database")
         self.updateDatabaseButton.setDefault(True)
         self.updateDatabaseButton.clicked.connect(update_database_button)
+        self.updateDatabaseButton.setToolTip("Adds new media and subtitles to the database.")
         hbox2.addWidget(self.updateDatabaseButton)
 
+        self.reloadDatabaseButton = QPushButton("Reload Database")
+        self.reloadDatabaseButton.setDefault(True)
+        self.reloadDatabaseButton.clicked.connect(reload_database_button)
+        self.reloadDatabaseButton.setToolTip("Resets the entire database. Useful when files with the same name overlap.")
+        hbox2.addWidget(self.reloadDatabaseButton)
+
         hbox2.addStretch(4)
-
-        # todo add mpv support
-        # open file button
-        # self.openFileButton = QPushButton("Open File")
-        # self.openFileButton.setDefault(True)
-        # self.openFileButton.clicked.connect(lambda: None)
-        # hbox2.addWidget(self.openFileButton)
-
         vbox.addLayout(hbox2)
         self.setLayout(vbox)
         self.setWindowIcon(QIcon(":/icons/anki.png"))

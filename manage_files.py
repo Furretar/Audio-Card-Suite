@@ -633,7 +633,6 @@ def get_source_path_from_full_filename(full_source_filename) -> str:
     return ""
 
 def get_subtitle_track_number_by_code(source_path, code):
-    db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
     conn = manage_database.get_database()
     filename = os.path.basename(source_path)
 

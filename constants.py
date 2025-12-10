@@ -64,9 +64,9 @@ BACKTICK_PATTERN = re.compile(
     r'(?:\])?$',                                   # optional closing "]"
     re.IGNORECASE
 )
-
 addon_dir = addon_dir
 default_source_dir = os.path.join(addon_dir, "Sources")
+ignore_dir = os.path.join(default_source_dir, "ignore")
 select_note_type_string = "Please Select a Note Type"
 
 default_settings = {

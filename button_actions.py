@@ -528,9 +528,8 @@ def generate_and_update_fields(editor, note, should_overwrite):
 
 ## get and format data
 def context_aware_sound_sentence_line_generate(sentence_line, new_sentence_line, sound_line, subtitle_path, config, note_type_name):
-    print(f"aaa sound line: {sound_line}")
     if sentence_line == new_sentence_line:
-        log_error(f"sentence line and new sentence line are the same: {sentence_line}")
+        log_filename(f"sentence line and new sentence line are the same: {sentence_line}, will not search for context")
         return sound_line, sentence_line
 
     if (not sentence_line) or (not new_sentence_line):
@@ -742,7 +741,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
 
     # generate sound line if it doesn't exist
     if not data:
-        log_error(f"no data extracted from sound line: {sound_line}")
+        log_error(f"no data in sound line: {sound_line}")
 
         # Get target block and subtitle path using selected_text if available, otherwise sentence_line
         search_text = selected_text if selected_text else sentence_line

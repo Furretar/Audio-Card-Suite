@@ -52,18 +52,20 @@ video_extensions = [
 subtitle_extensions = {".srt", ".vtt", ".ass", ".ssa"}
 
 BACKTICK_PATTERN = re.compile(
-    r'^(?:\[sound:)?'                               # optional opening "[sound:"
-    r'(?P<filename_base>[^`.]+)'                    # filename base
-    r'(?P<source_file_extension>\.[a-z0-9]+)?'     # optional extension
-    r'(?:`(?P<lang_code>[a-z]{3})(?:-(?P<timing_lang_code>[a-z]{3}))?)?'  # optional lang codes
-    r'`(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'  # start time
-    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'     # end time
-    r'(?P<subtitle_range>\d+-\d+)'                 # subtitle range
-    r'(?:`(?P<normalize_tag>[^`]+))?'             # optional normalization tag
-    r'\.(?P<sound_file_extension>\w+)'             # sound file extension
-    r'(?:\])?$',                                   # optional closing "]"
+    r'^(?:\[sound:)?'
+    r'(?P<filename_base>[^`.]+)'
+    r'(?P<source_file_extension>\.[^`]+)?'
+    r'(?:`(?P<lang_code>[a-z]{3})(?:-(?P<timing_lang_code>[a-z]{3}))?)?'
+    r'`(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'
+    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'
+    r'(?P<subtitle_range>\d+-\d+)'
+    r'(?:`(?P<normalize_tag>[^`]+))?'
+    r'\.(?P<sound_file_extension>\w+)'
+    r'(?:\])?$',
     re.IGNORECASE
 )
+
+
 addon_dir = addon_dir
 default_source_dir = os.path.join(addon_dir, "Sources")
 ignore_dir = os.path.join(default_source_dir, "ignore")

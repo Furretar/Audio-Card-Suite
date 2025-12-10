@@ -103,7 +103,7 @@ def extract_sound_line_data(sound_line):
         log_error("extract_sound_line_data received None or empty string")
         return None
 
-    log_error(f"no data extracted from sound line: {sound_line}")
+    log_error(f"no data extracted from sound line: {sound_line}, format type: {format_type}")
     return None
 
 # returns all current config values as a dict
@@ -771,6 +771,8 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
     target_language_code = note_config.get("target_language_code")
     target_audio_track = str(note_config.get("target_audio_track", 0))
 
+
+
     if not target_language_code and target_audio_track == "0":
         log_error(f"Target language code and track not set for note type: '{note_type_name}'")
         return None, None
@@ -822,7 +824,7 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
         else:
             max_window = 100
 
-        log_filename(f"window: {max_window}")
+        log_filename(f"search subtitle window length: {max_window}")
 
         joined_lines = normalized_lines
 
@@ -841,6 +843,19 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
                     subtitle_name += f"`track_{trk}`{lang}"
                 subtitle_name += ".srt"
                 actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
+
+                # search for the correct block if the subtitle line is smaller than the search window
+                if i == 0:
+                    log_filename(f"subtitle line at index smaller than search window ({max_window})")
+                    start_index = joined.index(normalized_sentence)
+                    pos = 0
+                    for offset, line in enumerate(window):
+                        next_pos = pos + len(line)
+                        if start_index < next_pos:
+                            return usable_blocks[i + offset], actual_path
+                        pos = next_pos
+
+                # otherwise the last block will contain the correct line
                 return usable_blocks[i + max_window - 1], actual_path
 
     log_command("No subtitle match found across blocks.")

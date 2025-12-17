@@ -665,7 +665,7 @@ def get_subtitle_code_by_track_number(source_path, track_number):
             "-show_entries", "stream=index:stream_tags=language",
             "-of", "json", source_path
         ]
-        result = constants.silent_run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        result = constants.silent_run(cmd, capture_output=True, text=True)
         log_command(f"[ffprobe subtitle code lookup]\ncmd: {' '.join(cmd)}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
 
         streams = json.loads(result.stdout).get("streams", [])
@@ -1042,7 +1042,7 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
             m4b_image_collection_path
         ]
         log_command(f"Extracting cover from m4b:\n{' '.join(cmd)}")
-        result = constants.silent_run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        result = constants.silent_run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             log_error(f"FFmpeg cover extraction failed:\n{result.stderr}")
             return ""
@@ -1065,7 +1065,7 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
     ]
 
     log_image(f"Extracting image:\n{' '.join(cmd)}")
-    result = constants.silent_run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+    result = constants.silent_run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         log_error(f"FFmpeg image extraction failed:\n{result.stderr}")
         return ""
@@ -1135,7 +1135,7 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
         result = constants.silent_run(
             [ffprobe_path, "-v", "error", "-select_streams", "a", "-show_entries",
              "stream=index:stream_tags=language", "-of", "json", source_path],
-            capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW,
+            capture_output=True, text=True,
         )
         log_command(f"[ffprobe audio stream scan]\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
         info = json.loads(result.stdout)
@@ -1241,7 +1241,7 @@ def ffmpeg_extract_full_audio(source_file_path, config, note_type_name) -> str:
     log_command(f"[FFmpeg extract full audio]\n{' '.join(cmd)}")
 
     try:
-        result = constants.silent_run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        result = constants.silent_run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             log_error(f"FFmpeg failed with return code {result.returncode}:\n{result.stderr}")
             return ""
@@ -1337,7 +1337,7 @@ def get_audio_start_time_ms(source_file_path: str) -> int:
         "-print_format", "compact", source_file_path
     ]
     try:
-        result = constants.silent_run(cmd, capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        result = constants.silent_run(cmd, capture_output=True, text=True, check=True)
         log_command(f"ffprobe output: {result.stdout.strip()}")
         match = re.search(r"pts_time=(\d+(?:\.\d+)?)", result.stdout)
         return round(float(match.group(1)) * 1000) if match else 0
@@ -1592,7 +1592,7 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
         try:
             log_filename(f"generating new sound file: {altered_data['new_path']}")
             log_filename(f"Running FFmpeg command: {' '.join(cmd)}")
-            result = constants.silent_run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=subprocess.CREATE_NO_WINDOW)
+            result = constants.silent_run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
             if result.returncode != 0:
                 log_error(f"FFmpeg failed:\n{result.stderr}")
                 return

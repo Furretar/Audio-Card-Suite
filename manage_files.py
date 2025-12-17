@@ -845,6 +845,7 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
                 actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
 
                 # search for the correct block if the subtitle line is smaller than the search window
+                print(f"loops: {i}")
                 if i == 0:
                     log_filename(f"subtitle line at index smaller than search window ({max_window})")
                     start_index = joined.index(normalized_sentence)

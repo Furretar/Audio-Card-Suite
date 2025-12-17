@@ -29,7 +29,7 @@ except ImportError:
     import language_codes
     import constants
 
-
+# container constants
 CONTAINER_MARGINS = constants.CONTAINER_MARGINS
 CONTAINER_SPACING = constants.CONTAINER_SPACING
 
@@ -666,7 +666,7 @@ class AudioToolsDialog(QDialog):
         self.updateDatabaseButton = QPushButton("Update Database")
         self.updateDatabaseButton.setDefault(True)
         self.updateDatabaseButton.clicked.connect(update_database_button)
-        self.updateDatabaseButton.setToolTip("Adds new media and subtitles to the database.")
+        self.updateDatabaseButton.setToolTip("Adds only new media and subtitles to the database.")
         hbox2.addWidget(self.updateDatabaseButton)
 
         self.reloadDatabaseButton = QPushButton("Reload Database")

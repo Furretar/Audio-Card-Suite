@@ -17,15 +17,8 @@ import shutil
 import re
 from collections import Counter
 import subprocess
-
-from constants import (
-    log_database,
-    log_error,
-    log_image,
-    log_command,
-log_database,
-)
-
+from constants import log_error
+from constants import log_database
 
 conn = None
 
@@ -59,8 +52,6 @@ def close_database():
 
 audio_exts = constants.audio_extensions
 video_exts = constants.video_extensions
-
-
 
 def run_ffprobe(file_path):
     _, ffprobe_path = constants.get_ffmpeg_exe_path()
@@ -136,7 +127,17 @@ def get_srt_converted_subtitle_from_path(subtitle_path):
             'pipe:1'  # output to stdout
         ]
 
-        result = constants.silent_run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        # only use create no window on windows
+        creationflags = 0
+        if os.name == "nt":
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        result = constants.silent_run(
+            cmd,
+            capture_output=True,
+            text=True,
+            creationflags=creationflags
+        )
 
         if result.returncode != 0:
             log_database(f"ffmpeg conversion failed for {subtitle_path}: {result.stderr}")
@@ -236,6 +237,7 @@ def update_database():
     media_exts = audio_exts + video_exts
 
     # Recursively get all media files, excluding any folder that contains 'ignore' in its path parts
+    print(f"folder: {folder}")
     media_paths_in_folder = {
         os.path.join(root, f)
         for root, dirs, files in os.walk(folder)

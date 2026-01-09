@@ -27,12 +27,15 @@ def get_database():
     if conn is None:
         db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
         conn = sqlite3.connect(db_path, timeout=10, isolation_level=None)
+        # Create FTS5 virtual table for full-text search (must match update_database schema)
+        conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')
+        conn.execute('CREATE TABLE IF NOT EXISTS media_tracks (filename TEXT, track INTEGER, language TEXT, type TEXT, PRIMARY KEY(filename, track, type))')
         conn.execute('''
-        CREATE TABLE IF NOT EXISTS subtitles (
+        CREATE TABLE IF NOT EXISTS media_audio_start_times (
             filename TEXT,
-            language TEXT,
-            track INTEGER,
-            content TEXT
+            audio_track INTEGER,
+            delay_ms INTEGER,
+            PRIMARY KEY (filename, audio_track)
         )
         ''')
         conn.execute('''

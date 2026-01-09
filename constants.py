@@ -31,8 +31,10 @@ database_items_left = 0
 
 
 temp_ffmpeg_folder = os.path.join(addon_dir, "ffmpeg")
-temp_ffmpeg_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffmpeg.exe")
-temp_ffprobe_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffprobe.exe")
+ffmpeg_exe_name = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+ffprobe_exe_name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
+temp_ffmpeg_exe = os.path.join(temp_ffmpeg_folder, "bin", ffmpeg_exe_name)
+temp_ffprobe_exe = os.path.join(temp_ffmpeg_folder, "bin", ffprobe_exe_name)
 
 # strings
 target_subtitle_line_string = "Target Subtitle Line"
@@ -46,7 +48,7 @@ audio_extensions = [
 ]
 
 video_extensions = [
-    ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".m4b"
+    ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".m4b", ".webm"
 ]
 
 subtitle_extensions = {".srt", ".vtt", ".ass", ".ssa"}
@@ -173,9 +175,6 @@ def get_ffmpeg_exe_path():
         return temp_ffmpeg_exe, temp_ffprobe_exe
 
     log_error("FFmpeg executable not found in PATH or addon folder.")
-    showInfo("FFmpeg is not installed or could not be found.\n\n"
-             "Either install FFmpeg globally and add it to your system PATH,\n"
-             "or place ffmpeg.exe in the addon folder under: ffmpeg/bin/ffmpeg.exe")
     return None, None
 
 def normalize_text(s):
@@ -199,7 +198,7 @@ def get_audio_start_time_ms_for_track(source_path, audio_stream_index):
             "-of", "json",
             source_path
         ]
-        result = silent_run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        result = silent_run(cmd, capture_output=True, text=True)
 
         info = json.loads(result.stdout)
 
@@ -302,9 +301,7 @@ def format_anki_safe_filename(text, revert):
     found = [c for c in text if c in unsafe_chars]
     if found:
         unique_found = sorted(set(found))
-        showInfo(f"Incompatible characters detected in filename:\n"
-                 f"{text}\n"
-                 f"Please remove or replace: '{' '.join(unique_found)}'")
+        log_error(f"Incompatible characters detected in filename: {text} - found: {' '.join(unique_found)}")
         return ""
 
     if not revert:

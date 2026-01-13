@@ -383,6 +383,9 @@ def generate_fields_button(editor):
 
 # uses current fields to generate all missing fields
 def generate_and_update_fields(editor, note, should_overwrite):
+    ffmpeg, ffprobe = constants.get_ffmpeg_exe_path()
+    if not (ffmpeg and ffprobe):
+        return None, None
     config = constants.extract_config_data()
 
     # Determine current_note and fields dict depending on whether note or editor is provided
@@ -468,6 +471,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
 
         if not new_sound_line:
             full_source_filename = altered_data["full_source_filename"]
+            log_error(f"Source file not found for: {full_source_filename}.")
             aqt.utils.showInfo(f"Source file not found for: {full_source_filename}.")
             return None, False
 

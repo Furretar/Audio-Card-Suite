@@ -315,3 +315,6 @@ def format_anki_safe_filename(text, revert):
         text = text.replace('((', '[').replace('))', ']')
 
     return text
+
+def show_error(message):
+    showInfo(f"{message}")

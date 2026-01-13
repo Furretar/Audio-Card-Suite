@@ -31,8 +31,10 @@ database_items_left = 0
 
 
 temp_ffmpeg_folder = os.path.join(addon_dir, "ffmpeg")
-temp_ffmpeg_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffmpeg.exe")
-temp_ffprobe_exe = os.path.join(temp_ffmpeg_folder, "bin", "ffprobe.exe")
+ffmpeg_exe_name = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+ffprobe_exe_name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
+temp_ffmpeg_exe = os.path.join(temp_ffmpeg_folder, "bin", ffmpeg_exe_name)
+temp_ffprobe_exe = os.path.join(temp_ffmpeg_folder, "bin", ffprobe_exe_name)
 
 # strings
 target_subtitle_line_string = "Target Subtitle Line"
@@ -46,7 +48,7 @@ audio_extensions = [
 ]
 
 video_extensions = [
-    ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".m4b"
+    ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".m4b", ".webm"
 ]
 
 subtitle_extensions = {".srt", ".vtt", ".ass", ".ssa"}
@@ -302,6 +304,7 @@ def format_anki_safe_filename(text, revert):
     found = [c for c in text if c in unsafe_chars]
     if found:
         unique_found = sorted(set(found))
+        log_error(f"Incompatible characters detected in filename: {text} - found: {' '.join(unique_found)}")
         showInfo(f"Incompatible characters detected in filename:\n"
                  f"{text}\n"
                  f"Please remove or replace: '{' '.join(unique_found)}'")

@@ -7,6 +7,7 @@
 - [ ] save config and log somewhere to help me debug reports
 - [ ] if theres only 1 audio track then dont worry about the user set track
 - [ ] make it possible to put (()) in filenames/fix unsafe characters better
+- [ ] fix ffmpeg not found error
 
 
 

@@ -1093,6 +1093,9 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
     log_filename(f"Extracting sound_line_data from sound_line: {sound_line}")
 
     ffmpeg_path, ffprobe_path = constants.get_ffmpeg_exe_path()
+    if not (ffmpeg_path and ffprobe_path):
+        return []
+    
     start = convert_hmsms_to_ffmpeg_time_notation(start_time)
     end = convert_hmsms_to_ffmpeg_time_notation(end_time)
     duration_sec = time_hmsms_to_seconds(end) - time_hmsms_to_seconds(start)

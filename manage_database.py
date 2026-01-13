@@ -57,7 +57,7 @@ audio_exts = constants.audio_extensions
 video_exts = constants.video_extensions
 
 def run_ffprobe(file_path):
-    _, ffprobe_path = constants.get_ffmpeg_exe_path()
+    _, ffprobe_path = constants.get_ffmpeg_exe_path(True)
     cmd = [
         f"{ffprobe_path}",
         "-v", "error",
@@ -119,7 +119,7 @@ def check_already_indexed(conn, media_file, track, lang=None):
 
 def get_srt_converted_subtitle_from_path(subtitle_path):
     try:
-        exe_path, ffprobe_path = constants.get_ffmpeg_exe_path()
+        exe_path, ffprobe_path = constants.get_ffmpeg_exe_path(True)
 
         # Use ffmpeg to convert subtitle to SRT and output to stdout
         cmd = [
@@ -390,7 +390,7 @@ def extract_all_subtitle_tracks_and_update_db(conn):
     audio_exts = constants.audio_extensions
     video_exts = constants.video_extensions
     media_exts = audio_exts + video_exts
-    exe_path, ffprobe_path = constants.get_ffmpeg_exe_path()
+    exe_path, ffprobe_path = constants.get_ffmpeg_exe_path(True)
 
     def run_ffprobe(path):
         cmd = [

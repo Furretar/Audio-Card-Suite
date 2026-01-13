@@ -165,7 +165,7 @@ def log_database(message):
         print(f"[{timestamp}] {file}:{line} in {func}:\n[database] {message.strip()}\n")
 
 
-def get_ffmpeg_exe_path():
+def get_ffmpeg_exe_path(background_thread=False):
     exe_path = shutil.which("ffmpeg")
     probe_path = shutil.which("ffprobe")
     if exe_path:
@@ -175,9 +175,8 @@ def get_ffmpeg_exe_path():
         return temp_ffmpeg_exe, temp_ffprobe_exe
 
     log_error("FFmpeg executable not found in PATH or addon folder.")
-    showInfo("FFmpeg is not installed or could not be found.\n\n"
-             "Either install FFmpeg globally and add it to your system PATH,\n"
-             "or place ffmpeg.exe in the addon folder under: ffmpeg/bin/ffmpeg.exe")
+    if not background_thread:
+        showInfo("FFmpeg executable not found in PATH or addon folder.")
     return None, None
 
 def normalize_text(s):

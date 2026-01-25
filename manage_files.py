@@ -421,6 +421,7 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
     subtitle_database = manage_database.get_database()
 
     # get translation subtitle file and the subtitle blocks that overlap timings with the sound line
+    log_filename(f"getting translation subtitle with data: {full_source_filename}, {translation_audio_track}, {translation_language_code}")
     translation_subtitle_path = get_subtitle_file_from_database(full_source_filename, translation_audio_track, translation_language_code, config, subtitle_database, note_type_name)
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(translation_subtitle_path, start_time, end_time)
 
@@ -466,6 +467,7 @@ def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, 
 
     subtitle_database = manage_database.get_database()
 
+    log_filename(f"getting timing subtitle 2 with data: {full_source_filename}, {timing_audio_track}, {timing_language_code}")
     timing_subtitle_path = get_subtitle_file_from_database(
         full_source_filename, timing_audio_track, timing_language_code, config, subtitle_database, note_type_name)
 
@@ -1200,8 +1202,6 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
     ]
 
     filters = []
-    if delay_ms > 0:
-        filters.append(f"adelay={delay_ms}|{delay_ms}")
 
     if normalize_audio and int(lufs) < 1:
         filters.append(f"loudnorm=I={lufs}:TP=-1.5:LRA=11")

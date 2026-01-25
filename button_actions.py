@@ -208,6 +208,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         end_time = None
 
     full_source_filename = data["full_source_filename"]
+    log_filename(f"getting timing subtitle with data: {full_source_filename}, {track}, {code}")
     timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database, note_type_name)
 
     if not timing_subtitle_path:
@@ -230,6 +231,7 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
 
     # get blocks for sentence line if applicable
     if timing_code != code:
+        log_filename(f"getting sentence subtitle with data: {full_source_filename}, {track}, {code}")
         sentence_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database, note_type_name)
         log_filename(f"sentence_subtitle_path: {sentence_subtitle_path}")
 
@@ -696,7 +698,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
     image_line = fields["image_line"]
     selected_text = fields["selected_text"]
 
-    if not sentence_line:
+    if not sentence_line and not selected_text:
         log_error(f"sentence field empty")
         return None
 
@@ -725,6 +727,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
     if data:
         full_source_filename = data["full_source_filename"]
         subtitle_database = manage_database.get_database()
+
         subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, code, config, subtitle_database, note_type_name)
         log_filename(f"subtitle path from database1: {subtitle_path}")
 

@@ -517,7 +517,7 @@ def extract_all_subtitle_tracks_and_update_db(conn):
             codec = stream.get("codec_name")
             log_database(f"Extracting track={track}, lang={lang}, codec={codec}")
 
-            if codec not in ("subrip", "ass", "srt", "ssa"):
+            if codec not in ("subrip", "ass", "srt", "ssa", "webvtt"):
                 log_database(f"skip unsupported codec {codec}")
                 continue
 

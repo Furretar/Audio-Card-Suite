@@ -1621,3 +1621,30 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
     thread.join(timeout=4)  # won't freeze Anki UI
     return f"[sound:{altered_data['new_filename']}]"
 
+def audio_language_exists_in_file(full_source_path, requested_lang):
+    _, ffprobe_exe = constants.get_ffmpeg_exe_path()
+
+    command = [
+        ffprobe_exe,
+        "-v", "error",
+        "-select_streams", "a",
+        "-show_entries", "stream=index:stream_tags=language",
+        "-of", "json",
+        full_source_path
+    ]
+
+    result = constants.silent_run(command)
+    if not result:
+        return False
+
+    try:
+        data = json.loads(result)
+        streams = data.get("streams", [])
+        for stream in streams:
+            lang = stream.get("tags", {}).get("language")
+            if lang == requested_lang:
+                return True
+    except Exception:
+        return False
+
+    return False

@@ -18,6 +18,12 @@ import subprocess
 from constants import log_error
 from constants import log_database
 
+base_dir = os.path.dirname(__file__)
+lib_dir = os.path.join(base_dir, "lib")
+ctypes.CDLL(os.path.join(lib_dir, "libstdc++.so.6"))
+sys.path.insert(0, os.path.join(lib_dir, "fasttext"))
+import fasttext
+
 conn = None
 
 def get_database():

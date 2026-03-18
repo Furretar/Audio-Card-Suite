@@ -1125,5 +1125,7 @@ def bulk_generate(deck, note_type):
         for note_id in note_ids:
             note = mw.col.get_note(note_id)
             generate_and_update_fields(None, note, False)
+            
+        original_showInfo(f"Bulk generate complete. Processed {len(note_ids)} notes.")
     finally:
         aqt.utils.showInfo = original_showInfo

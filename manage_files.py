@@ -1633,12 +1633,12 @@ def audio_language_exists_in_file(full_source_path, requested_lang):
         full_source_path
     ]
 
-    result = constants.silent_run(command)
+    result = constants.silent_run(command, capture_output=True, text=True)
     if not result:
         return False
 
     try:
-        data = json.loads(result)
+        data = json.loads(result.stdout)
         streams = data.get("streams", [])
         for stream in streams:
             lang = stream.get("tags", {}).get("language")

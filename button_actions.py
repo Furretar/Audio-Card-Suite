@@ -896,7 +896,6 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
 
 
 def show_info_msg(msg):
-    import aqt
     aqt.utils.showInfo(msg)
 
 

@@ -1,17 +1,15 @@
 import sys, os
-
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QProgressDialog
 from aqt import mw
 from aqt.utils import tooltip
 
 sys.path.append(os.path.dirname(__file__))
-import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "lib"))
+
 import sqlite3
-import re
 import constants
 import json
-import unicodedata
 import tempfile
 import shutil
 import re
@@ -219,9 +217,10 @@ def extract_subtitle_file_data(subtitle_filename):
 def update_database():
     constants.database_updating.set()
     log_database(f"update database called")
-    db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
-    conn = sqlite3.connect(db_path, timeout=10, isolation_level=None)
 
+    close_database()
+    conn = get_database()
+    
     # create tables
     conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')
     conn.execute('CREATE TABLE IF NOT EXISTS media_tracks (filename TEXT, track INTEGER, language TEXT, type TEXT, PRIMARY KEY(filename, track, type))')
@@ -318,12 +317,12 @@ def update_database():
 
         name_no_ext, ext = os.path.splitext(filename)
 
-        match = re.match(r"^(.*?)(?:\.([a-zA-Z]{3}))?$", name_no_ext)
-        if match:
-            base_name = match.group(1)
-            lang_code = match.group(2) if match.group(2) else "und"
+        parts = name_no_ext.rsplit('.', 1)
+        if len(parts) == 2 and re.fullmatch(r'[a-zA-Z]{2,3}', parts[1]):
+            base_name = parts[0]
+            lang_code = parts[1].lower()
         else:
-            base_name = os.path.splitext(name_no_ext)[0]
+            base_name = name_no_ext
             lang_code = "und"
 
         if base_name not in indexed_subtitle_basenames:

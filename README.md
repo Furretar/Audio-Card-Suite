@@ -1,4 +1,8 @@
+# About
 
+# Usage
+## Sources and Subtitles
+Audio Card Suite will read through every video file in the `Sources` folder, storing the contents of every embedded subtitle file and its [language code](https://en.wikipedia.org/wiki/List_of_ISO_639-2_codes) in the database. If the language is `undefined`, the language will be automatically detected using [fastText](https://github.com/facebookresearch/fastText). External subtitle files in the same directory with the same name will also be added, for example, `video.mkv` and `video.srt`. The language code can also be manually set by adding its [639-2 language code](https://en.wikipedia.org/wiki/List_of_ISO_639-2_codes) before the extension, like this: `video.mkv` and `video.jpn.srt`. Subtitles without a matching video file will be automatically removed from the database. Since the contents of the subtitle file are read into the database on startup, you must either: click `Reload Database` in the settings, or, remove the subtitle file, click `Update Database`, then add it back.
 
 - [ ] figure out why some files arent deleted from collection
 - [ ] figure out why database doesn't go to 0 when all files are removed

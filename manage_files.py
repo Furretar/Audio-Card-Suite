@@ -1,26 +1,19 @@
-from datetime import datetime
 import os
 import json
-import html
 import re
-import subprocess
 import threading
 import time
 
 from aqt.utils import showInfo
 from send2trash import send2trash
-import constants
+
 import manage_database
-from typing import Tuple, Optional, List
-from constants import (
-    log_filename,
-    log_error,
-    log_image,
-    log_command,
-log_database,
-)
+import constants
 
-
+from constants import log_filename
+from constants import log_error
+from constants import log_image
+from constants import log_command
 
 # todo: implement 4 character sha hash to disambiguate files with the same name and extension
 # extracts all data in a sound line and returns it as a dict
@@ -510,7 +503,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
     if '`' in base:
         base = base.split('`')[0]
 
-    # Remove extension to get base filename only
+    # remove extension to get base filename only
     base_no_ext = os.path.splitext(base)[0]
 
     subtitle_data = extract_subtitle_path_data(subtitle_path)
@@ -526,7 +519,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
     if not code:
         code = "und"
 
-    # Try exact match first (using base without extension)
+    # try exact match first (using base without extension)
     query = '''
     SELECT s.content, s.filename
     FROM subtitles s
@@ -539,7 +532,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
     cursor = db.execute(query, params)
     row = cursor.fetchone()
 
-    # If no exact match, try LIKE query to find filename starting with base_no_ext (ignore extension differences)
+    # if no exact match, try LIKE query to find filename starting with base_no_ext (ignore extension differences)
     if row is None:
         like_pattern = base_no_ext + "%"
         query_like = '''
@@ -553,7 +546,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
         cursor = db.execute(query_like, (like_pattern, str(track), code))
         row = cursor.fetchone()
 
-    # Optionally, update last_accessed after fetching
+    # update last_accessed after fetching
     if row:
         db.execute('''
         INSERT INTO subtitle_access(filename, last_accessed)
@@ -564,7 +557,6 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
     if row is None:
         log_error(f"No subtitle content found in DB for filename={base_no_ext} track={track} language={code}")
         return []
-
 
     content_json = row[0]
 

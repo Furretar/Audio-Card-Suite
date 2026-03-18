@@ -229,7 +229,7 @@ class _FastText(object):
             else:
                 probs, labels = ([], ())
 
-            return labels, np.asarray(probs)
+            return labels, np.array(probs, copy=False)
 
     def get_input_matrix(self):
         """

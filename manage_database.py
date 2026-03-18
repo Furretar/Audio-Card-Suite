@@ -1,11 +1,22 @@
-import sys, os
+# imports
+import sys
+import os
+import ctypes
+
+base_dir = os.path.dirname(__file__)
+lib_dir = os.path.join(base_dir, "lib")
+fasttext_lib_dir = os.path.join(lib_dir, "fasttext")
+
+ctypes.CDLL(os.path.join(fasttext_lib_dir, "libstdc++.so.6"))
+
+sys.path.insert(0, base_dir)
+sys.path.insert(0, fasttext_lib_dir)
+import fasttext
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QProgressDialog
 from aqt import mw
 from aqt.utils import tooltip
-
-sys.path.append(os.path.dirname(__file__))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "lib"))
 
 import sqlite3
 import constants
@@ -14,17 +25,19 @@ import tempfile
 import shutil
 import re
 from collections import Counter
-import subprocess
-from constants import log_error
+
+from constants import log_error, ffmpeg_exe_name
 from constants import log_database
+import language_codes
 
-base_dir = os.path.dirname(__file__)
-lib_dir = os.path.join(base_dir, "lib")
-ctypes.CDLL(os.path.join(lib_dir, "libstdc++.so.6"))
-sys.path.insert(0, os.path.join(lib_dir, "fasttext"))
-import fasttext
 
+
+# global variables
 conn = None
+audio_exts = constants.audio_extensions
+video_exts = constants.video_extensions
+media_exts = audio_exts + video_exts
+ffmpeg_path, ffprobe_path = constants.get_ffmpeg_exe_path(True)
 
 def get_database():
     global conn
@@ -32,7 +45,7 @@ def get_database():
         db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
         conn = sqlite3.connect(db_path, timeout=10, isolation_level=None)
         # Create FTS5 virtual table for full-text search (must match update_database schema)
-        conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')
+        conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, auto_language_code, track, content)')
         conn.execute('CREATE TABLE IF NOT EXISTS media_tracks (filename TEXT, track INTEGER, language TEXT, type TEXT, PRIMARY KEY(filename, track, type))')
         conn.execute('''
         CREATE TABLE IF NOT EXISTS media_audio_start_times (
@@ -50,21 +63,15 @@ def get_database():
         ''')
     return conn
 
-
 def close_database():
     global conn
     if conn is not None:
         conn = None
 
-
-audio_exts = constants.audio_extensions
-video_exts = constants.video_extensions
-
 def run_ffprobe(file_path):
 
     # check if ffmpeg exists
-    result = constants.get_ffmpeg_exe_path(True)
-    if not result or not result[1]:
+    if not ffmpeg_path or not ffprobe_path:
         log_error(f"ffprobe not found, skipping {file_path}")
         return None
     _, ffprobe_path = result
@@ -84,7 +91,6 @@ def run_ffprobe(file_path):
         return None
 
     return json.loads(result.stdout)
-
 
 def remove_subtitle_formatting(text: str) -> str:
     if '\\p' in text or '{\\p' in text:
@@ -127,18 +133,15 @@ def check_already_indexed(conn, media_file, track, lang=None):
     cursor = conn.execute(query, params)
     return cursor.fetchone() is not None
 
-
 def get_srt_converted_subtitle_from_path(subtitle_path):
     try:
-        exe_path, ffprobe_path = constants.get_ffmpeg_exe_path(True)
-
-        if not exe_path:
+        if not ffmpeg_path:
             log_database(f"FFmpeg not found, cannot convert {subtitle_path}")
             return None
 
-        # Use ffmpeg to convert subtitle to SRT and output to stdout
+        # use ffmpeg to convert subtitle to SRT and output to stdout
         cmd = [
-            exe_path,
+            ffmpeg_path,
             '-i', subtitle_path,
             '-c:s', 'srt',
             '-f', 'srt',  # force SRT format
@@ -220,6 +223,37 @@ def extract_subtitle_file_data(subtitle_filename):
         'base_name': base_name,
     }
 
+
+_fasttext_model = None
+
+def get_fasttext_model():
+    global _fasttext_model
+    if _fasttext_model is None:
+        import os
+        model_path = os.path.join(base_dir, "lib", "fasttext", "lid.176.ftz")
+
+        # suppress fasttext's load_model warning
+        devnull = open(os.devnull, 'w')
+        old_stderr = sys.stderr
+        sys.stderr = devnull
+        _fasttext_model = fasttext.load_model(model_path)
+        sys.stderr = old_stderr
+        devnull.close()
+    return _fasttext_model
+
+def detect_language(parsed_blocks):
+    combined = ' '.join(block[3] for block in parsed_blocks if len(block) >= 4).replace('\n', ' ').strip()
+    if not combined:
+        return "und"
+    try:
+        model = get_fasttext_model()
+        label = model.predict(combined, k=1)[0][0]
+        code = label.replace('__label__', '')
+        return language_codes.PyLangISO639_2.iso639_1_to_3(code)
+    except Exception as e:
+        log_database(f"fasttext language detection failed: {e}")
+        return "und"
+
 def update_database():
     constants.database_updating.set()
     log_database(f"update database called")
@@ -228,9 +262,8 @@ def update_database():
     conn = get_database()
     
     # create tables
-    conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, track, content)')
-    conn.execute('CREATE TABLE IF NOT EXISTS media_tracks (filename TEXT, track INTEGER, language TEXT, type TEXT, PRIMARY KEY(filename, track, type))')
-
+    conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, auto_language_code, track, content)')
+    conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, auto_language_code, track, content)')
     conn.execute('''
     CREATE TABLE IF NOT EXISTS media_audio_start_times (
         filename TEXT,
@@ -251,11 +284,8 @@ def update_database():
     if not os.path.exists(folder):
         os.makedirs(folder)
 
-    audio_exts = constants.audio_extensions
-    video_exts = constants.video_extensions
-    media_exts = audio_exts + video_exts
 
-    # Recursively get all media files, excluding any folder that contains 'ignore' in its path parts
+    # recursively get all media files, except "ignore" folder
     print(f"folder: {folder}")
     media_paths_in_folder = {
         os.path.join(root, f)
@@ -306,14 +336,13 @@ def update_database():
         log_database(f"Removed subtitle: file={basename}, track={track}, lang={lang}")
         constants.database_items_left -= 1
 
-    # Get current media basenames (without extension)
+    # get current media basenames (without extension)
     media_basenames = {os.path.splitext(f)[0] for f in current_media}
 
     cursor = conn.execute(
         "SELECT DISTINCT filename FROM subtitles WHERE track = '-1'"
     )
     indexed_subtitle_files = {row[0] for row in cursor}
-
 
     indexed_subtitle_basenames = {os.path.splitext(f)[0] for f in indexed_subtitle_files}
 
@@ -333,17 +362,18 @@ def update_database():
 
         if base_name not in indexed_subtitle_basenames:
             if base_name in media_basenames:
-
-                # There might be multiple media files with this base_name but different extensions
                 for media_file in (m for m in current_media if os.path.splitext(m)[0] == base_name):
                     try:
                         parsed = get_srt_converted_subtitle_from_path(subtitle_path)
                         if not parsed:
                             log_database(f"No valid subtitle content found in {subtitle_path}")
                             continue
+
+                        # in update_database() for external subtitle files:
+                        detected_lang = detect_language(parsed)
                         conn.execute(
-                            'INSERT INTO subtitles (filename, language, track, content) VALUES (?, ?, ?, ?)',
-                            (media_file, lang_code, "-1", json.dumps(parsed, ensure_ascii=False))
+                            'INSERT INTO subtitles (filename, language, auto_language_code, track, content) VALUES (?, ?, ?, ?, ?)',
+                            (media_file, lang_code, detected_lang, "-1", json.dumps(parsed, ensure_ascii=False))
                         )
 
                         conn.execute('''
@@ -403,12 +433,8 @@ def update_database():
 
 def extract_all_subtitle_tracks_and_update_db(conn):
     folder = os.path.join(constants.addon_dir, constants.addon_source_folder)
-    audio_exts = constants.audio_extensions
-    video_exts = constants.video_extensions
-    media_exts = audio_exts + video_exts
-    exe_path, ffprobe_path = constants.get_ffmpeg_exe_path(True)
 
-    if not exe_path or not ffprobe_path:
+    if not ffmpeg_path or not ffprobe_path:
         log_error("ffmpeg/ffprobe not found, skipping subtitle extraction")
         return conn
 
@@ -473,7 +499,7 @@ def extract_all_subtitle_tracks_and_update_db(conn):
     def extract_all_subs_single(media_path, subtitle_streams):
         temp_dir = tempfile.mkdtemp()
         try:
-            cmd = [exe_path, "-y", "-i", media_path]
+            cmd = [ffmpeg_path, "-y", "-i", media_path]
             for i, _ in enumerate(subtitle_streams):
                 cmd += ["-map", f"0:s:{i}", "-c:s", "srt", os.path.join(temp_dir, f"track_{i}.srt")]
             result = constants.silent_run(cmd, capture_output=True, text=True)
@@ -504,7 +530,7 @@ def extract_all_subtitle_tracks_and_update_db(conn):
         if os.path.splitext(f)[1].lower() in media_exts
     }
 
-    # Fetch all filenames with any subtitle entry, use basenames only
+    # fetch all filenames with any subtitle entry, use basenames only
     cursor = conn.execute('SELECT DISTINCT filename FROM subtitles')
     indexed_basenames = {os.path.basename(r[0]) for r in cursor}
 
@@ -562,10 +588,13 @@ def extract_all_subtitle_tracks_and_update_db(conn):
                     continue
                 parsed.append([lines[0], start, end, content])
 
+            detected_lang = detect_language(parsed)
             conn.executemany(
-                'INSERT INTO subtitles (filename, language, track, content) VALUES (?,?,?,?)',
-                [(os.path.basename(media_file), lang, str(track), json.dumps(parsed, ensure_ascii=False))]
+                'INSERT INTO subtitles (filename, language, auto_language_code, track, content) VALUES (?,?,?,?,?)',
+                [(os.path.basename(media_file), lang, detected_lang, str(track),
+                  json.dumps(parsed, ensure_ascii=False))]
             )
+
             conn.execute('''
             INSERT INTO subtitle_access(filename, last_accessed)
             VALUES (?, CURRENT_TIMESTAMP)
@@ -659,11 +688,11 @@ def print_all_subtitle_contents():
 
 def print_all_subtitle_names():
     conn = get_database()
-    cursor = conn.execute('SELECT filename, track, language FROM subtitles ORDER BY filename, track')
-    for filename, track, language in cursor:
-        print(f"{filename} | Track: {track} | Language: {language}")
+    cursor = conn.execute('SELECT filename, track, language, auto_language_code FROM subtitles ORDER BY filename, track')
+    for filename, track, language, auto_language_code in cursor:
+        print(f"{filename} | Track: {track} | Language: {language} | Auto: {auto_language_code}")
 
-# print_all_subtitle_names()
+print_all_subtitle_names()
 
 def print_subtitles_by_last_accessed():
     conn = get_database()

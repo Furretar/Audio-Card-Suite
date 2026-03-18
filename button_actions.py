@@ -1,26 +1,29 @@
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QApplication
+# imports
 import difflib
-import json
 import os
 import re
-from aqt import mw
 import aqt
+
 from aqt.sound import play, av_player
 from aqt.utils import tooltip
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QTimer
+
 import manage_database
 import manage_files
-from manage_files import get_field_key_from_label, get_altered_sound_data, \
-    extract_sound_line_data
+from manage_files import extract_sound_line_data
+from manage_files import get_altered_sound_data
+from manage_files import get_field_key_from_label
+
 import constants
-from constants import (
-    log_filename,
-    log_error,
-    log_image,
-    log_database,
-    log_command, addon_source_folder,
-)
-from PyQt6.QtCore import QTimer
+from constants import log_filename
+from constants import log_error
+from constants import log_image
+from constants import log_database
+from constants import log_command
+from constants import addon_source_folder
+
 
 # constants
 ms_amount = constants.ms_amount
@@ -525,7 +528,7 @@ def generate_and_update_fields(editor, note, should_overwrite):
     log_filename(f"playing sound2: {match.group(1)}" if match else "No sound match")
 
     if match:
-        path = os.path.join(mw.col.media.dir(), match.group(1))
+        path = os.path.join(aqt.mw.col.media.dir(), match.group(1))
         return (match.group(1), updated) if os.path.exists(path) else (None, updated)
     return None, updated
 
@@ -1107,23 +1110,23 @@ def bulk_generate(deck, note_type):
         log_command("Running bulk_generate...")
         log_command(f"Deck: {current_deck_name}")
 
-        note_ids = mw.col.find_notes(f'deck:"{current_deck_name}"')
+        note_ids = aqt.mw.col.find_notes(f'deck:"{current_deck_name}"')
 
         if not note_ids:
-            all_decks = [d["name"] for d in mw.col.decks.all()]
+            all_decks = [d["name"] for d in aqt.mw.col.decks.all()]
             log_command(f"Available decks: {all_decks}")
 
             log_command("Available decks:")
-            for deck in mw.col.decks.all():
+            for deck in aqt.mw.col.decks.all():
                 log_command(f"  ID: {deck['id']}, Name: {deck['name']}")
 
             log_command("\nAvailable note types:")
-            for note_type in mw.col.note_types.all():
+            for note_type in aqt.mw.col.note_types.all():
                 log_command(f"  Name: {note_type['name']}, ID: {note_type['id']}")
 
         log_command(f"note ids: {note_ids}")
         for note_id in note_ids:
-            note = mw.col.get_note(note_id)
+            note = aqt.mw.col.get_note(note_id)
             generate_and_update_fields(None, note, False)
             
         original_showInfo(f"Bulk generate complete. Processed {len(note_ids)} notes.")

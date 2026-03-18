@@ -249,7 +249,8 @@ def detect_language(parsed_blocks):
         model = get_fasttext_model()
         label = model.predict(combined, k=1)[0][0]
         code = label.replace('__label__', '')
-        return language_codes.PyLangISO639_2.iso639_1_to_3(code)
+        iso3 = language_codes.PyLangISO639_2.iso639_1_to_3(code)
+        return language_codes.PyLangISO639_2.t_to_b(iso3)  # convert terminologic to bibliographic
     except Exception as e:
         log_database(f"fasttext language detection failed: {e}")
         return "und"
@@ -262,7 +263,6 @@ def update_database():
     conn = get_database()
     
     # create tables
-    conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, auto_language_code, track, content)')
     conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, auto_language_code, track, content)')
     conn.execute('''
     CREATE TABLE IF NOT EXISTS media_audio_start_times (
@@ -369,7 +369,7 @@ def update_database():
                             log_database(f"No valid subtitle content found in {subtitle_path}")
                             continue
 
-                        # in update_database() for external subtitle files:
+                        # auto detect language code
                         detected_lang = detect_language(parsed)
                         conn.execute(
                             'INSERT INTO subtitles (filename, language, auto_language_code, track, content) VALUES (?, ?, ?, ?, ?)',

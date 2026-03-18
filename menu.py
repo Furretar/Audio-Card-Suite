@@ -158,19 +158,24 @@ class AudioToolsDialog(QDialog):
 
         note_type_name = self.modelButton.text()
 
-        if note_type_name not in self.settings:
-            self.settings[note_type_name] = {}
+        if note_type_name not in self.configManager.data:
+            self.configManager.data[note_type_name] = {}
 
-        self.settings[note_type_name]["image_height"] = self.imageHeightEdit.value()
-        self.settings[note_type_name]["pad_start_target"] = self.padStartEditTarget.value()
-        self.settings[note_type_name]["pad_end_target"] = self.padEndEditTarget.value()
-        self.settings[note_type_name]["pad_start_translation"] = self.padStartEditTranslation.value()
-        self.settings[note_type_name]["pad_end_translation"] = self.padEndEditTranslation.value()
-        self.settings[note_type_name]["audio_ext"] = self.audioExtCombo.currentText()
-        self.settings[note_type_name]["bitrate"] = self.bitrateEdit.value()
-        self.settings[note_type_name]["normalize_audio"] = self.normalize_checkbox.isChecked()
-        self.settings[note_type_name]["lufs"] = self.lufsSpinner.value()
-        self.settings["source_folder"] = self.sourceDirEdit.text()
+        d = self.configManager.data[note_type_name]
+
+        d["image_height"] = self.imageHeightEdit.value()
+        d["pad_start_target"] = self.padStartEditTarget.value()
+        d["pad_end_target"] = self.padEndEditTarget.value()
+        d["pad_start_translation"] = self.padStartEditTranslation.value()
+        d["pad_end_translation"] = self.padEndEditTranslation.value()
+        d["audio_ext"] = self.audioExtCombo.currentText()
+        d["bitrate"] = self.bitrateEdit.value()
+        d["normalize_audio"] = self.normalize_checkbox.isChecked()
+        d["lufs"] = self.lufsSpinner.value()
+        d["timing_tracks_enabled"] = self.timingTracksCheckbox.isChecked()
+
+        self.configManager.data["source_folder"] = self.sourceDirEdit.text()
+        self.configManager.data["default_model"] = note_type_name
 
         tracks = [
             "target_audio_track",
@@ -182,28 +187,15 @@ class AudioToolsDialog(QDialog):
         ]
 
         for i, key in enumerate(tracks):
-            self.settings[note_type_name][key] = self.trackSpinners[i].value()
-
-        self.settings[note_type_name]["timing_tracks_enabled"] = self.timingTracksCheckbox.isChecked()
-        print(f"setting timing tracks to {self.timingTracksCheckbox.isChecked()} to model: {note_type_name}")
+            d[key] = self.trackSpinners[i].value()
 
         # Save all 4 language code edits
         for i, key in enumerate(["target_language_code", "translation_language_code", "target_timing_code",
                                  "translation_timing_code"]):
-            code = self.settings[note_type_name].get(key, "")
-            language_name = language_codes.PyLangISO639_2.code_to_name(code)
-            if language_name:
-                self.langCodeCombos[i].setCurrentText(language_name)
-            else:
-                self.langCodeCombos[i].setCurrentText("None")
+            d[key] = self.langCodeEdits[i].text().strip()
 
-        config_path = os.path.join(constants.addon_dir, "config.json")
-        try:
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(self.settings, f, indent=2)
-            print("Settings saved successfully.")
-        except Exception as e:
-            print(f"Error saving settings: {e}")
+        self.configManager.save()
+        print("Settings saved successfully.")
 
     def show_fields_menu(self):
         current_note_type_name = self.modelButton.text()
@@ -232,18 +224,23 @@ class AudioToolsDialog(QDialog):
         edit.setText(code)
         note_type_name = self.modelButton.text()
 
+        if note_type_name not in self.configManager.data:
+            self.configManager.data[note_type_name] = {}
+
+        d = self.configManager.data[note_type_name]
+
         if idx == 0:
-            self.settings[note_type_name]["target_language"] = language
-            self.settings[note_type_name]["target_language_code"] = code
+            d["target_language"] = language
+            d["target_language_code"] = code
         elif idx == 1:
-            self.settings[note_type_name]["translation_language"] = language
-            self.settings[note_type_name]["translation_language_code"] = code
+            d["translation_language"] = language
+            d["translation_language_code"] = code
         elif idx == 2:
-            self.settings[note_type_name]["target_timing_language"] = language
-            self.settings[note_type_name]["target_timing_code"] = code
+            d["target_timing_language"] = language
+            d["target_timing_code"] = code
         elif idx == 3:
-            self.settings[note_type_name]["translation_timing_language"] = language
-            self.settings[note_type_name]["translation_timing_code"] = code
+            d["translation_timing_language"] = language
+            d["translation_timing_code"] = code
 
         self.save_settings()
 

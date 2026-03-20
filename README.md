@@ -24,11 +24,14 @@ None - Plays target audio if all fields are full, otherwise generates all set fi
 - [ ] save config and log somewhere to help with bug reports
 - [ ] if theres only 1 audio track then dont worry about the user set track
 - [ ] make it possible to put (()) in filenames/fix unsafe characters better
-- [ ] option to auto detect languages for subs with no language code
+- [ ] console window at the bottom of settings to show source reading progress
+- [ ] if there are the same number of audio and subtitle tracks with the same language with matches indices, use the corresponding tracks (ie audio - 1:mainland chi, 2:taiwan chi, subs - 1:mainland chi, 2:taiwan chi)
 
-low priority
+low priority/after initial release?
 - [ ] add checkbox to allow trimming audio and batch normalization even without source files
 - [ ] hash subtitle files to link them to file, this will allow files with the same name to remain unchanged, allowing torrent seeding etc
 - [ ] option to stop subtitle search, useful if you know you want something in the first subtitle but it didn't match immediately.
+- [ ] functionality to cycle tracks if there are multiple audio/subtitle tracks of the same language?
+- [ ] checkbox to prioritize auto detected audio language, if tracks were set wrong initially
 
 

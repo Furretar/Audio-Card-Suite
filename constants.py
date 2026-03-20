@@ -117,7 +117,17 @@ CHECKBOX_MIN_WIDTH = 150
 BUTTON_PADDING = "padding: 1px 4px;"
 SHIFT_BUTTON_BG_COLOR = "#f0d0d0"
 
+LOG_FILE = os.path.join(addon_dir, "debug.log")
 
+# clear log file on startup
+def clear_log():
+    with open(LOG_FILE, "w", encoding="utf-8") as f:
+        f.write("")
+clear_log()
+
+def write_log(message):
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(message + "\n")
 
 def log_filename(message):
     if DEBUG_FILENAME:
@@ -126,7 +136,9 @@ def log_filename(message):
         file = os.path.basename(frame.filename)
         line = frame.lineno
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{timestamp}] {file}:{line} in {func}:\n{message.strip()}\n")
+        msg = f"[{timestamp}] {file}:{line} in {func}:\n{message.strip()}\n"
+        print(msg)
+        write_log(msg)
 
 def log_command(message):
     if DEBUG_COMMAND:
@@ -135,7 +147,9 @@ def log_command(message):
         file = os.path.basename(frame.filename)
         line = frame.lineno
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{timestamp}] {file}:{line} in {func}:\n[command] {message.strip()}\n")
+        msg = f"[{timestamp}] {file}:{line} in {func}:\n[command] {message.strip()}\n"
+        print(msg)
+        write_log(msg)
 
 def log_error(message):
     if DEBUG_ERROR:
@@ -144,7 +158,9 @@ def log_error(message):
         file = os.path.basename(frame.filename)
         line = frame.lineno
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{timestamp}] {file}:{line} in {func}:\n[error] {message.strip()}\n")
+        msg = f"[{timestamp}] {file}:{line} in {func}:\n[error] {message.strip()}\n"
+        print(msg)
+        write_log(msg)
 
 def log_image(message):
     if DEBUG_IMAGE:
@@ -153,8 +169,10 @@ def log_image(message):
         file = os.path.basename(frame.filename)
         line = frame.lineno
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{timestamp}] {file}:{line} in {func}:\n[image] {message.strip()}\n")
-
+        msg = f"[{timestamp}] {file}:{line} in {func}:\n[image] {message.strip()}\n"
+        print(msg)
+        write_log(msg)
+        
 def log_database(message):
     if DEBUG_DATABASE:
         frame = inspect.stack()[1]
@@ -162,8 +180,45 @@ def log_database(message):
         file = os.path.basename(frame.filename)
         line = frame.lineno
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        print(f"[{timestamp}] {file}:{line} in {func}:\n[database] {message.strip()}\n")
+        msg = f"[{timestamp}] {file}:{line} in {func}:\n[database] {message.strip()}\n"
+        print(msg)
+        write_log(msg)
 
+last_trace_line = None
+last_trace_count = 0
+last_trace_printed = 0
+
+last_trace_line = None
+last_trace_count = 0
+last_trace_printed = 0
+
+def trace_calls(frame, event, arg):
+    global last_trace_line, last_trace_count, last_trace_printed
+    if event == 'call':
+        func = frame.f_code.co_name
+        file = os.path.basename(frame.f_code.co_filename)
+        line = frame.f_lineno
+
+        # only include calls from this addon
+        if addon_dir in frame.f_code.co_filename:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            msg = f"[{timestamp}] {file}:{line} -> {func}()"
+            stripped = msg[27:]
+
+            # if called more than 10 times just print a summary
+            if stripped == last_trace_line:
+                last_trace_count += 1
+                if last_trace_count <= 10:
+                    write_log(msg)
+            else:
+                if last_trace_count > 10:
+                    write_log(f"  (...and {last_trace_count - 10} more)")
+                last_trace_line = stripped
+                last_trace_count = 1
+                write_log(msg)
+    return trace_calls
+
+sys.settrace(trace_calls)
 
 def get_ffmpeg_exe_path(background_thread=False):
     exe_path = shutil.which("ffmpeg")

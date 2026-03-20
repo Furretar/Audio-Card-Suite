@@ -690,8 +690,8 @@ def print_all_subtitle_names():
     conn = get_database()
     cursor = conn.execute('SELECT filename, track, language, auto_language_code FROM subtitles ORDER BY filename, track')
     for filename, track, language, auto_language_code in cursor:
-        print(f"{filename} | Track: {track} | Language: {language} | Auto: {auto_language_code}")
-
+        msg = f"{filename} | Track: {track} | Language: {language} | Auto: {auto_language_code}"
+        constants.write_log(msg)
 print_all_subtitle_names()
 
 def print_subtitles_by_last_accessed():

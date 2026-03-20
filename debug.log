@@ -1,0 +1,87 @@
+[2026-03-20 02:26:59.001] constants.py:276 -> extract_config_data()
+[2026-03-20 02:26:59.022] menu.py:1 -> <module>()
+[2026-03-20 02:26:59.024] manage_database.py:2 -> <module>()
+[2026-03-20 02:26:59.025] constants.py:223 -> get_ffmpeg_exe_path()
+[2026-03-20 02:26:59.027] manage_database.py:689 -> print_all_subtitle_names()
+[2026-03-20 02:26:59.027] manage_database.py:46 -> get_database()
+[2026-03-20 02:26:59.033] constants.py:128 -> write_log()
+((SubsPlease)) Jujutsu Kaisen - 56 (1080p) [0F106B43].mkv | Track: -1 | Language: und | Auto: jpn
+[2026-03-20 02:26:59.034] constants.py:128 -> write_log()
+Tondemo Skill de Isekai Hourou Meshi S1 - 01.mkv | Track: 1 | Language: chi | Auto: chi
+[2026-03-20 02:26:59.034] constants.py:128 -> write_log()
+Tondemo Skill de Isekai Hourou Meshi S1 - 01.mkv | Track: 2 | Language: chi | Auto: chi
+[2026-03-20 02:26:59.034] constants.py:128 -> write_log()
+Tondemo Skill de Isekai Hourou Meshi S1 - 01.mkv | Track: 3 | Language: jpn | Auto: jpn
+[2026-03-20 02:26:59.034] constants.py:128 -> write_log()
+Tondemo Skill de Isekai Hourou Meshi S1 - 01.mkv | Track: 4 | Language: eng | Auto: eng
+[2026-03-20 02:26:59.034] constants.py:128 -> write_log()
+Tondemo Skill de Isekai Hourou Meshi S1 - 02.mkv | Track: 1 | Language: chi | Auto: chi
+[2026-03-20 02:26:59.034] constants.py:128 -> write_log()
+Tondemo Skill de Isekai Hourou Meshi S1 - 02.mkv | Track: 2 | Language: chi | Auto: chi
+[2026-03-20 02:26:59.035] constants.py:128 -> write_log()
+Tondemo Skill de Isekai Hourou Meshi S1 - 02.mkv | Track: 3 | Language: jpn | Auto: jpn
+[2026-03-20 02:26:59.035] constants.py:128 -> write_log()
+Tondemo Skill de Isekai Hourou Meshi S1 - 02.mkv | Track: 4 | Language: eng | Auto: eng
+[2026-03-20 02:26:59.035] constants.py:128 -> write_log()
+Tondemo Skill de Isekai Hourou Meshi S1 - 03.mkv | Track: 1 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 03.mkv | Track: 2 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 03.mkv | Track: 3 | Language: jpn | Auto: jpn
+Tondemo Skill de Isekai Hourou Meshi S1 - 03.mkv | Track: 4 | Language: eng | Auto: eng
+Tondemo Skill de Isekai Hourou Meshi S1 - 04.mkv | Track: 1 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 04.mkv | Track: 2 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 04.mkv | Track: 3 | Language: jpn | Auto: jpn
+Tondemo Skill de Isekai Hourou Meshi S1 - 04.mkv | Track: 4 | Language: eng | Auto: eng
+Tondemo Skill de Isekai Hourou Meshi S1 - 05.mkv | Track: 1 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 05.mkv | Track: 2 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 05.mkv | Track: 3 | Language: jpn | Auto: jpn
+Tondemo Skill de Isekai Hourou Meshi S1 - 05.mkv | Track: 4 | Language: eng | Auto: eng
+Tondemo Skill de Isekai Hourou Meshi S1 - 06.mkv | Track: 1 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 06.mkv | Track: 2 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 06.mkv | Track: 3 | Language: jpn | Auto: jpn
+Tondemo Skill de Isekai Hourou Meshi S1 - 06.mkv | Track: 4 | Language: eng | Auto: eng
+Tondemo Skill de Isekai Hourou Meshi S1 - 07.mkv | Track: 1 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 07.mkv | Track: 2 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 07.mkv | Track: 3 | Language: jpn | Auto: jpn
+Tondemo Skill de Isekai Hourou Meshi S1 - 07.mkv | Track: 4 | Language: eng | Auto: eng
+Tondemo Skill de Isekai Hourou Meshi S1 - 08.mkv | Track: 1 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 08.mkv | Track: 2 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 08.mkv | Track: 3 | Language: jpn | Auto: jpn
+Tondemo Skill de Isekai Hourou Meshi S1 - 08.mkv | Track: 4 | Language: eng | Auto: eng
+Tondemo Skill de Isekai Hourou Meshi S1 - 09.mkv | Track: 1 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 09.mkv | Track: 2 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 09.mkv | Track: 3 | Language: jpn | Auto: jpn
+Tondemo Skill de Isekai Hourou Meshi S1 - 09.mkv | Track: 4 | Language: eng | Auto: eng
+Tondemo Skill de Isekai Hourou Meshi S1 - 10.mkv | Track: 1 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 10.mkv | Track: 2 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 10.mkv | Track: 3 | Language: jpn | Auto: jpn
+Tondemo Skill de Isekai Hourou Meshi S1 - 10.mkv | Track: 4 | Language: eng | Auto: eng
+Tondemo Skill de Isekai Hourou Meshi S1 - 11.mkv | Track: 1 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 11.mkv | Track: 2 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 11.mkv | Track: 3 | Language: jpn | Auto: jpn
+Tondemo Skill de Isekai Hourou Meshi S1 - 11.mkv | Track: 4 | Language: eng | Auto: eng
+Tondemo Skill de Isekai Hourou Meshi S1 - 12.mkv | Track: 1 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 12.mkv | Track: 2 | Language: chi | Auto: chi
+Tondemo Skill de Isekai Hourou Meshi S1 - 12.mkv | Track: 3 | Language: jpn | Auto: jpn
+Tondemo Skill de Isekai Hourou Meshi S1 - 12.mkv | Track: 4 | Language: eng | Auto: eng
+  (...and 39 more)
+[2026-03-20 02:26:59.040] manage_files.py:1 -> <module>()
+[2026-03-20 02:26:59.042] button_actions.py:2 -> <module>()
+[2026-03-20 02:26:59.044] manage_files.py:1 -> <module>()
+[2026-03-20 02:26:59.047] language_codes.py:1 -> <module>()
+[2026-03-20 02:26:59.047] language_codes.py:1 -> PyLangISO639_2()
+[2026-03-20 02:26:59.047] language_codes.py:491 -> <dictcomp>()
+[2026-03-20 02:26:59.048] language_codes.py:502 -> <dictcomp>()
+[2026-03-20 02:26:59.049] menu.py:63 -> ConfigManager()
+[2026-03-20 02:26:59.049] menu.py:95 -> AudioToolsDialog()
+[2026-03-20 02:26:59.049] menu.py:872 -> FieldMapping()
+[2026-03-20 02:26:59.049] menu.py:986 -> add_audio_tools_menu()
+[2026-03-20 02:26:59.153] manage_database.py:262 in update_database:
+[database] update database called
+
+[2026-03-20 02:26:59.162] manage_database.py:290 in update_database:
+[database] folder: /home/wyatt/.local/share/Anki2/addons21/Audio-Card-Suite/Sources
+
+[2026-03-20 02:26:59.187] manage_database.py:349 in update_database:
+[database] current subtitles in folder: {'((SubsPlease)) Jujutsu Kaisen - 56 (1080p) [0F106B43].srt'}
+
+[2026-03-20 02:26:59.343] menu.py:1129 -> on_profile_loaded()

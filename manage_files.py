@@ -3,6 +3,7 @@ import json
 import re
 import threading
 import time
+from collections import defaultdict
 
 from aqt.utils import showInfo
 from send2trash import send2trash
@@ -787,7 +788,6 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
     return usable_blocks
 
 
-# write here
 def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line, config, note_type_name):
     log_filename(f"getting block from sentence line: {sentence_line}")
 
@@ -816,7 +816,11 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
         WHERE (s.language = 'und' AND s.track = '-1') OR s.language = ? OR s.track = ?
         ORDER BY last_accessed DESC, s.filename COLLATE NOCASE ASC''',
         (target_language_code, target_audio_track))
+
     rows = cursor.fetchall()
+    lang_track_groups = defaultdict(list)
+    for db_filename, language, track, content_json, last_accessed, raw_language in rows:
+        lang_track_groups[(db_filename, language)].append(track)
 
     for db_filename, language, track, content_json, last_accessed, raw_language in rows:
         log_filename(f"Checking subtitle file: {db_filename}, language={language}, track={track}")
@@ -869,7 +873,6 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
                 actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
 
                 # search for the correct block if the subtitle line is smaller than the search window
-                print(f"loops: {i}")
                 if i == 0:
                     log_filename(f"subtitle line at index smaller than search window ({max_window})")
                     start_index = joined.index(normalized_sentence)
@@ -877,19 +880,24 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
                     for offset, line in enumerate(window):
                         next_pos = pos + len(line)
                         if start_index < next_pos:
-                            return usable_blocks[i + offset], actual_path
+                            group = lang_track_groups[(db_filename, language)]
+                            log_filename(f"group for ({db_filename}, {language}): {group}, matched track: {track}, index: {group.index(track) if len(group) > 1 else 0}")
+                            corresponding_audio_track_count = group.index(str(track)) if len(group) > 1 else 0
+                            return usable_blocks[i + offset], actual_path, corresponding_audio_track_count
                         pos = next_pos
 
                 # otherwise the last block will contain the correct line
-                return usable_blocks[i + max_window - 1], actual_path
+                group = lang_track_groups[(db_filename, language)]
+                log_filename(f"group for ({db_filename}, {language}): {group}, matched track: {track}, index: {group.index(track) if len(group) > 1 else 0}")
+                corresponding_audio_track_count = group.index(str(track)) if len(group) > 1 else 0
+                return usable_blocks[i + max_window - 1], actual_path, corresponding_audio_track_count
 
     log_command("No subtitle match found across blocks.")
-    return None, None
+    return None, None, -1
 
 
-# option to provide codes to choose what's displayed in the sentence line
 def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path, sentence_code, timing_code, config,
-                                                          note_type_name):
+                                                          note_type_name, corresponding_audio_track_count):
     if not subtitle_path:
         log_error("Error: subtitle_path is None")
         return None, None
@@ -942,7 +950,7 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
         code = None
         timing_code = None
     log_filename(
-        f"building sound line with filename: {filename_base}, and extension: {file_extension}, audio langauge code: {code}, timing langauge code: {timing_code}")
+        f"building sound line with filename: {filename_base}, and extension: {file_extension}, audio language code: {code}, timing language code: {timing_code}, corre audio track: {corresponding_audio_track_count}")
 
     timestamp, new_sound_line = build_filename_and_sound_line(filename_base, file_extension, code, timing_code,
                                                               start_time, end_time, start_index, end_index, lufs,
@@ -1101,7 +1109,7 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
 
 
 def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, collection_path, sound_line, config,
-                                        sound_line_data, use_translation_data, note_type_name) -> list:
+                                        sound_line_data, use_translation_data, note_type_name, corresponding_audio_track_count) -> list:
     if not source_path:
         log_error(f"source path is null")
         return []
@@ -1157,7 +1165,7 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
 
     new_collection_path = f"{base}{output_ext}"
 
-    # Determine which audio track to use
+    # determine which audio track to use
     code = translation_code if use_translation_data else target_code
     track = translation_track if use_translation_data else target_track
 
@@ -1176,11 +1184,17 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
             log_error(f"no info from file: {source_path}")
             return []
 
+        # if there are multiple pairs of audio tracks and subtitles with the same language,
+        # use corresponding_audio_track_count to find the right pair
+        log_filename(f"corresponding_audio_track_count: {corresponding_audio_track_count}")
         if selected_tab_index == 0:
+            match_count = 0
             for stream in streams:
                 if stream.get("tags", {}).get("language", "").lower() == code.lower():
                     audio_track_index = stream["index"]
-                    break
+                    if match_count == corresponding_audio_track_count:
+                        break
+                    match_count += 1
 
         # use the first audio track if it hasn't been set in the settings
         if audio_track_index is None:
@@ -1201,13 +1215,11 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
             showInfo(f"No audio track found for '{basename}' with the code '{code}' or track '{track}'.")
             return []
 
-
-
     except Exception as e:
         log_error(f"Error selecting audio track: {e}")
         audio_track_index = 0
 
-    # --- Retrieve delay_ms for this audio stream from DB ---
+    #  retrieve delay_ms for this audio stream from database
     conn = manage_database.get_database()
     filename = os.path.basename(source_path)
 
@@ -1227,7 +1239,7 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
         )
         conn.commit()
 
-    # --- build ffmpeg command using delay_ms ---
+    # build ffmpeg command using delay_ms
     cmd = [
         ffmpeg_path, "-y",
         "-ss", start,
@@ -1565,7 +1577,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
     timing_lang_code = sound_line_data["timing_lang_code"]
 
     log_filename(
-        f"building altered sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {lang_code}, timing langauge code: {timing_lang_code}")
+        f"building altered sound line with filename: {filename_base}, and extension: {source_file_extension}, audio language code: {lang_code}, timing language code: {timing_lang_code}")
 
     new_filename, _ = build_filename_and_sound_line(filename_base, source_file_extension, lang_code, timing_lang_code,
                                                     new_start_time, new_end_time, start_index, end_index, lufs,
@@ -1595,7 +1607,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
     }
 
 
-def alter_sound_file_times(altered_data, sound_line, config, use_translation_data, note_type_name):
+def alter_sound_file_times(altered_data, sound_line, config, use_translation_data, note_type_name, corresponding_audio_track_count):
     if not altered_data:
         log_error("altered sound_line_data is empty")
         return None
@@ -1611,7 +1623,7 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
         send2trash(altered_data["old_path"])
 
     full_source_filename = altered_data["full_source_filename"]
-    log_filename(f"full source filename4: {full_source_filename}")
+    log_filename(f"4: full source filename: {full_source_filename}")
     source_path = get_source_path_from_full_filename(full_source_filename)
     if not source_path:
         log_error(f"Source file not found for: {full_source_filename}.")
@@ -1626,7 +1638,8 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
         config,
         extract_sound_line_data(altered_data["new_sound_line"]),
         use_translation_data,
-        note_type_name
+        note_type_name,
+        corresponding_audio_track_count
     )
 
     if not cmd:

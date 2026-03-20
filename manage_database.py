@@ -2,6 +2,7 @@
 import sys
 import os
 import ctypes
+import threading
 
 base_dir = os.path.dirname(__file__)
 lib_dir = os.path.join(base_dir, "lib")
@@ -28,6 +29,8 @@ from collections import Counter
 
 from constants import log_error, ffmpeg_exe_name
 from constants import log_database
+from constants import folder
+
 import language_codes
 
 
@@ -38,16 +41,15 @@ audio_exts = constants.audio_extensions
 video_exts = constants.video_extensions
 media_exts = audio_exts + video_exts
 ffmpeg_path, ffprobe_path = constants.get_ffmpeg_exe_path(True)
+_thread_local = threading.local()
 
 def get_database():
-    global conn
-    if conn is None:
+    if not hasattr(_thread_local, "conn") or _thread_local.conn is None:
         db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
-        conn = sqlite3.connect(db_path, timeout=10, isolation_level=None)
-        # Create FTS5 virtual table for full-text search (must match update_database schema)
-        conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, auto_language_code, track, content)')
-        conn.execute('CREATE TABLE IF NOT EXISTS media_tracks (filename TEXT, track INTEGER, language TEXT, type TEXT, PRIMARY KEY(filename, track, type))')
-        conn.execute('''
+        _thread_local.conn = sqlite3.connect(db_path, timeout=10, isolation_level=None)
+        _thread_local.conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, auto_language_code, track, content)')
+        _thread_local.conn.execute('CREATE TABLE IF NOT EXISTS media_tracks (filename TEXT, track INTEGER, language TEXT, type TEXT, PRIMARY KEY(filename, track, type))')
+        _thread_local.conn.execute('''
         CREATE TABLE IF NOT EXISTS media_audio_start_times (
             filename TEXT,
             audio_track INTEGER,
@@ -55,13 +57,13 @@ def get_database():
             PRIMARY KEY (filename, audio_track)
         )
         ''')
-        conn.execute('''
+        _thread_local.conn.execute('''
         CREATE TABLE IF NOT EXISTS subtitle_access (
             filename TEXT PRIMARY KEY,
             last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
         )
         ''')
-    return conn
+    return _thread_local.conn
 
 def close_database():
     global conn
@@ -261,7 +263,7 @@ def update_database():
 
     close_database()
     conn = get_database()
-    
+
     # create tables
     conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, auto_language_code, track, content)')
     conn.execute('''
@@ -280,13 +282,12 @@ def update_database():
     )
     ''')
 
-    folder = os.path.join(constants.addon_dir, constants.addon_source_folder)
     if not os.path.exists(folder):
         os.makedirs(folder)
 
 
     # recursively get all media files, except "ignore" folder
-    print(f"folder: {folder}")
+    log_database(f"folder: {folder}")
     media_paths_in_folder = {
         os.path.join(root, f)
         for root, dirs, files in os.walk(folder)
@@ -304,7 +305,6 @@ def update_database():
         for f in files
         if os.path.splitext(f)[1].lower() in subtitle_extensions
     }
-
     subtitles_in_folder = {os.path.basename(p) for p in subtitle_paths_in_folder}
 
     # collect orphaned subtitles

@@ -242,6 +242,7 @@ def extract_config_data():
 
 config = extract_config_data()
 addon_source_folder = config["source_folder"]
+folder = os.path.join(addon_dir, addon_source_folder)
 
 def format_subtitle_block(subtitle_block):
     if not subtitle_block:

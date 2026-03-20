@@ -756,6 +756,10 @@ class AudioToolsDialog(QDialog):
             self.timingTracksCheckbox,
             self.sourceDirEdit,
         ]
+
+
+
+
         for w in widgets:
             w.blockSignals(True)
 
@@ -779,7 +783,6 @@ class AudioToolsDialog(QDialog):
 
         self.tabs.setCurrentIndex(self.settings.get(note_type_name, {}).get("selected_tab_index", constants.default_settings["selected_tab_index"]))
 
-
         tracks = [
             "target_audio_track",
             "target_subtitle_track",
@@ -789,8 +792,21 @@ class AudioToolsDialog(QDialog):
             "translation_timing_track"
         ]
 
+        combo_keys = ["target_language", "translation_language", "target_timing_language",
+                      "translation_timing_language"]
+        edit_keys = ["target_language_code", "translation_language_code", "target_timing_code",
+                     "translation_timing_code"]
+
         for i, track in enumerate(tracks):
             self.trackSpinners[i].setValue(self.settings.get(note_type_name, {}).get(track, 0))
+
+        for i in range(4):
+            saved_combo = self.settings.get(note_type_name, {}).get(combo_keys[i], "None")
+            combo = self.langCodeCombos[i]
+            if combo.findText(saved_combo) == -1:
+                combo.insertItem(0, saved_combo)
+            combo.setCurrentText(saved_combo)
+            self.langCodeEdits[i].setText(self.settings.get(note_type_name, {}).get(edit_keys[i], ""))
 
         self.timingTracksCheckbox.setChecked(self.settings.get(note_type_name, {}).get("timing_tracks_enabled", False))
 

@@ -770,6 +770,7 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
             data = None
 
     # generate sound line if it doesn't exist
+    corresponding_audio_track_count = 0
     if not data:
         log_filename(f"no data in sound line: {sound_line}")
 

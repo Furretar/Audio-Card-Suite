@@ -4,4 +4,3 @@ __pycache__
 config.json
 subtitles_index.db
 .idea
-debug.log

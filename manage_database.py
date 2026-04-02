@@ -1,18 +1,8 @@
 # imports
 import sys
 import os
-import ctypes
 import threading
-
-base_dir = os.path.dirname(__file__)
-lib_dir = os.path.join(base_dir, "lib")
-fasttext_lib_dir = os.path.join(lib_dir, "fasttext")
-
-ctypes.CDLL(os.path.join(fasttext_lib_dir, "libstdc++.so.6"))
-
-sys.path.insert(0, base_dir)
-sys.path.insert(0, fasttext_lib_dir)
-import fasttext
+import subprocess
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QProgressDialog
@@ -20,20 +10,16 @@ from aqt import mw
 from aqt.utils import tooltip
 
 import sqlite3
-import constants
 import json
 import tempfile
 import shutil
 import re
 from collections import Counter
 
-from constants import log_error, ffmpeg_exe_name
-from constants import log_database
-from constants import folder
-
-import language_codes
-
-
+from . import constants
+from .constants import log_error, ffmpeg_exe_name
+from .constants import log_database
+from .constants import folder
 
 # global variables
 conn = None
@@ -76,7 +62,6 @@ def run_ffprobe(file_path):
     if not ffmpeg_path or not ffprobe_path:
         log_error(f"ffprobe not found, skipping {file_path}")
         return None
-    _, ffprobe_path = result
 
     cmd = [
         f"{ffprobe_path}",
@@ -85,7 +70,7 @@ def run_ffprobe(file_path):
         "-show_streams",
         file_path
     ]
-    result = constants.silent_run(cmd, capture_output=True, text=True, errors="replace")
+    result = constants.silent_run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
     if result is None or result.returncode != 0:
         err = result.stderr.strip() if result and result.stderr else "(no error output)"
@@ -159,6 +144,7 @@ def get_srt_converted_subtitle_from_path(subtitle_path):
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             creationflags=creationflags
         )
 
@@ -224,38 +210,6 @@ def extract_subtitle_file_data(subtitle_filename):
         'lang_code': lang_code,
         'base_name': base_name,
     }
-
-
-_fasttext_model = None
-
-def get_fasttext_model():
-    global _fasttext_model
-    if _fasttext_model is None:
-        import os
-        model_path = os.path.join(base_dir, "lib", "fasttext", "lid.176.ftz")
-
-        # suppress fasttext's load_model warning
-        devnull = open(os.devnull, 'w')
-        old_stderr = sys.stderr
-        sys.stderr = devnull
-        _fasttext_model = fasttext.load_model(model_path)
-        sys.stderr = old_stderr
-        devnull.close()
-    return _fasttext_model
-
-def detect_language(parsed_blocks):
-    combined = ' '.join(block[3] for block in parsed_blocks if len(block) >= 4).replace('\n', ' ').strip()
-    if not combined:
-        return "und"
-    try:
-        model = get_fasttext_model()
-        label = model.predict(combined, k=1)[0][0]
-        code = label.replace('__label__', '')
-        iso3 = language_codes.PyLangISO639_2.iso639_1_to_3(code)
-        return language_codes.PyLangISO639_2.t_to_b(iso3)  # convert terminologic to bibliographic
-    except Exception as e:
-        log_database(f"fasttext language detection failed: {e}")
-        return "und"
 
 def update_database():
     constants.database_updating.set()
@@ -369,11 +323,9 @@ def update_database():
                             log_database(f"No valid subtitle content found in {subtitle_path}")
                             continue
 
-                        # auto detect language code
-                        detected_lang = detect_language(parsed)
                         conn.execute(
                             'INSERT INTO subtitles (filename, language, auto_language_code, track, content) VALUES (?, ?, ?, ?, ?)',
-                            (media_file, lang_code, detected_lang, "-1", json.dumps(parsed, ensure_ascii=False))
+                            (media_file, lang_code, lang_code, "-1", json.dumps(parsed, ensure_ascii=False))
                         )
 
                         conn.execute('''
@@ -588,10 +540,9 @@ def extract_all_subtitle_tracks_and_update_db(conn):
                     continue
                 parsed.append([lines[0], start, end, content])
 
-            detected_lang = detect_language(parsed)
             conn.executemany(
                 'INSERT INTO subtitles (filename, language, auto_language_code, track, content) VALUES (?,?,?,?,?)',
-                [(os.path.basename(media_file), lang, detected_lang, str(track),
+                [(os.path.basename(media_file), lang, lang, str(track),
                   json.dumps(parsed, ensure_ascii=False))]
             )
 

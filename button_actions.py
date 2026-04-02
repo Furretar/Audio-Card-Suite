@@ -10,19 +10,19 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
 
-import manage_database
-import manage_files
-from manage_files import extract_sound_line_data
-from manage_files import get_altered_sound_data
-from manage_files import get_field_key_from_label
+from . import manage_database
+from . import manage_files
+from .manage_files import extract_sound_line_data
+from .manage_files import get_altered_sound_data
+from .manage_files import get_field_key_from_label
 
-import constants
-from constants import log_filename
-from constants import log_error
-from constants import log_image
-from constants import log_database
-from constants import log_command
-from constants import addon_source_folder
+from . import constants
+from .constants import log_filename
+from .constants import log_error
+from .constants import log_image
+from .constants import log_database
+from .constants import log_command
+from .constants import addon_source_folder
 
 
 # constants

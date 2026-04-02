@@ -8,13 +8,13 @@ from collections import defaultdict
 from aqt.utils import showInfo
 from send2trash import send2trash
 
-import manage_database
-import constants
+from . import manage_database
+from . import constants
 
-from constants import log_filename
-from constants import log_error
-from constants import log_image
-from constants import log_command
+from .constants import log_filename
+from .constants import log_error
+from .constants import log_image
+from .constants import log_command
 
 
 # todo: implement 4 character sha hash to disambiguate files with the same name and extension

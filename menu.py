@@ -13,21 +13,13 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
 )
 
-import manage_database
 
-try:
-    from . import manage_files
-    from . import button_actions
-    from . import language_codes
-    from . import constants
-except ImportError:
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    import manage_files
-    import button_actions
-    import language_codes
-    import constants
+from . import manage_files
+from . import button_actions
+from . import language_codes
+from . import constants
+from . import manage_database
+
 
 # container constants
 CONTAINER_MARGINS = constants.CONTAINER_MARGINS

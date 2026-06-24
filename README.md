@@ -44,6 +44,7 @@ low priority/after initial release?
 - [ ] add checkbox to allow trimming audio and batch normalization even without source files
 - [ ] hash subtitle files to link them to file, this will allow files in subdirectories with the same name to remain unchanged, allowing torrent seeding etc
 - [ ] option to stop subtitle search, useful if you know you want something in the first subtitle but it didn't match immediately.
+- [ ] hotkey to just add next and prev line to check before generating every time
 - [ ] functionality to cycle tracks if there are multiple audio/subtitle tracks of the same language?
 - [ ] auto detect audio language using faster whisper tiny, sample multiple sections of video
 - [ ] option to prioritize auto detected languages, if codes were set wrong in the files

@@ -38,6 +38,7 @@ When Audio Card Suite will try to match the 1st `chi` subtitle track with the 1s
 # To-Do
 - [ ] save config and log somewhere to help with bug reports
 - [ ] console window at the bottom of settings to show source reading progress
+- [ ] fix text inside parentheses ex. `（五重塔？）`
 
 low priority/after initial release?
 - [ ] add checkbox to allow trimming audio and batch normalization even without source files

@@ -797,7 +797,7 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
 
     if not target_language_code and target_audio_track == "0":
         log_error(f"Target language code and track not set for note type: '{note_type_name}'")
-        return None, None
+        return None, None, 0
 
     sentence_line = sentence_line or ""
     normalized_sentence = constants.normalize_text(sentence_line)

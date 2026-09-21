@@ -276,22 +276,31 @@ def get_audio_start_time_ms_for_track(source_path, audio_stream_index):
 def extract_config_data():
     config_path = os.path.join(os.path.dirname(__file__), "config.json")
 
-    if not os.path.exists(config_path):
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(default_settings, f, indent=2)
+    config = None
+    if os.path.exists(config_path) and os.path.getsize(config_path) > 0:
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except Exception as e:
+            log_error(f"Failed to load config from {config_path}: {e}")
+            config = None
+
+    if not isinstance(config, dict):
         config = default_settings.copy()
-    else:
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
 
     # Fill in any missing keys with defaults
     for key, value in default_settings.items():
         if key not in config:
             config[key] = value
 
-    # Save back any missing defaults to file
-    with open(config_path, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
+    # Save back safely to file
+    try:
+        temp_path = config_path + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+        os.replace(temp_path, config_path)
+    except Exception as e:
+        log_error(f"Failed to write config to {config_path}: {e}")
 
     return config
 

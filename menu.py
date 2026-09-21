@@ -46,11 +46,14 @@ from aqt.qt import *
 
 def create_default_config():
     config_file_path = os.path.join(constants.addon_dir, "config.json")
-
-    if not os.path.exists(config_file_path):
-        with open(config_file_path, "w", encoding="utf-8") as f:
+    try:
+        temp_path = config_file_path + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as f:
             json.dump(constants.default_settings, f, indent=2)
-    return constants.default_settings
+        os.replace(temp_path, config_file_path)
+    except Exception as e:
+        print(f"Failed to create default config: {e}")
+    return constants.default_settings.copy()
 
 class ConfigManager:
     def __init__(self, config_path):
@@ -70,8 +73,13 @@ class ConfigManager:
         return self.data
 
     def save(self) -> None:
-        with open(self.config_path, "w", encoding="utf-8") as f:
-            json.dump(self.data, f, indent=2)
+        try:
+            temp_path = self.config_path + ".tmp"
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=2)
+            os.replace(temp_path, self.config_path)
+        except Exception as e:
+            print(f"Failed to save config: {e}")
 
 
 
@@ -1125,8 +1133,13 @@ def on_profile_loaded():
 
 def save_config(cfg: dict) -> None:
     path = os.path.join(constants.addon_dir, "config.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2)
+    try:
+        temp_path = path + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+        os.replace(temp_path, path)
+    except Exception as e:
+        print(f"Failed to save config: {e}")
 
 def handle_autoplay_toggle_and_save(editor: Editor):
     # flip editor state

@@ -36,6 +36,7 @@ def get_database():
         try:
             _thread_local.conn.execute('PRAGMA journal_mode = WAL;')
             _thread_local.conn.execute('PRAGMA synchronous = NORMAL;')
+            _thread_local.conn.execute('PRAGMA busy_timeout = 30000;')
         except Exception:
             pass
         
@@ -563,7 +564,10 @@ def update_database():
                          f"base name: {base_name} not in present sub basenames: {present_subtitle_basenames}")
 
     conn.commit()
-    conn.execute("VACUUM;")
+    try:
+        conn.execute("PRAGMA optimize;")
+    except Exception:
+        pass
     constants.database_updating.clear()
     constants.database_items_left = 0
     return conn

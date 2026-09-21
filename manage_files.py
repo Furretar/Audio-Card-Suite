@@ -103,14 +103,9 @@ def extract_sound_line_data(sound_line):
 
 # returns all current config values as a dict
 def get_config():
-    config_path = os.path.join(os.path.dirname(__file__), "config.json")
-
-    if not os.path.exists(config_path):
-        log_error(f"Config file not found at {config_path}")
+    config = constants.extract_config_data()
+    if not config:
         return None
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = json.load(f)
 
     keys = [
         "default_model", "default_deck", "audio_ext", "bitrate", "image_height",
@@ -179,6 +174,19 @@ def extract_subtitle_path_data(subtitle_path):
     return subtitle_data
 
 
+def safe_update_subtitle_access(database, filename):
+    if not database or not filename or constants.database_updating.is_set():
+        return
+    try:
+        database.execute('''
+                         INSERT INTO subtitle_access(filename, last_accessed)
+                         VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(filename) DO
+                         UPDATE SET last_accessed = CURRENT_TIMESTAMP
+                         ''', (filename,))
+    except Exception:
+        pass
+
+
 # todo: add another section to subtitle file names so the method knows which pattern to search for
 # searches all possible name patterns using the base filename, track, and code
 def get_subtitle_file_from_database(full_source_filename, track, code, config, database, note_type_name):
@@ -220,14 +228,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
             tagged_subtitle_path = os.path.join(constants.addon_source_folder, tagged_subtitle_file)
             if os.path.exists(tagged_subtitle_path):
                 log_filename(f"tagged_subtitle_path: {tagged_subtitle_path}")
-
-                # Update last_accessed for this access
-                database.execute('''
-                                 INSERT INTO subtitle_access(filename, last_accessed)
-                                 VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(filename) DO
-                                 UPDATE SET last_accessed = CURRENT_TIMESTAMP
-                                 ''', (full_source_filename,))
-
+                safe_update_subtitle_access(database, full_source_filename)
                 return tagged_subtitle_path
 
         # try matching basename (user placed file)
@@ -247,14 +248,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
 
         if result:
             log_filename(f"Found subtitle in DB for {full_source_filename} with track=-1 and language=und")
-
-            # Update last_accessed for this access
-            database.execute('''
-                             INSERT INTO subtitle_access(filename, last_accessed)
-                             VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(filename) DO
-                             UPDATE SET last_accessed = CURRENT_TIMESTAMP
-                             ''', (full_source_filename,))
-
+            safe_update_subtitle_access(database, full_source_filename)
             return f"{full_source_filename}.srt"
 
         # prioritize finding the code if that tab is selected
@@ -276,14 +270,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                 subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
                 subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
                 log_filename(f"[tab 0] subtitle_path (by code, recent-first): {subtitle_path}")
-
-                # Update last_accessed for this access
-                database.execute('''
-                                 INSERT INTO subtitle_access(filename, last_accessed)
-                                 VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(filename) DO
-                                 UPDATE SET last_accessed = CURRENT_TIMESTAMP
-                                 ''', (base_filename,))
-
+                safe_update_subtitle_access(database, base_filename)
                 return subtitle_path
 
         # search for track
@@ -302,14 +289,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                 subtitle_filename = f"{db_filename}`track_{track}`{db_lang}.srt"
                 subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
                 log_filename(f"[tab {selected_tab_index}] subtitle_path (by track, recent-first): {subtitle_path}")
-
-                # Update last_accessed for this access
-                database.execute('''
-                                 INSERT INTO subtitle_access(filename, last_accessed)
-                                 VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(filename) DO
-                                 UPDATE SET last_accessed = CURRENT_TIMESTAMP
-                                 ''', (db_filename,))
-
+                safe_update_subtitle_access(database, db_filename)
                 return subtitle_path
 
         # search for code as a fallback if track was not found
@@ -330,14 +310,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                 subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
                 subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
                 log_filename(f"[tab 1+] subtitle_path (fallback by code, recent-first): {subtitle_path}")
-
-                # Update last_accessed for this access
-                database.execute('''
-                                 INSERT INTO subtitle_access(filename, last_accessed)
-                                 VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(filename) DO
-                                 UPDATE SET last_accessed = CURRENT_TIMESTAMP
-                                 ''', (base_filename,))
-
+                safe_update_subtitle_access(database, base_filename)
                 return subtitle_path
 
         return None
@@ -573,11 +546,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
 
     # update last_accessed after fetching
     if row:
-        db.execute('''
-                   INSERT INTO subtitle_access(filename, last_accessed)
-                   VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(filename) DO
-                   UPDATE SET last_accessed = CURRENT_TIMESTAMP
-                   ''', (row[1],))
+        safe_update_subtitle_access(db, row[1])
 
     if row is None:
         log_error(f"No subtitle content found in DB for filename={base_no_ext} track={track} language={code}")
@@ -669,11 +638,7 @@ def get_subtitle_track_number_by_code(source_path, code):
     row = cursor.fetchone()
     if row:
         # Update last_accessed for this access
-        conn.execute('''
-                     INSERT INTO subtitle_access(filename, last_accessed)
-                     VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(filename) DO
-                     UPDATE SET last_accessed = CURRENT_TIMESTAMP
-                     ''', (filename,))
+        safe_update_subtitle_access(conn, filename)
         return row[0]
 
     return None
@@ -821,10 +786,7 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
         actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
 
         try:
-            subtitle_database.execute(
-                "UPDATE subtitle_access SET last_accessed = CURRENT_TIMESTAMP WHERE filename = ?",
-                (fn,)
-            )
+            safe_update_subtitle_access(subtitle_database, fn)
 
             # Compute corresponding_audio_track_count if multiple tracks have the same language
             corresponding_audio_track_count = 0

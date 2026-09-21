@@ -47,8 +47,7 @@ def next_result_button(editor):
 
     if constants.database_updating.is_set():
         items_msg = f" ({constants.database_items_left} files left)" if constants.database_items_left else ""
-        show_info_msg(f"The subtitle database is currently busy updating{items_msg}.\nPlease wait a moment for it to finish and try again.")
-        return
+        tooltip(f"Searching currently loaded files... (updating in background{items_msg})", period=2000)
 
     config = constants.extract_config_data()
     fields = get_fields_from_editor_or_note(editor)
@@ -141,8 +140,7 @@ def next_result_button(editor):
 def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     if constants.database_updating.is_set():
         items_msg = f" ({constants.database_items_left} files left)" if constants.database_items_left else ""
-        show_info_msg(f"The subtitle database is currently busy updating{items_msg}.\nPlease wait a moment for it to finish and try again.")
-        return
+        tooltip(f"Accessing currently loaded files... (updating in background{items_msg})", period=2000)
 
     current_note = editor.note
     note_type_name = current_note.note_type()["name"]
@@ -307,8 +305,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
 
     if constants.database_updating.is_set():
         items_msg = f" ({constants.database_items_left} files left)" if constants.database_items_left else ""
-        show_info_msg(f"The subtitle database is currently busy updating{items_msg}.\nPlease wait a moment for it to finish and try again.")
-        return
+        tooltip(f"Accessing currently loaded files... (updating in background{items_msg})", period=2000)
 
     # check for modifier keys
     config = constants.extract_config_data()
@@ -382,8 +379,7 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
 def generate_fields_button(editor):
     if constants.database_updating.is_set():
         items_msg = f" ({constants.database_items_left} files left)" if constants.database_items_left else ""
-        show_info_msg(f"The subtitle database is currently busy updating{items_msg}.\nPlease wait a moment for it to finish and try again.")
-        return
+        tooltip(f"Searching currently loaded files... (updating in background{items_msg})", period=2000)
 
     sound_filename, _ = generate_and_update_fields(editor, None, False)
     if sound_filename:
@@ -392,11 +388,6 @@ def generate_fields_button(editor):
 
 # uses current fields to generate all missing fields
 def generate_and_update_fields(editor, note, should_overwrite):
-    if constants.database_updating.is_set():
-        items_msg = f" ({constants.database_items_left} files left)" if constants.database_items_left else ""
-        show_info_msg(f"The subtitle database is currently busy updating{items_msg}.\nPlease wait a moment for it to finish and try again.")
-        return None, None
-
     ffmpeg, ffprobe = constants.get_ffmpeg_exe_path()
     if not (ffmpeg and ffprobe):
         return None, None
@@ -800,9 +791,13 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
                 aqt.utils.showInfo(f"Target language code is not set.")
             else:
                 search_text = selected_text if selected_text else sentence_line
-                log_error(f"Could not find '{search_text}' in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file with the code '{code}' or track '{track}'.")
-                aqt.utils.showInfo(
-                    f"Could not find '{search_text}' in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file with the code '{code}' or track '{track}'.")
+                if constants.database_updating.is_set():
+                    left = f" ({constants.database_items_left} files left)" if constants.database_items_left else ""
+                    msg = f"Could not find '{search_text}' in currently loaded files.\n\nThe database is still updating in the background{left}. If this file has not finished indexing yet, please wait for the update to complete."
+                else:
+                    msg = f"Could not find '{search_text}' in any subtitle file in '{os.path.basename(addon_source_folder)}', or any embedded subtitle file with the code '{code}' or track '{track}'."
+                log_error(msg)
+                aqt.utils.showInfo(msg)
             return None
 
         new_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(block, subtitle_path, None, None, config, note_type_name, corresponding_audio_track_count)

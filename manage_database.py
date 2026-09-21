@@ -7,7 +7,7 @@ import subprocess
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QProgressDialog
 from aqt import mw
-from aqt.utils import tooltip
+from aqt.utils import tooltip, showInfo
 
 import sqlite3
 import json
@@ -32,8 +32,28 @@ _thread_local = threading.local()
 def get_database():
     if not hasattr(_thread_local, "conn") or _thread_local.conn is None:
         db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
-        _thread_local.conn = sqlite3.connect(db_path, timeout=10, isolation_level=None)
+        _thread_local.conn = sqlite3.connect(db_path, timeout=30, isolation_level=None)
+        try:
+            _thread_local.conn.execute('PRAGMA journal_mode = WAL;')
+            _thread_local.conn.execute('PRAGMA synchronous = NORMAL;')
+        except Exception:
+            pass
+        
         _thread_local.conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS subtitles USING fts5(filename, language, auto_language_code, track, content)')
+        _thread_local.conn.execute('''
+        CREATE VIRTUAL TABLE IF NOT EXISTS subtitle_lines_fts USING fts5(
+            filename UNINDEXED,
+            track UNINDEXED,
+            language UNINDEXED,
+            line_index UNINDEXED,
+            start_time UNINDEXED,
+            end_time UNINDEXED,
+            clean_text UNINDEXED,
+            search_tokens,
+            tokenize="unicode61"
+        )
+        ''')
+
         _thread_local.conn.execute('CREATE TABLE IF NOT EXISTS media_tracks (filename TEXT, track INTEGER, language TEXT, type TEXT, PRIMARY KEY(filename, track, type))')
         _thread_local.conn.execute('''
         CREATE TABLE IF NOT EXISTS media_audio_start_times (
@@ -41,14 +61,31 @@ def get_database():
             audio_track INTEGER,
             delay_ms INTEGER,
             PRIMARY KEY (filename, audio_track)
-        )
-        ''')
+        )''')
+
         _thread_local.conn.execute('''
         CREATE TABLE IF NOT EXISTS subtitle_access (
             filename TEXT PRIMARY KEY,
             last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
         )
         ''')
+
+        # Fast O(1) check: backfill subtitle_lines_fts if table is empty but subtitles has data
+        has_fts = _thread_local.conn.execute("SELECT 1 FROM subtitle_lines_fts LIMIT 1").fetchone()
+        if not has_fts:
+            cursor = _thread_local.conn.execute("SELECT filename, track, language, content FROM subtitles")
+            rows = cursor.fetchall()
+            if rows:
+                _thread_local.conn.execute("BEGIN TRANSACTION")
+                for fn, trk, lang, content in rows:
+                    try:
+                        blocks = json.loads(content)
+                        index_parsed_subtitles_fts(_thread_local.conn, fn, trk, lang, blocks)
+                    except Exception:
+                        pass
+                _thread_local.conn.execute("COMMIT")
+
+
     return _thread_local.conn
 
 def close_database():
@@ -56,6 +93,7 @@ def close_database():
     if conn is not None:
         conn = None
 
+# run ffprobe on file and return the results as json
 def run_ffprobe(file_path):
 
     # check if ffmpeg exists
@@ -90,6 +128,9 @@ def remove_subtitle_formatting(text: str) -> str:
 
     return text
 
+# removes subtitle lines if 4 or more have the same start times
+# helps clean .ass files with a lot of formatting
+# TODO find more efficient way to convert from ass to srt 
 def filter_subtitles(subtitles):
     timing_counts = Counter((sub[0], sub[1]) for sub in subtitles)
 
@@ -109,6 +150,145 @@ def filter_subtitles(subtitles):
             filtered.append((start, end, clean_text))
     return filtered
 
+# Split CJK text into individual characters so FTS can search it, while keeping Latin words together
+def tokenize_for_fts(text: str) -> str:
+    if not text:
+        return ""
+    tokens = []
+    current_latin = []
+    for ch in text:
+        # Check CJK Ideographs, Hiragana, Katakana
+        if ('\u4e00' <= ch <= '\u9fff') or ('\u3040' <= ch <= '\u309f') or ('\u30a0' <= ch <= '\u30ff'):
+            if current_latin:
+                tokens.append(''.join(current_latin))
+                current_latin = []
+            tokens.append(ch)
+        elif ch.isalnum():
+            current_latin.append(ch)
+        else:
+            if current_latin:
+                tokens.append(''.join(current_latin))
+                current_latin = []
+    if current_latin:
+        tokens.append(''.join(current_latin))
+    return ' '.join(tokens)
+
+# Tokenize search text and format it as an FTS5 phrase query
+def build_fts_query(text: str) -> str:
+    tokens = tokenize_for_fts(text)
+    if not tokens:
+        return ""
+    safe_tokens = tokens.replace('"', '""')
+    return f'"{safe_tokens}"'
+
+
+# Inserts all blocks of a subtitle track into the FTS index
+def index_parsed_subtitles_fts(conn, filename: str, track: str, language: str, parsed_blocks):
+    if not parsed_blocks:
+        return
+    entries = []
+    for b in parsed_blocks:
+        if isinstance(b, list) and len(b) >= 4:
+            idx, start, end, raw_text = b[:4]
+        elif isinstance(b, str):
+            formatted = constants.format_subtitle_block(b)
+            if not formatted:
+                continue
+            idx, start, end, raw_text = formatted
+        else:
+            continue
+        clean = remove_subtitle_formatting(raw_text)
+        tokens = tokenize_for_fts(clean)
+        if tokens:
+            entries.append((filename, str(track), language, str(idx), str(start), str(end), clean, tokens))
+    if entries:
+        conn.executemany(
+            'INSERT INTO subtitle_lines_fts (filename, track, language, line_index, start_time, end_time, clean_text, search_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            entries
+        )
+
+# Deletes entries from FTS index
+def delete_subtitles_fts(
+    conn,
+    filename: str,
+    track: str | int | None = None,
+    language: str | None = None,
+):
+    if not conn or not filename:
+        return
+
+    clauses = ["filename = ?"]
+    params = [filename]
+
+    if track is not None:
+        clauses.append("track = ?")
+        params.append(str(track))
+
+    if language is not None:
+        clauses.append("language = ?")
+        params.append(language)
+
+    query = f"DELETE FROM subtitle_lines_fts WHERE {' AND '.join(clauses)}"
+    conn.execute(query, tuple(params))
+
+def search_subtitles_fts(
+    conn,
+    search_text: str,
+    language: str | None = None,
+    track: str | int | None = None,
+    filename: str | None = None,
+    limit: int | None = None,
+):
+    """
+    Search subtitle_lines_fts using FTS5 phrase matching.
+    Returns: list of tuples (filename, track, language, line_index, start_time, end_time, clean_text)
+    """
+    query_str = build_fts_query(search_text)
+    if not query_str:
+        return []
+
+    clauses = ["f.search_tokens MATCH ?"]
+    params = [query_str]
+
+    if filename is not None:
+        clauses.append("f.filename = ?")
+        params.append(filename)
+
+    if track is not None:
+        clauses.append("f.track = ?")
+        params.append(str(track))
+
+    if language and language != "und":
+        clauses.append("(f.language = ? OR f.language = 'und')")
+        params.append(language)
+
+    sql = f"""
+        SELECT f.filename, f.track, f.language, f.line_index, f.start_time, f.end_time, f.clean_text
+        FROM subtitle_lines_fts f
+        LEFT JOIN subtitle_access a ON f.filename = a.filename
+        WHERE {' AND '.join(clauses)}
+        ORDER BY COALESCE(a.last_accessed, '1970-01-01 00:00:00') DESC,
+                 f.filename ASC,
+                 CAST(f.line_index AS INTEGER) ASC
+    """
+
+    if limit is not None:
+        sql += f" LIMIT {int(limit)}"
+
+    try:
+        cursor = conn.execute(sql, tuple(params))
+        return cursor.fetchall()
+    except sqlite3.OperationalError as e:
+        err_msg = str(e).lower()
+        if "locked" in err_msg or "busy" in err_msg:
+            log_error(f"Subtitle database is locked: {e}")
+            showInfo("The subtitle database is currently busy updating in the background.\nPlease wait a moment for it to finish and try again.")
+        else:
+            log_error(f"Database error in search_subtitles_fts: {e}")
+        return []
+
+
+# Check whether the subtitle track is already stored in the database
 def check_already_indexed(conn, media_file, track, lang=None):
     query = "SELECT 1 FROM subtitles WHERE filename=? AND track=?"
     params = [media_file, str(track)]
@@ -283,6 +463,8 @@ def update_database():
             "DELETE FROM subtitles WHERE filename=? AND language=? AND track=?",
             (basename, lang, track),
         )
+        delete_subtitles_fts(conn, basename, track=track, language=lang)
+
         conn.execute(
             "DELETE FROM subtitle_access WHERE filename=?",
             (basename,)
@@ -327,6 +509,8 @@ def update_database():
                             'INSERT INTO subtitles (filename, language, auto_language_code, track, content) VALUES (?, ?, ?, ?, ?)',
                             (media_file, lang_code, lang_code, "-1", json.dumps(parsed, ensure_ascii=False))
                         )
+                        index_parsed_subtitles_fts(conn, media_file, "-1", lang_code, parsed)
+
 
                         conn.execute('''
                         INSERT INTO subtitle_access(filename, last_accessed)
@@ -369,6 +553,8 @@ def update_database():
                 "DELETE FROM subtitles WHERE filename=? AND language=? AND track=?",
                 (filename, language, track),
             )
+            delete_subtitles_fts(conn, filename, track=track, language=language)
+
             conn.execute(
                 "DELETE FROM subtitle_access WHERE filename=?",
                 (filename,)
@@ -545,6 +731,8 @@ def extract_all_subtitle_tracks_and_update_db(conn):
                 [(os.path.basename(media_file), lang, lang, str(track),
                   json.dumps(parsed, ensure_ascii=False))]
             )
+            index_parsed_subtitles_fts(conn, os.path.basename(media_file), str(track), lang, parsed)
+
 
             conn.execute('''
             INSERT INTO subtitle_access(filename, last_accessed)

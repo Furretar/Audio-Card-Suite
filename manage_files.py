@@ -3,6 +3,7 @@ import json
 import re
 import threading
 import time
+import sqlite3
 from collections import defaultdict
 
 from aqt.utils import showInfo
@@ -805,92 +806,102 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
 
     # use auto generated code if language is undefined
     subtitle_database = manage_database.get_database()
-    cursor = subtitle_database.execute('''
-        SELECT s.filename,
-               COALESCE(NULLIF(s.language, 'und'), s.auto_language_code) AS language, s.track, s.content,
-        COALESCE(a.last_accessed, '1970-01-01 00:00:00') AS last_accessed,
-        s.language AS raw_language
-        FROM subtitles s
-            LEFT JOIN subtitle_access a
-        ON s.filename = a.filename
-        WHERE (s.language = 'und' AND s.track = '-1') OR s.language = ? OR s.track = ?
-        ORDER BY last_accessed DESC, s.filename COLLATE NOCASE ASC''',
-        (target_language_code, target_audio_track))
 
-    rows = cursor.fetchall()
-    lang_track_groups = defaultdict(list)
-    for db_filename, language, track, content_json, last_accessed, raw_language in rows:
-        lang_track_groups[(db_filename, language)].append(track)
+    # Clean the input text of HTML formatting while preserving whitespace
+    clean_search = re.sub(r'<[^>]+>', '', sentence_line).strip()
+    if not clean_search:
+        return None, None, -1
 
-    for db_filename, language, track, content_json, last_accessed, raw_language in rows:
-        log_filename(f"Checking subtitle file: {db_filename}, language={language}, track={track}")
-        if raw_language == 'und' and language != 'und':
-            log_filename(f"[auto language] {language}: using auto_language_code '{language}'")
+    def resolve_match(row):
+        fn, trk, lang, idx, start, end, text = row
+        subtitle_name = f"{fn}"
+        if lang != "und" or str(trk) != "-1":
+            subtitle_name += f"`track_{trk}`{lang}"
+        subtitle_name += ".srt"
+        actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
+
         try:
-            raw_blocks = json.loads(content_json)
-        except Exception as e:
-            log_error(f"Failed to parse content for {db_filename}: {e}")
-            continue
+            subtitle_database.execute(
+                "UPDATE subtitle_access SET last_accessed = CURRENT_TIMESTAMP WHERE filename = ?",
+                (fn,)
+            )
 
-        usable_blocks = []
-        for raw_block in raw_blocks:
-            if isinstance(raw_block, str):
-                parsed = constants.format_subtitle_block(raw_block)
-                if parsed:
-                    usable_blocks.append(parsed)
-            elif isinstance(raw_block, list) and len(raw_block) == 4:
-                usable_blocks.append(raw_block)
-
-        normalized_lines = [constants.normalize_text(b[3]) for b in usable_blocks]
-
-        if len(sentence_line) <= 10:
-            max_window = max(1, len(sentence_line))
-        elif len(sentence_line) <= 100:
-            max_window = max(1, 10 + len(sentence_line) // 10)
-        elif len(sentence_line) <= 1000:
-            max_window = max(1, len(sentence_line) // 10)
-        else:
-            max_window = 100
-
-        log_filename(f"search subtitle window length: {max_window}")
-
-        joined_lines = normalized_lines
-
-        for i in range(len(joined_lines) - max_window + 1):
-            window = joined_lines[i:i + max_window]
-            joined = ''.join(window)
-            if normalized_sentence in joined:
-                subtitle_database.execute(
-                    "UPDATE subtitle_access SET last_accessed = CURRENT_TIMESTAMP WHERE filename = ?",
-                    (db_filename,)
+            # Compute corresponding_audio_track_count if multiple tracks have the same language
+            corresponding_audio_track_count = 0
+            if lang and lang != "und" and str(trk) != "-1":
+                cur = subtitle_database.execute(
+                    "SELECT track FROM subtitles WHERE filename = ? AND language = ? ORDER BY CAST(track AS INTEGER) ASC",
+                    (fn, lang)
                 )
-                subtitle_database.commit()
+                tracks = [str(r[0]) for r in cur.fetchall()]
+                if len(tracks) > 1 and str(trk) in tracks:
+                    corresponding_audio_track_count = tracks.index(str(trk))
+        except sqlite3.OperationalError as e:
+            log_error(f"Database error while updating access or resolving track count: {e}")
+            corresponding_audio_track_count = 0
 
-                subtitle_name = f"{db_filename}"
-                if language != "und" or str(track) != "-1":
-                    subtitle_name += f"`track_{track}`{language}"
-                subtitle_name += ".srt"
-                actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
+        return [str(idx), start, end, text], actual_path, corresponding_audio_track_count
 
-                # search for the correct block if the subtitle line is smaller than the search window
-                if i == 0:
-                    log_filename(f"subtitle line at index smaller than search window ({max_window})")
-                    start_index = joined.index(normalized_sentence)
-                    pos = 0
-                    for offset, line in enumerate(window):
-                        next_pos = pos + len(line)
-                        if start_index < next_pos:
-                            group = lang_track_groups[(db_filename, language)]
-                            log_filename(f"group for ({db_filename}, {language}): {group}, matched track: {track}, index: {group.index(track) if len(group) > 1 else 0}")
-                            corresponding_audio_track_count = group.index(str(track)) if len(group) > 1 else 0
-                            return usable_blocks[i + offset], actual_path, corresponding_audio_track_count
-                        pos = next_pos
+    try:
+        # 1. First Pass: Exact full-text FTS search (fast single-line match)
+        matches = manage_database.search_subtitles_fts(
+            subtitle_database,
+            search_text=clean_search,
+            language=target_language_code if target_language_code else None,
+            track=target_audio_track if target_audio_track != "0" else None,
+            limit=1,
+        )
+        if matches:
+            return resolve_match(matches[0])
 
-                # otherwise the last block will contain the correct line
-                group = lang_track_groups[(db_filename, language)]
-                log_filename(f"group for ({db_filename}, {language}): {group}, matched track: {track}, index: {group.index(track) if len(group) > 1 else 0}")
-                corresponding_audio_track_count = group.index(str(track)) if len(group) > 1 else 0
-                return usable_blocks[i + max_window - 1], actual_path, corresponding_audio_track_count
+        # Fallback without language restriction if target code didn't match
+        if target_language_code:
+            matches = manage_database.search_subtitles_fts(
+                subtitle_database,
+                search_text=clean_search,
+                limit=1,
+            )
+            if matches:
+                return resolve_match(matches[0])
+
+        # 2. Second Pass: Multi-line sentence support
+        # If the full sentence didn't match a single line, search for the opening clause or prefix
+        candidates = []
+        clauses = [c.strip() for c in re.split(r'[,、.。!?！？\n]', clean_search) if len(c.strip()) >= 2]
+        if clauses and clauses[0] != clean_search:
+            candidates.append(clauses[0])
+
+        words = clean_search.split()
+        if len(words) > 3:
+            candidates.append(" ".join(words[:4]))
+        elif len(clean_search) > 8:
+            candidates.append(clean_search[:8])
+
+        for cand in candidates:
+            clause_matches = manage_database.search_subtitles_fts(
+                subtitle_database,
+                search_text=cand,
+                language=target_language_code if target_language_code else None,
+                track=target_audio_track if target_audio_track != "0" else None,
+                limit=1,
+            )
+            if not clause_matches and target_language_code:
+                clause_matches = manage_database.search_subtitles_fts(
+                    subtitle_database,
+                    search_text=cand,
+                    limit=1,
+                )
+            if clause_matches:
+                return resolve_match(clause_matches[0])
+    except sqlite3.OperationalError as e:
+        err_msg = str(e).lower()
+        if "locked" in err_msg or "busy" in err_msg:
+            log_error(f"Database locked during subtitle search: {e}")
+            showInfo("The subtitle database is currently busy updating in the background.\nPlease wait a moment for it to finish and try again.")
+        else:
+            log_error(f"Database error during subtitle search: {e}")
+            showInfo(f"Database error during subtitle search:\n{e}")
+        return None, None, -1
 
     log_command("No subtitle match found across blocks.")
     return None, None, -1
@@ -961,7 +972,7 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
     return new_sound_line, combined_text
 
 
-# todo: make more efficient by only searching files after the current file
+# TODO: make more efficient by only searching files after the current file
 # finds the location of the current sentence field, then uses the selected text to find the next line that
 # contains the selection and re-generates every field
 def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, config, sound_line_data, note_type_name):
@@ -973,84 +984,62 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
 
     target_index = sound_line_data["start_index"]
     filename_base = sound_line_data["filename_base"]
-    track = config[note_type_name]["target_subtitle_track"]
     code = config[note_type_name]["target_language_code"]
-    normalized_target_text = constants.normalize_text(selected_text or sentence_line)
-    log_filename(f"Searching for: {normalized_target_text}")
+    raw_search = (selected_text or sentence_line).strip()
 
-    def search_blocks(after_current: bool):
-        found_current = not after_current
+    # Strip HTML tags but preserve word spaces for FTS
+    search_query = re.sub(r'<[^>]+>', '', raw_search).strip()
+    log_filename(f"Searching for: {search_query}")
 
-        db = manage_database.get_database()
-        rows = db.execute('''
-                          SELECT s.filename, s.language, s.track, s.content
-                          FROM subtitles s
-                                   JOIN subtitle_access a ON s.filename = a.filename
-                          ''').fetchall()
+    db = manage_database.get_database()
 
-        def priority(language, track):
-            track = str(track)
-            if language == "und" and track == "-1":
-                return 0
-            if language == code:
-                return 1
-            if track == str(track):
-                return 2
-            return 3
+    try:
+        # Use FTS to find matching lines directly
+        matches = manage_database.search_subtitles_fts(
+            db,
+            search_text=search_query,
+            language=code,
+        )
 
-        # only search files with target code or track
-        candidates = [
-            (fn, language, track, content_json)
-            for fn, language, track, content_json in sorted(rows, key=lambda row: priority(row[1], row[2]))
-            if priority(language, track) < 3
-        ]
-
-        for fn, language, track, content_json in candidates:
-            log_filename(f"checking for next result: {fn}, {language}, {track}")
-            base_candidate, _ = os.path.splitext(fn)
-
-            # convert to blocks
-            try:
-                raw_blocks = json.loads(content_json)
-            except Exception as e:
-                log_error(f"Failed to parse {fn}: {e}")
-                continue
-
-            # normalize and format
-            usable = []
-            for rb in raw_blocks:
-                if isinstance(rb, list) and len(rb) == 4:
-                    usable.append(rb)
-                elif isinstance(rb, str):
-                    parsed = constants.format_subtitle_block(rb)
-                    if parsed:
-                        usable.append(parsed)
-
-            # scan through blocks
-            for b in usable:
-                block_idx = int(b[0])
-                text = b[3]
-                if not found_current:
-                    if base_candidate == filename_base and block_idx == target_index:
-                        found_current = True
-                    continue
-
-                subtitle_filename = f"{fn}`track_{track}`{code}.srt"
-                subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-                if normalized_target_text in constants.normalize_text(text):
-                    log_filename(f"Match found in block {block_idx} of {base_candidate}, path is: {subtitle_path}")
-                    return b, subtitle_path
-
+        if not matches:
+            # Fallback to searching without language restriction
+            matches = manage_database.search_subtitles_fts(db, search_text=search_query)
+    except sqlite3.OperationalError as e:
+        err_msg = str(e).lower()
+        if "locked" in err_msg or "busy" in err_msg:
+            log_error(f"Database locked during next matching search: {e}")
+            showInfo("The subtitle database is currently busy updating in the background.\nPlease wait a moment for it to finish and try again.")
+        else:
+            log_error(f"Database error during next matching search: {e}")
         return None, None
 
-    # first pass: after the current block
-    result, path = search_blocks(after_current=True)
-    if result:
-        return result, path
+    if not matches:
+        return None, None
 
-    # wrap‑around: search from the top
+    def make_result(row):
+        fn, r_track, r_lang, idx, start, end, text = row
+        b = [str(idx), start, end, text]
+        subtitle_filename = f"{fn}"
+        if r_lang != "und" or str(r_track) != "-1":
+            subtitle_filename += f"`track_{r_track}`{r_lang}"
+        subtitle_filename += ".srt"
+        subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
+        return b, subtitle_path
+
+    # First pass: look for a match after current position
+    found_current = False
+    for row in matches:
+        fn, r_track, r_lang, idx, start, end, text = row
+        base_cand, _ = os.path.splitext(fn)
+        if not found_current:
+            if base_cand == filename_base and int(idx) == target_index:
+                found_current = True
+            continue
+        return make_result(row)
+
+    # Wrap-around: return the first match from the top
     log_command("Wrapping to start of subtitle files...")
-    return search_blocks(after_current=False)
+    return make_result(matches[0])
 
 
 def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collection_path, m4b_image_collection_path,

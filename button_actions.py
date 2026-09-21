@@ -46,7 +46,9 @@ def next_result_button(editor):
     note_type_name = current_note.note_type()["name"]
 
     if constants.database_updating.is_set():
-        tooltip(f"Database updating, {constants.database_items_left} files left process.")
+        items_msg = f" ({constants.database_items_left} files left)" if constants.database_items_left else ""
+        show_info_msg(f"The subtitle database is currently busy updating{items_msg}.\nPlease wait a moment for it to finish and try again.")
+        return
 
     config = constants.extract_config_data()
     fields = get_fields_from_editor_or_note(editor)
@@ -138,7 +140,9 @@ def next_result_button(editor):
 
 def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     if constants.database_updating.is_set():
-        tooltip(f"Database updating, {constants.database_items_left} files left process.")
+        items_msg = f" ({constants.database_items_left} files left)" if constants.database_items_left else ""
+        show_info_msg(f"The subtitle database is currently busy updating{items_msg}.\nPlease wait a moment for it to finish and try again.")
+        return
 
     current_note = editor.note
     note_type_name = current_note.note_type()["name"]
@@ -302,7 +306,9 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
     note_type_name = current_note.note_type()["name"]
 
     if constants.database_updating.is_set():
-        tooltip(f"Database updating, {constants.database_items_left} files left process.")
+        items_msg = f" ({constants.database_items_left} files left)" if constants.database_items_left else ""
+        show_info_msg(f"The subtitle database is currently busy updating{items_msg}.\nPlease wait a moment for it to finish and try again.")
+        return
 
     # check for modifier keys
     config = constants.extract_config_data()
@@ -375,7 +381,9 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
 # play sound hooks and buttons
 def generate_fields_button(editor):
     if constants.database_updating.is_set():
-        tooltip(f"Database updating, {constants.database_items_left} files left process.")
+        items_msg = f" ({constants.database_items_left} files left)" if constants.database_items_left else ""
+        show_info_msg(f"The subtitle database is currently busy updating{items_msg}.\nPlease wait a moment for it to finish and try again.")
+        return
 
     sound_filename, _ = generate_and_update_fields(editor, None, False)
     if sound_filename:
@@ -384,6 +392,11 @@ def generate_fields_button(editor):
 
 # uses current fields to generate all missing fields
 def generate_and_update_fields(editor, note, should_overwrite):
+    if constants.database_updating.is_set():
+        items_msg = f" ({constants.database_items_left} files left)" if constants.database_items_left else ""
+        show_info_msg(f"The subtitle database is currently busy updating{items_msg}.\nPlease wait a moment for it to finish and try again.")
+        return None, None
+
     ffmpeg, ffprobe = constants.get_ffmpeg_exe_path()
     if not (ffmpeg and ffprobe):
         return None, None

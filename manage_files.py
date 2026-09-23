@@ -94,7 +94,7 @@ def extract_sound_line_data(sound_line):
 
     # fallback if not a recognized pattern
     if not sound_line:
-        log_error("extract_sound_line_data received None or empty string")
+        log_filename("extract_sound_line_data received None or empty string")
         return None
 
     log_error(f"no data extracted from sound line: {sound_line}, format type: {format_type}")
@@ -667,7 +667,7 @@ def get_subtitle_code_by_track_number(source_path, track_number):
     return None
 
 
-def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path, keep_start, keep_end):
+def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtitle_path, keep_start, keep_end, show_dialog=False):
     log_filename(
         f"getting timing blocks, start_index {start_index},  end_index {end_index}, timing subtitle path: {subtitle_path}")
 
@@ -719,31 +719,74 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
         log_error(f"no subtitle blocks returned")
         return []
 
-    if start_index <= 0:
-        showInfo("You've reached the first subtitle line.")
-        return []
+    # Map start_index and end_index to positions in blocks list
+    start_pos = None
+    end_pos = None
 
-    if end_index > total_blocks:
-        log_error(f"last subtitle line, end index: {end_index}, total blocks: {total_blocks}")
-        showInfo("You've reached the last subtitle line.")
+    # Check if 1-based indexing directly matches the block's stored ID
+    if 0 <= start_index - 1 < total_blocks:
+        blk = blocks[start_index - 1]
+        blk_id = blk[0] if isinstance(blk, (list, tuple)) and len(blk) > 0 else None
+        if blk_id is not None and str(blk_id) == str(start_index):
+            start_pos = start_index - 1
 
-    if start_index > end_index:
-        showInfo(f"Start index cannot be after end index: {start_index}-{end_index}.")
+    if 0 <= end_index - 1 < total_blocks:
+        blk = blocks[end_index - 1]
+        blk_id = blk[0] if isinstance(blk, (list, tuple)) and len(blk) > 0 else None
+        if blk_id is not None and str(blk_id) == str(end_index):
+            end_pos = end_index - 1
+
+    # If ID and 1-based index diverged, build ID lookup map
+    if start_pos is None or end_pos is None:
+        id_to_pos = {}
+        for idx_pos, blk in enumerate(blocks):
+            if isinstance(blk, (list, tuple)) and len(blk) > 0:
+                id_to_pos[str(blk[0])] = idx_pos
+        if start_pos is None:
+            start_pos = id_to_pos.get(str(start_index))
+        if end_pos is None:
+            end_pos = id_to_pos.get(str(end_index))
+
+    # Fallback to 1-based index if not matched by ID
+    if start_pos is None:
+        if 1 <= start_index <= total_blocks:
+            start_pos = start_index - 1
+        elif start_index <= 0:
+            if show_dialog:
+                showInfo("You've reached the first subtitle line.")
+            return []
+        else:
+            log_filename(f"Invalid access attempt: start_index={start_index}, total_blocks={total_blocks}")
+            return []
+
+    if end_pos is None:
+        if 1 <= end_index <= total_blocks:
+            end_pos = end_index - 1
+        elif end_index > total_blocks:
+            log_filename(f"last subtitle line, end index: {end_index}, total blocks: {total_blocks}")
+            if show_dialog:
+                showInfo("You've reached the last subtitle line.")
+            return []
+        else:
+            return []
+
+    if start_pos > end_pos:
+        if show_dialog:
+            showInfo(f"Start index cannot be after end index: {start_index}-{end_index}.")
         return []
 
     usable_blocks = []
-    if 0 <= start_index - 1 < len(blocks):
-        log_error(f"starting block at index: {start_index - 1}, {blocks[start_index - 1]}")
-    else:
-        log_error(f"[warning] Invalid access attempt: start_index={start_index}, total_blocks={len(blocks)}")
-        return []
-    for i, raw_block in enumerate(blocks[start_index - 1:end_index]):
+    log_filename(f"starting block at index: {start_pos}, {blocks[start_pos]}")
+    for i, raw_block in enumerate(blocks[start_pos : end_pos + 1]):
         if isinstance(raw_block, str):
             parsed = constants.format_subtitle_block(raw_block)
             if parsed:
                 usable_blocks.append(parsed)
         elif isinstance(raw_block, list) and len(raw_block) == 4:
             usable_blocks.append(raw_block)
+
+    if not usable_blocks:
+        return []
 
     if keep_start:
         usable_blocks[0][1] = keep_start

@@ -5,3 +5,5 @@ config.json
 subtitles_index.db
 .idea
 debug.log
+.gitignore
+.clinerules

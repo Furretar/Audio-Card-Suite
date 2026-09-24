@@ -45,7 +45,26 @@ from aqt.qt import *
 
 
 def create_default_config():
+    """Return the current config, creating config.json from the defaults only if needed.
+
+    config.json also holds every per-note-type section (including the field
+    mappings), so it must never be overwritten with just the defaults: that
+    silently wipes the user's note types, per-note-type settings and field
+    mappings. The file is only (re)written when it is missing, empty or
+    unreadable.
+    """
     config_file_path = os.path.join(constants.addon_dir, "config.json")
+
+    if os.path.exists(config_file_path) and os.path.getsize(config_file_path) > 0:
+        try:
+            with open(config_file_path, "r", encoding="utf-8") as f:
+                existing_config = json.load(f)
+            if isinstance(existing_config, dict):
+                return existing_config
+            print("Invalid config.json (not a JSON object), recreating it from defaults.")
+        except Exception as e:
+            print(f"Invalid config.json, recreating it from defaults. Error: {e}")
+
     try:
         temp_path = config_file_path + ".tmp"
         with open(temp_path, "w", encoding="utf-8") as f:
@@ -110,18 +129,22 @@ class AudioToolsDialog(QDialog):
 
     def load_settings(self):
         config_file_path = os.path.join(constants.addon_dir, "config.json")
-        if not os.path.exists(config_file_path):
+        if not os.path.exists(config_file_path) or os.path.getsize(config_file_path) == 0:
             print("No config.json found, creating default config.")
             config = create_default_config()
         else:
             try:
                 with open(config_file_path, "r", encoding="utf-8") as f:
                     config = json.load(f)
+                if not isinstance(config, dict):
+                    raise ValueError("config.json does not contain a JSON object")
             except Exception as e:
                 print(f"Invalid config.json, resetting to defaults. Error: {e}")
                 config = create_default_config()
 
-        default_settings = create_default_config()
+        # Defaults are taken from memory here: calling create_default_config()
+        # would rewrite config.json and wipe the stored note types/field mappings.
+        default_settings = constants.default_settings
 
         # Treat only these keys as global defaults (kept at top level)
         GLOBAL_KEYS = [
@@ -158,41 +181,46 @@ class AudioToolsDialog(QDialog):
 
         note_type_name = self.modelButton.text()
 
-        if note_type_name not in self.configManager.data:
-            self.configManager.data[note_type_name] = {}
-
-        d = self.configManager.data[note_type_name]
-
-        d["image_height"] = self.imageHeightEdit.value()
-        d["pad_start_target"] = self.padStartEditTarget.value()
-        d["pad_end_target"] = self.padEndEditTarget.value()
-        d["pad_start_translation"] = self.padStartEditTranslation.value()
-        d["pad_end_translation"] = self.padEndEditTranslation.value()
-        d["audio_ext"] = self.audioExtCombo.currentText()
-        d["bitrate"] = self.bitrateEdit.value()
-        d["normalize_audio"] = self.normalize_checkbox.isChecked()
-        d["lufs"] = self.lufsSpinner.value()
-        d["timing_tracks_enabled"] = self.timingTracksCheckbox.isChecked()
-
+        # Global options are always saved, even before a note type is selected.
         self.configManager.data["source_folder"] = self.sourceDirEdit.text()
         self.configManager.data["default_model"] = note_type_name
 
-        tracks = [
-            "target_audio_track",
-            "target_subtitle_track",
-            "translation_audio_track",
-            "translation_subtitle_track",
-            "target_timing_track",
-            "translation_timing_track"
-        ]
+        # Note-type specific values are only stored once a real note type is
+        # selected, so they do not get written under the
+        # "Please Select a Note Type" placeholder name.
+        if note_type_name and note_type_name != constants.select_note_type_string:
+            if note_type_name not in self.configManager.data:
+                self.configManager.data[note_type_name] = {}
 
-        for i, key in enumerate(tracks):
-            d[key] = self.trackSpinners[i].value()
+            d = self.configManager.data[note_type_name]
 
-        # Save all 4 language code edits
-        for i, key in enumerate(["target_language_code", "translation_language_code", "target_timing_code",
-                                 "translation_timing_code"]):
-            d[key] = self.langCodeEdits[i].text().strip()
+            d["image_height"] = self.imageHeightEdit.value()
+            d["pad_start_target"] = self.padStartEditTarget.value()
+            d["pad_end_target"] = self.padEndEditTarget.value()
+            d["pad_start_translation"] = self.padStartEditTranslation.value()
+            d["pad_end_translation"] = self.padEndEditTranslation.value()
+            d["audio_ext"] = self.audioExtCombo.currentText()
+            d["bitrate"] = self.bitrateEdit.value()
+            d["normalize_audio"] = self.normalize_checkbox.isChecked()
+            d["lufs"] = self.lufsSpinner.value()
+            d["timing_tracks_enabled"] = self.timingTracksCheckbox.isChecked()
+
+            tracks = [
+                "target_audio_track",
+                "target_subtitle_track",
+                "translation_audio_track",
+                "translation_subtitle_track",
+                "target_timing_track",
+                "translation_timing_track"
+            ]
+
+            for i, key in enumerate(tracks):
+                d[key] = self.trackSpinners[i].value()
+
+            # Save all 4 language code edits
+            for i, key in enumerate(["target_language_code", "translation_language_code", "target_timing_code",
+                                     "translation_timing_code"]):
+                d[key] = self.langCodeEdits[i].text().strip()
 
         self.configManager.save()
         print("Settings saved successfully.")
@@ -736,6 +764,12 @@ class AudioToolsDialog(QDialog):
         if note_type_name not in self.settings:
             self.settings[note_type_name] = {}
         self.settings[note_type_name]["selected_tab_index"] = index
+
+        # apply_settings_to_ui() reads the tab index per note type, so it has to
+        # be stored in the config as well (self.settings is never written to disk).
+        if note_type_name and note_type_name != constants.select_note_type_string:
+            self.configManager.data.setdefault(note_type_name, {})["selected_tab_index"] = index
+
         print(f"saving settings, tab change")
         self.save_settings()
 

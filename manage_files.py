@@ -1089,6 +1089,7 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
 
     target_index = sound_line_data["start_index"]
     filename_base = sound_line_data["filename_base"]
+    full_source_filename = sound_line_data.get("full_source_filename")
     code = config[note_type_name]["target_language_code"]
     # keep the same subtitle track the sound line was generated from
     subtitle_track = sound_line_data.get("subtitle_track")
@@ -1126,8 +1127,10 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
     def make_result(row):
         fn, r_track, r_lang, idx, start, end, text = row
         b = [str(idx), start, end, text]
-        # stay on the track the sound line came from when the same line exists on several tracks
-        if subtitle_track is not None:
+        # stay on the track the sound line came from only while navigating within the
+        # same file; a result in a different file must keep its own track so the
+        # audio/subtitle pair stays correct
+        if subtitle_track is not None and fn == full_source_filename:
             r_track = subtitle_track
         subtitle_filename = f"{fn}"
         if r_lang != "und" or str(r_track) != "-1":

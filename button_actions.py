@@ -228,6 +228,18 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         log_error(f"no timing blocks returned")
         return ""
 
+    # guard against inverted timings from mixed/mismatched block formats so the
+    # user gets a clear message instead of a silent no-op
+    new_start_ms = manage_files.time_hmsms_to_milliseconds(manage_files.to_hmsms_format(timing_blocks[0][1]))
+    new_end_ms = manage_files.time_hmsms_to_milliseconds(manage_files.to_hmsms_format(timing_blocks[-1][2]))
+    if new_start_ms is None or new_end_ms is None or new_end_ms <= new_start_ms:
+        log_error(f"invalid timing range: {timing_blocks[0][1]}-{timing_blocks[-1][2]}")
+        aqt.utils.showInfo(
+            f"Could not add/remove line: invalid timing range "
+            f"{manage_files.to_hmsms_format(timing_blocks[0][1])}-{manage_files.to_hmsms_format(timing_blocks[-1][2])}.\n"
+            f"The timing subtitle for this note may be out of sync with the audio subtitle.")
+        return ""
+
     new_timing_sound_line, new_sentence_line = manage_files.get_sound_sentence_line_from_subtitle_blocks_and_path(timing_blocks, timing_subtitle_path, code, timing_code, config, note_type_name, 0)
     log_filename(f"timing blocks: {timing_blocks}")
 
@@ -269,10 +281,13 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     new_timing_sound_line = manage_files.alter_sound_file_times(altered_data, new_timing_sound_line, config, alt_pressed, note_type_name, 0)
 
     # generate new translation line
-    if not alt_pressed and translation_idx and translation_idx > -1:
+    translation_code = (config.get(note_type_name, {}).get("translation_language_code") or "").strip()
+    if not alt_pressed and translation_idx and translation_idx > -1 and translation_code:
         print(f'aaa translation idx: {fields["translation_idx"]}')
         translation_line, _ = manage_files.get_translation_line_and_subtitle_from_target_sound_line(new_timing_sound_line, config, new_data, note_type_name)
-        editor.note.fields[translation_idx] = str(translation_line or "")
+        # only write when a translation was found, so an existing field is not wiped
+        if translation_line:
+            editor.note.fields[translation_idx] = str(translation_line)
 
     # update sound field with new sound line
     if new_timing_sound_line:
@@ -713,6 +728,12 @@ def should_generate_fields(fields, note_type_name, overwrite, data, config):
     if (translation_sound_line and not overwrite) or not get_field_key_from_label(note_type_name, translation_audio_string, config):
         should_generate_translation_sound_line = False
 
+    # translation needs a language code set, otherwise there is nothing to translate to
+    translation_code = (config.get(note_type_name, {}).get("translation_language_code") or "").strip()
+    if not translation_code or translation_code.lower() == "none":
+        should_generate_translation_line = False
+        should_generate_translation_sound_line = False
+
     if (image_line and not overwrite) or not get_field_key_from_label(note_type_name, image_string, config):
         should_generate_image_line = False
 
@@ -914,26 +935,29 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
     if should_generate_translation_sound_line:
         subtitle_data = manage_files.extract_subtitle_path_data(translation_subtitle_path)
         if not subtitle_data:
-            log_error("subtitle_data null")
-            return None
-        subtitle_file_code = subtitle_data["code"]
-
-        # extract source filename from sound line
-        sound_data = manage_files.extract_sound_line_data(new_sound_line)
-        full_source_filename = sound_data["full_source_filename"]
-        full_source_path = manage_files.get_source_path_from_full_filename(full_source_filename)
-
-        if not manage_files.audio_language_exists_in_file(full_source_path, subtitle_file_code):
-            log_error(f"Audio language '{subtitle_file_code}' not found in file. Skipping translation audio.")
+            # no translation subtitle for this file: skip the translation audio
+            # instead of aborting the whole field generation
+            log_error("no translation subtitle found, skipping translation audio")
             new_translation_sound_line = ""
         else:
-            new_translation_sound_line = manage_files.get_new_timing_sound_line_from_target_sound_line(
-                new_sound_line,
-                config,
-                subtitle_file_code,
-                True,
-                note_type_name
-            )
+            subtitle_file_code = subtitle_data["code"]
+
+            # extract source filename from sound line
+            sound_data = manage_files.extract_sound_line_data(new_sound_line)
+            full_source_filename = sound_data["full_source_filename"]
+            full_source_path = manage_files.get_source_path_from_full_filename(full_source_filename)
+
+            if not manage_files.audio_language_exists_in_file(full_source_path, subtitle_file_code):
+                log_error(f"Audio language '{subtitle_file_code}' not found in file. Skipping translation audio.")
+                new_translation_sound_line = ""
+            else:
+                new_translation_sound_line = manage_files.get_new_timing_sound_line_from_target_sound_line(
+                    new_sound_line,
+                    config,
+                    subtitle_file_code,
+                    True,
+                    note_type_name
+                )
     else:
         new_translation_sound_line = ""
 

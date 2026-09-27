@@ -189,11 +189,25 @@ def safe_update_subtitle_access(database, filename):
 
 # todo: add another section to subtitle file names so the method knows which pattern to search for
 # searches all possible name patterns using the base filename, track, and code
-def get_subtitle_file_from_database(full_source_filename, track, code, config, database, note_type_name):
-    if not code:
-        code = "und"
+def get_subtitle_file_from_database(full_source_filename, track, code, config, database, note_type_name,
+                                    notify_user=True, fallback_track=None, fallback_code=None):
+    """Finds the subtitle file matching a source file, track and language code.
 
-    def find_subtitle():
+    A track of 0 (the value used when no track is picked in the settings) means
+    "any track" instead of track number 0. If nothing matches and
+    fallback_track/fallback_code are given, the search is repeated with those
+    values, which is used to fall back to the target track when the configured
+    translation code does not exist in the file. notify_user=False suppresses the
+    popup shown when no subtitle could be found.
+    """
+
+    def find_subtitle(track, code):
+        track = "" if track is None else str(track).strip()
+        track_is_set = track not in ("", "0", "none")
+        code = str(code).strip() if code else ""
+        if not code:
+            code = "und"
+
         selected_tab_index = config.get(note_type_name, {}).get("selected_tab_index",
                                                                 config.get("selected_tab_index", 1))
         log_filename(f"received filename: {full_source_filename}, track/code: {track}/{code}")
@@ -212,19 +226,30 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
 
         # try exact match
         log_filename(f"trying exact match")
-        cursor = database.execute('''
-                                  SELECT s.filename, s.language, s.track, s.content
-                                  FROM subtitles s
-                                           JOIN subtitle_access a ON s.filename = a.filename
-                                  WHERE s.filename = ?
-                                    AND s.track = ?
-                                    AND s.language = ?
-                                  ORDER BY a.last_accessed DESC
-                                  ''', (full_source_filename, str(track), code))
+        if track_is_set:
+            cursor = database.execute('''
+                                      SELECT s.filename, s.language, s.track, s.content
+                                      FROM subtitles s
+                                               JOIN subtitle_access a ON s.filename = a.filename
+                                      WHERE s.filename = ?
+                                        AND s.track = ?
+                                        AND s.language = ?
+                                      ORDER BY a.last_accessed DESC
+                                      ''', (full_source_filename, track, code))
+        else:
+            cursor = database.execute('''
+                                      SELECT s.filename, s.language, s.track, s.content
+                                      FROM subtitles s
+                                               JOIN subtitle_access a ON s.filename = a.filename
+                                      WHERE s.filename = ?
+                                        AND s.language = ?
+                                      ORDER BY a.last_accessed DESC
+                                      ''', (full_source_filename, code))
         result = cursor.fetchone()
 
         if result:
-            tagged_subtitle_file = f"{full_source_filename}`track_{track}`{code}.srt"
+            found_track = result[2]
+            tagged_subtitle_file = f"{full_source_filename}`track_{found_track}`{code}.srt"
             tagged_subtitle_path = os.path.join(constants.addon_source_folder, tagged_subtitle_file)
             if os.path.exists(tagged_subtitle_path):
                 log_filename(f"tagged_subtitle_path: {tagged_subtitle_path}")
@@ -274,23 +299,24 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                 return subtitle_path
 
         # search for track
-        log_filename(f"trying to match track")
-        query = '''
-                SELECT s.filename, s.track, s.language
-                FROM subtitles s
-                         JOIN subtitle_access a ON s.filename = a.filename
-                WHERE s.filename LIKE ?
-                ORDER BY a.last_accessed DESC \
-                '''
-        cursor.execute(query, (like_pattern,))
-        rows = cursor.fetchall()
-        for db_filename, db_track, db_lang in rows:
-            if db_filename.startswith(full_source_filename) and f"`track_{track}`" in db_filename:
-                subtitle_filename = f"{db_filename}`track_{track}`{db_lang}.srt"
-                subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-                log_filename(f"[tab {selected_tab_index}] subtitle_path (by track, recent-first): {subtitle_path}")
-                safe_update_subtitle_access(database, db_filename)
-                return subtitle_path
+        if track_is_set:
+            log_filename(f"trying to match track")
+            query = '''
+                    SELECT s.filename, s.track, s.language
+                    FROM subtitles s
+                             JOIN subtitle_access a ON s.filename = a.filename
+                    WHERE s.filename LIKE ?
+                    ORDER BY a.last_accessed DESC \
+                    '''
+            cursor.execute(query, (like_pattern,))
+            rows = cursor.fetchall()
+            for db_filename, db_track, db_lang in rows:
+                if db_filename.startswith(full_source_filename) and f"`track_{track}`" in db_filename:
+                    subtitle_filename = f"{db_filename}`track_{track}`{db_lang}.srt"
+                    subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
+                    log_filename(f"[tab {selected_tab_index}] subtitle_path (by track, recent-first): {subtitle_path}")
+                    safe_update_subtitle_access(database, db_filename)
+                    return subtitle_path
 
         # search for code as a fallback if track was not found
         log_filename(f"trying code as fallback")
@@ -316,17 +342,28 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
         return None
 
     # try finding subtitle
-    path = find_subtitle()
+    path = find_subtitle(track, code)
     if path:
         return path
 
-    log_error(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
-    # todo showInfo(f"No matching subtitle file found for:\n{full_source_filename}|'track_{track}'|{code}")
+    # fall back to the given track/code (the target track) before giving up
+    if fallback_code:
+        log_filename(
+            f"no subtitle found for track/code {track}/{code}, falling back to track/code {fallback_track}/{fallback_code}")
+        path = find_subtitle(fallback_track, fallback_code)
+        if path:
+            return path
 
-    if config.get(note_type_name, {}).get("selected_tab_index", 0) == 0:
-        log_error(
-            f"Both the code '{code}' and track 'track_{track}' do not exist for the file: {full_source_filename}.")
-        showInfo(f"Both the code '{code}' and track 'track_{track}' do not exist for the file: {full_source_filename}.")
+    log_error(f"No matching subtitle file found for:\n{full_source_filename}|`track_{track}`|{code}")
+
+    if notify_user and config.get(note_type_name, {}).get("selected_tab_index", 0) == 0:
+        if fallback_code:
+            msg = (f"No subtitle file found for the file '{full_source_filename}' with the code '{code}' or the "
+                   f"code '{fallback_code}'.")
+        else:
+            msg = f"Both the code '{code}' and track 'track_{track}' do not exist for the file: {full_source_filename}."
+        log_error(msg)
+        showInfo(msg)
     return None
 
 
@@ -392,19 +429,29 @@ def get_translation_line_and_subtitle_from_target_sound_line(target_sound_line, 
         log_error(f"extract_sound_line_data returned None.")
         return "", ""
 
-    translation_audio_track = config[note_type_name]["translation_audio_track"]
-    translation_language_code = config[note_type_name]["translation_language_code"]
+    note_config = config.get(note_type_name, {})
+    translation_audio_track = note_config.get("translation_audio_track", 0)
+    translation_language_code = note_config.get("translation_language_code", "")
     start_time = sound_line_data["start_time"]
     end_time = sound_line_data["end_time"]
     full_source_filename = sound_line_data["full_source_filename"]
     subtitle_database = manage_database.get_database()
+
+    # if the translation code does not exist in the file, use the target's own track instead
+    target_track = note_config.get("target_subtitle_track", 0)
+    target_code = sound_line_data.get("timing_lang_code") or sound_line_data.get("lang_code", "")
 
     # get translation subtitle file and the subtitle blocks that overlap timings with the sound line
     log_filename(
         f"getting translation subtitle with data: {full_source_filename}, {translation_audio_track}, {translation_language_code}")
     translation_subtitle_path = get_subtitle_file_from_database(full_source_filename, translation_audio_track,
                                                                 translation_language_code, config, subtitle_database,
-                                                                note_type_name)
+                                                                note_type_name, notify_user=False,
+                                                                fallback_track=target_track, fallback_code=target_code)
+    if not translation_subtitle_path:
+        log_filename(f"no translation subtitle found for {full_source_filename}, skipping translation line")
+        return "", ""
+
     overlapping_translation_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(
         translation_subtitle_path, start_time, end_time)
 
@@ -452,10 +499,22 @@ def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, 
 
     subtitle_database = manage_database.get_database()
 
+    # translation audio falls back to the target's track when the translation code
+    # is not in the file, matching the translation line behavior
+    target_track = config.get(note_type_name, {}).get("target_subtitle_track", 0)
+    target_code = sound_line_data.get("timing_lang_code") or sound_line_data.get("lang_code", "")
+
     log_filename(
         f"getting timing subtitle 2 with data: {full_source_filename}, {timing_audio_track}, {timing_language_code}")
     timing_subtitle_path = get_subtitle_file_from_database(
-        full_source_filename, timing_audio_track, timing_language_code, config, subtitle_database, note_type_name)
+        full_source_filename, timing_audio_track, timing_language_code, config, subtitle_database, note_type_name,
+        notify_user=not use_translation_data,
+        fallback_track=target_track if use_translation_data else None,
+        fallback_code=target_code if use_translation_data else None)
+
+    if not timing_subtitle_path:
+        log_filename(f"no timing subtitle found for {full_source_filename}, skipping sound line")
+        return ""
 
     overlapping_blocks = get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(
         timing_subtitle_path, sound_line_data["start_time"], sound_line_data["end_time"]
@@ -788,11 +847,13 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
     if not usable_blocks:
         return []
 
+    # keep_start/keep_end may arrive as SRT, filename, or hmsms timestamps.
+    # normalize to hmsms so callers never mix formats in a block.
     if keep_start:
-        usable_blocks[0][1] = keep_start
+        usable_blocks[0][1] = to_hmsms_format(keep_start)
 
     if keep_end:
-        usable_blocks[-1][2] = keep_end
+        usable_blocks[-1][2] = to_hmsms_format(keep_end)
 
     return usable_blocks
 
@@ -1426,6 +1487,12 @@ def to_hmsms_format(ts) -> str:
     ts = ts.strip()
     parts = []
 
+    # already in hmsms format (this function's own output) -- normalize and return
+    hmsms_match = re.fullmatch(r"(\d+)h(\d+)m(\d+)s(\d+)ms", ts)
+    if hmsms_match:
+        h, m, s, ms = hmsms_match.groups()
+        return f"{int(h):02d}h{int(m):02d}m{int(s):02d}s{int(ms):03d}ms"
+
     if '.' in ts and ts.count('.') == 3:
         parts = ts.split('.')
     elif ':' in ts and ',' in ts:
@@ -1544,16 +1611,7 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
         log_error(f"Invalid time range: {to_hmsms_format(new_start_ms)}-{to_hmsms_format(new_end_ms)}")
         showInfo(
             f"Invalid time range: {to_hmsms_format(new_start_ms)}-{to_hmsms_format(new_end_ms)}.\nPadded timings may be the problem.")
-        return {
-            "new_sound_line": sound_line,
-            "new_start_time": None,
-            "new_end_time": None,
-            "new_filename": None,
-            "new_path": None,
-            "old_path": None,
-            "filename_base": None,
-            "full_source_filename": None,
-        }
+        return {}
 
     new_start_time = to_hmsms_format(new_start_ms)
     new_end_time = to_hmsms_format(new_end_ms)

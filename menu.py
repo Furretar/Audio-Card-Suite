@@ -617,7 +617,9 @@ class AudioToolsDialog(QDialog):
             spinner = QSpinBox()
             spinner.setMinimum(0)
             spinner.setMaximum(1000)
-            spinner.setValue(self.settings.get(note_type_name, {}).get(key, 0))
+            # 0 means "any track"; the addon's default track is used when the note
+            # type has no track saved yet
+            spinner.setValue(self.settings.get(note_type_name, {}).get(key, constants.default_settings[key]))
             tracksGrid.addWidget(label, i, 0)
             tracksGrid.addWidget(spinner, i, 1)
             self.trackLabels.append(label)
@@ -625,12 +627,8 @@ class AudioToolsDialog(QDialog):
 
         tracksTab.setLayout(tracksGrid)
         self.tabs.addTab(tracksTab, "Tracks")
-        self.trackSpinners[0].setValue(self.settings.get(note_type_name, {}).get("target_audio_track", 0))
-        self.trackSpinners[1].setValue(self.settings.get(note_type_name, {}).get("target_subtitle_track", 0))
-        self.trackSpinners[2].setValue(self.settings.get(note_type_name, {}).get("translation_audio_track", 0))
-        self.trackSpinners[3].setValue(self.settings.get(note_type_name, {}).get("translation_subtitle_track", 0))
-        self.trackSpinners[4].setValue(self.settings.get(note_type_name, {}).get("target_timing_track", 0))
-        self.trackSpinners[5].setValue(self.settings.get(note_type_name, {}).get("translation_timing_track", 0))
+        for i, key in enumerate(track_keys):
+            self.trackSpinners[i].setValue(self.settings.get(note_type_name, {}).get(key, constants.default_settings[key]))
 
         selected_tab_index = self.settings.get(note_type_name, {}).get("selected_tab_index", 0)
         self.tabs.setCurrentIndex(selected_tab_index)
@@ -832,7 +830,7 @@ class AudioToolsDialog(QDialog):
                      "translation_timing_code"]
 
         for i, track in enumerate(tracks):
-            self.trackSpinners[i].setValue(self.settings.get(note_type_name, {}).get(track, 0))
+            self.trackSpinners[i].setValue(self.settings.get(note_type_name, {}).get(track, constants.default_settings[track]))
 
         for i in range(4):
             saved_combo = self.settings.get(note_type_name, {}).get(combo_keys[i], "None")

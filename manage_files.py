@@ -31,6 +31,11 @@ def extract_sound_line_data(sound_line):
             return None
 
         groups = match.groupdict()
+        # DEBUG: confirm the pattern sees the track token
+        log_filename(
+            f"[DEBUG track] pattern matched, groups: lang_code={groups.get('lang_code')!r}, "
+            f"subtitle_track={groups.get('subtitle_track')!r}, "
+            f"start={groups.get('start_time')!r}, end={groups.get('end_time')!r}")
         filename_base = groups["filename_base"]
         filename_base = constants.format_anki_safe_filename(filename_base, revert=True)
         if not filename_base:
@@ -39,6 +44,8 @@ def extract_sound_line_data(sound_line):
         source_file_extension = groups.get("source_file_extension") or ""
         lang_code = groups.get("lang_code") or ""
         timing_lang_code = groups.get("timing_lang_code") or ""
+        subtitle_track = groups.get("subtitle_track")
+        subtitle_track = int(subtitle_track) if subtitle_track is not None else None
         start_time = groups["start_time"]
         end_time = groups["end_time"]
         subtitle_range = groups["subtitle_range"]
@@ -53,6 +60,9 @@ def extract_sound_line_data(sound_line):
             if timing_lang_code:
                 codes += f"-{timing_lang_code}"
             meta_parts.append(codes)
+
+        if subtitle_track is not None:
+            meta_parts.append(f"track_{subtitle_track}")
 
         meta_parts.append(f"{start_time}-{end_time}")
         meta_parts.append(subtitle_range)
@@ -78,6 +88,7 @@ def extract_sound_line_data(sound_line):
             "source_file_extension": source_file_extension,
             "lang_code": lang_code,
             "timing_lang_code": timing_lang_code,
+            "subtitle_track": subtitle_track,
             "start_time": start_time,
             "end_time": end_time,
             "start_index": start_index,
@@ -251,10 +262,13 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
             found_track = result[2]
             tagged_subtitle_file = f"{full_source_filename}`track_{found_track}`{code}.srt"
             tagged_subtitle_path = os.path.join(constants.addon_source_folder, tagged_subtitle_file)
-            if os.path.exists(tagged_subtitle_path):
-                log_filename(f"tagged_subtitle_path: {tagged_subtitle_path}")
-                safe_update_subtitle_access(database, full_source_filename)
-                return tagged_subtitle_path
+            # The database is authoritative: subtitle content is read from the DB, so
+            # return the match even when no tagged .srt file has been written to disk.
+            # Requiring os.path.exists() here made an exact track+code hit fall through
+            # to the code-only fallback, which can return a different track.
+            log_filename(f"tagged_subtitle_path: {tagged_subtitle_path}")
+            safe_update_subtitle_access(database, full_source_filename)
+            return tagged_subtitle_path
 
         # try matching basename (user placed file)
         log_filename(f"trying to match basename with filename: {full_source_filename}")
@@ -280,6 +294,28 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
         log_filename(f"trying match code")
         like_pattern = f"{full_source_filename}%"
         if selected_tab_index == 0:
+            # When a specific track was requested, prefer that track's code match so
+            # files with several tracks sharing a language code stay paired correctly.
+            if track_is_set:
+                query = '''
+                        SELECT s.filename, s.track, s.language
+                        FROM subtitles s
+                                 JOIN subtitle_access a ON s.filename = a.filename
+                        WHERE s.filename LIKE ?
+                          AND s.track = ?
+                          AND s.language = ?
+                        ORDER BY a.last_accessed DESC LIMIT 1 \
+                        '''
+                cursor.execute(query, (like_pattern, track, code))
+                row = cursor.fetchone()
+                if row:
+                    base_filename, found_track, found_code = row
+                    subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
+                    subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
+                    log_filename(f"[tab 0] subtitle_path (by track+code, recent-first): {subtitle_path}")
+                    safe_update_subtitle_access(database, base_filename)
+                    return subtitle_path
+
             query = '''
                     SELECT s.filename, s.track, s.language
                     FROM subtitles s
@@ -532,12 +568,13 @@ def get_new_timing_sound_line_from_target_sound_line(target_sound_line, config, 
         audio_ext = config[note_type_name]["audio_ext"]
         subtitle_data = extract_subtitle_path_data(timing_subtitle_path)
         timing_language_code = subtitle_data["code"]
+        timing_subtitle_track = subtitle_data.get("track")
 
         log_filename(
-            f"building new timing sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {audio_language_code}, timing langauge code: {timing_language_code}")
+            f"building new timing sound line with filename: {filename_base}, and extension: {source_file_extension}, audio langauge code: {audio_language_code}, timing langauge code: {timing_language_code}, subtitle track: {timing_subtitle_track}")
         timestamp, sound_line = build_filename_and_sound_line(filename_base, source_file_extension, audio_language_code,
                                                               timing_language_code, first_start, last_end, start_index,
-                                                              end_index, None, audio_ext)
+                                                              end_index, None, audio_ext, timing_subtitle_track)
 
         log_filename(f"timing sound line: {sound_line}")
         return sound_line
@@ -1022,16 +1059,18 @@ def get_sound_sentence_line_from_subtitle_blocks_and_path(blocks, subtitle_path,
         else:
             code = subtitle_data["code"]
             timing_code = None
+        subtitle_track = subtitle_data.get("track")
     else:
         log_error(f"No subtitle data extracted from: {subtitle_path}")
         code = None
         timing_code = None
+        subtitle_track = None
     log_filename(
-        f"building sound line with filename: {filename_base}, and extension: {file_extension}, audio language code: {code}, timing language code: {timing_code}, corre audio track: {corresponding_audio_track_count}")
+        f"building sound line with filename: {filename_base}, and extension: {file_extension}, audio language code: {code}, timing language code: {timing_code}, corre audio track: {corresponding_audio_track_count}, subtitle track: {subtitle_track}")
 
     timestamp, new_sound_line = build_filename_and_sound_line(filename_base, file_extension, code, timing_code,
                                                               start_time, end_time, start_index, end_index, lufs,
-                                                              audio_ext)
+                                                              audio_ext, subtitle_track)
     combined_text = "\n".join(b[3].strip() for b in blocks if len(b) > 3)
     log_filename(f"generated sound_line: {new_sound_line}\nsentence line: {combined_text}")
 
@@ -1051,6 +1090,8 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
     target_index = sound_line_data["start_index"]
     filename_base = sound_line_data["filename_base"]
     code = config[note_type_name]["target_language_code"]
+    # keep the same subtitle track the sound line was generated from
+    subtitle_track = sound_line_data.get("subtitle_track")
     raw_search = (selected_text or sentence_line).strip()
 
     # Strip HTML tags but preserve word spaces for FTS
@@ -1085,6 +1126,9 @@ def get_next_matching_subtitle_block(sentence_line, selected_text, sound_line, c
     def make_result(row):
         fn, r_track, r_lang, idx, start, end, text = row
         b = [str(idx), start, end, text]
+        # stay on the track the sound line came from when the same line exists on several tracks
+        if subtitle_track is not None:
+            r_track = subtitle_track
         subtitle_filename = f"{fn}"
         if r_lang != "und" or str(r_track) != "-1":
             subtitle_filename += f"`track_{r_track}`{r_lang}"
@@ -1161,6 +1205,34 @@ def run_ffmpeg_extract_image_command(source_path, image_timestamp, image_collect
 
     log_command(f"Extracted image: {image_collection_path}")
     return image_collection_path
+
+
+def get_subtitle_track_position(filename, code, subtitle_track):
+    """Returns the 1-based position of a subtitle track among the subtitle tracks that
+    share the same language code, ordered by track number.
+
+    Audio and subtitle track numbers are independent numbering spaces, so a raw
+    subtitle track number cannot be used directly to pick an audio track. The position
+    among same-language subtitle tracks is what lines up with the position among
+    same-language audio tracks.
+    """
+    if subtitle_track is None or not code:
+        return None
+
+    conn = manage_database.get_database()
+    cursor = conn.execute('''
+                          SELECT track
+                          FROM subtitles
+                          WHERE filename = ?
+                            AND language = ?
+                          ORDER BY CAST(track AS INTEGER) ASC
+                          ''', (filename, code.lower()))
+
+    tracks = [str(r[0]) for r in cursor.fetchall()]
+    if str(subtitle_track) not in tracks:
+        return None
+
+    return tracks.index(str(subtitle_track)) + 1
 
 
 def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, collection_path, sound_line, config,
@@ -1250,6 +1322,25 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
                     if match_count == corresponding_audio_track_count:
                         break
                     match_count += 1
+
+        # when the sound line recorded a subtitle track, map it by its position among the
+        # same-language subtitle tracks to the same position among the same-language audio
+        # tracks, ignoring audio streams whose code differs. If there are more subtitle
+        # tracks than audio tracks for that language, fall back to the last audio track.
+        stored_subtitle_track = (sound_line_data or {}).get("subtitle_track")
+        if stored_subtitle_track is not None and selected_tab_index == 0:
+            same_lang_streams = [
+                stream for stream in streams
+                if stream.get("tags", {}).get("language", "").lower() == code.lower()
+            ]
+            subtitle_position = get_subtitle_track_position(filename, code, stored_subtitle_track)
+            if same_lang_streams and subtitle_position is not None:
+                position = min(subtitle_position, len(same_lang_streams))
+                audio_track_index = same_lang_streams[position - 1]["index"]
+                log_filename(
+                    f"stored subtitle track {stored_subtitle_track} is same-language subtitle "
+                    f"position {subtitle_position}, matching to same-language audio position "
+                    f"{position}/{len(same_lang_streams)} (stream index {audio_track_index})")
 
         # use the first audio track if it hasn't been set in the settings
         if audio_track_index is None:
@@ -1559,7 +1650,7 @@ def time_hmsms_to_milliseconds(ts: str):
 
 
 def build_filename_and_sound_line(filename_base, source_file_extension, audio_code, timing_code, first_start, last_end,
-                                  start_index, end_index, lufs, audio_ext):
+                                  start_index, end_index, lufs, audio_ext, subtitle_track=None):
     if (not "." in source_file_extension) and source_file_extension:
         source_file_extension = f".{source_file_extension}"
 
@@ -1576,6 +1667,16 @@ def build_filename_and_sound_line(filename_base, source_file_extension, audio_co
         timestamp += f"`{audio_code}-{timing_code}"
     elif audio_code:
         timestamp += f"`{audio_code}"
+
+    # record the subtitle track so later operations reuse the same audio/subtitle pair
+    # even when several tracks share a language code
+    if subtitle_track is not None:
+        timestamp += f"`track_{subtitle_track}"
+
+    # DEBUG: confirm the token is present in the built filename
+    log_filename(
+        f"[DEBUG track] build_filename_and_sound_line: subtitle_track={subtitle_track!r}, "
+        f"token_in_output={'`track_' in timestamp}")
 
     timestamp += f"`{first_start}-{last_end}`{start_index}-{end_index}"
 
@@ -1627,13 +1728,14 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
 
     sound_file_extension = sound_line_data["sound_file_extension"]
     timing_lang_code = sound_line_data["timing_lang_code"]
+    subtitle_track = sound_line_data.get("subtitle_track")
 
     log_filename(
-        f"building altered sound line with filename: {filename_base}, and extension: {source_file_extension}, audio language code: {lang_code}, timing language code: {timing_lang_code}")
+        f"building altered sound line with filename: {filename_base}, and extension: {source_file_extension}, audio language code: {lang_code}, timing language code: {timing_lang_code}, subtitle track: {subtitle_track}")
 
     new_filename, _ = build_filename_and_sound_line(filename_base, source_file_extension, lang_code, timing_lang_code,
                                                     new_start_time, new_end_time, start_index, end_index, lufs,
-                                                    sound_file_extension)
+                                                    sound_file_extension, subtitle_track)
     new_filename = constants.format_anki_safe_filename(new_filename, revert=False)
     if not new_filename:
         return None

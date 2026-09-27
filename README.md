@@ -27,10 +27,11 @@ Some files contain multiple audio and subtitle tracks sharing the same language 
 | 3 | Audio | `chi` | Taiwanese | 3 | Subtitle | `chi` | Taiwan CHT |
 | | | | | 4 | Subtitle | `chi` | Chinese |
 
-When Audio Card Suite will try to match the 1st `chi` subtitle track with the 1st `chi` audio track, 2nd with the 2nd, etc. It will default to the last `chi` track if there are more subtitle tracks than audio tracks.
+When Audio Card Suite generates a sound line, it records the subtitle track it used in the sound line itself, for example `` Show - 01.mkv`chi`track_3`00h01m00s000ms-00h01m02s000ms`10-10`-16LUFS.mp3 ``. Later operations (adding/removing edge lines, next/previous line, re-generating fields) read that track back, so a note always stays on the same audio/subtitle pair instead of falling back to the first matching track.
+
+On first generation, the 1st `chi` subtitle track is matched with the 1st `chi` audio track, the 2nd with the 2nd, and so on, ignoring tracks whose code differs (for example `yue`). If there are more subtitle tracks than audio tracks for a language, the last matching audio track is used. In the table above, subtitle track 3 (Taiwan CHT) is paired with audio track 3 (Taiwanese), and subtitle track 4 falls back to audio track 3.
 
 <img width="475" height="156" alt="multipletracks" src="https://github.com/user-attachments/assets/4acc0b98-143f-4559-82bf-b29214707e7e" />
-
 
 ## Settings
 
@@ -45,7 +46,7 @@ low priority/after initial release?
 - [ ] hash subtitle files to link them to file, this will allow files in subdirectories with the same name to remain unchanged, allowing torrent seeding etc
 - [ ] option to stop subtitle search, useful if you know you want something in the first subtitle but it didn't match immediately.
 - [ ] hotkey to just add next and prev line to check before generating every time
-- [ ] functionality to cycle tracks if there are multiple audio/subtitle tracks of the same language?
+- [x] functionality to cycle tracks if there are multiple audio/subtitle tracks of the same language?
 - [ ] auto detect audio language using faster whisper tiny, sample multiple sections of video
 - [ ] option to prioritize auto detected languages, if codes were set wrong in the files
 - [ ] store original and sanitized filenames in the database, no need to ban (( and )) in filenames

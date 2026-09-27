@@ -7,3 +7,6 @@ subtitles_index.db
 debug.log
 .gitignore
 .clinerules
+nohup.out
+subtitles_index.db-shm
+subtitles_index.db-wal

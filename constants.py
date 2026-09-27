@@ -58,6 +58,8 @@ BACKTICK_PATTERN = re.compile(
     r'(?P<filename_base>[^`.]+)'
     r'(?P<source_file_extension>\.[^`]+)?'
     r'(?:`(?P<lang_code>[a-z]{3})(?:-(?P<timing_lang_code>[a-z]{3}))?)?'
+    # optional subtitle track, disambiguates files with several tracks sharing a language
+    r'(?:`track_(?P<subtitle_track>-?\d+))?'
     r'`(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'
     r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'
     r'(?P<subtitle_range>\d+-\d+)'

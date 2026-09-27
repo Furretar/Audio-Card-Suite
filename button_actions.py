@@ -178,7 +178,15 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         sound_line = fields["translation_sound_line"]
     else:
         sound_line = fields["sound_line"]
+
+    # DEBUG: trace the exact sound line string the button reads and what gets parsed
+    log_filename(
+        f"[DEBUG track] raw sound_line field = {sound_line!r}\n"
+        f"[DEBUG track] field contains '`track_' = {'`track_' in sound_line}")
     data = manage_files.extract_sound_line_data(sound_line)
+    log_filename(
+        f"[DEBUG track] extract_sound_line_data -> subtitle_track="
+        f"{data.get('subtitle_track') if data else 'NO DATA'!r}")
 
     if not data:
         log_error(f"no data from sound line: {sound_line}, generating fields")
@@ -195,6 +203,10 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
     start_index = data["start_index"]
     end_index = data["end_index"]
     timing_code = data["timing_lang_code"]
+
+    # if the sound line records the subtitle track it was built from, reuse it so
+    # files with several tracks sharing a language code stay paired correctly
+    sound_line_track = data.get("subtitle_track")
 
     if not timing_code and not code:
         timing_code = "und"
@@ -214,6 +226,13 @@ def add_and_remove_edge_lines_update_note(editor, add_to_start, add_to_end):
         end_time = None
 
     full_source_filename = data["full_source_filename"]
+    # DEBUG: show the decision that picks the track
+    log_filename(
+        f"[DEBUG track] track resolution: config_track={config[note_type_name].get('target_subtitle_track')!r}, "
+        f"sound_line_track={sound_line_track!r} -> using track={sound_line_track if sound_line_track is not None else config[note_type_name].get('target_subtitle_track')!r}"
+        + ("  (falling back to config - sound line has no track token!)" if sound_line_track is None else ""))
+    if sound_line_track is not None:
+        track = sound_line_track
     log_filename(f"getting timing subtitle with data: {full_source_filename}, {track}, {code}")
     timing_subtitle_path = manage_files.get_subtitle_file_from_database(full_source_filename, track, timing_code, config, subtitle_database, note_type_name)
 
@@ -471,6 +490,11 @@ def generate_and_update_fields(editor, note, should_overwrite):
         if new_val and current_note.fields[idx] != new_val:
             current_note.fields[idx] = new_val
             updated = True
+            # DEBUG: confirm token-bearing values are written into the note fields
+            if isinstance(new_val, str) and "[sound:" in new_val:
+                log_filename(
+                    f"[DEBUG track] wrote sound field idx {idx}: "
+                    f"token_in_field={'`track_' in new_val}, value={new_val!r}")
 
     should_generate = should_generate_fields(fields, note_type_name, overwrite, data, config)
 

@@ -822,6 +822,10 @@ def get_generate_fields_sound_sentence_image_translation(note_type_name, fields,
     new_sound_line = ""
     new_sentence_line = ""
     track = config.get(note_type_name, {}).get("target_subtitle_track", "")
+    # if the sound line records the subtitle track it was built from, reuse it so
+    # files with several tracks sharing a language code stay paired correctly
+    if data and data.get("subtitle_track") is not None:
+        track = data["subtitle_track"]
     code = config.get(note_type_name, {}).get("target_language_code", "")
     if not code:
         code = "und"

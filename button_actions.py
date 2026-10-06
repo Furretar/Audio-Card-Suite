@@ -364,14 +364,18 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
         sentence_line = fields["sentence_line"]
 
     generated = False
+    deferred_extraction = False
 
-    # generate a new sound line if no valid sound line is detected
+    # generate a new sound line if no valid sound line is detected. The clip is
+    # not encoded here: the generated sound line is adjusted and extracted a few
+    # lines below, so encoding it at this point would only be thrown away.
     data = manage_files.extract_sound_line_data(sound_line)
     if not data:
         log_error(f"no valid sound line detected")
-        sound_line, _ = generate_and_update_fields(editor, None, True)
+        sound_line, _ = generate_and_update_fields(editor, None, True, extract_sound=False)
         data = manage_files.extract_sound_line_data(sound_line)
         generated = True
+        deferred_extraction = True
 
     log_filename(f"getting altered data from1: {sound_line}")
     altered_data = manage_files.get_altered_sound_data(sound_line, -start_delta, end_delta, config, data, note_type_name)
@@ -394,6 +398,15 @@ def adjust_sound_tag(editor, start_delta: int, end_delta: int):
 
         log_filename(f"sending data to alter sound file times: {altered_data}")
         new_sound_line = manage_files.alter_sound_file_times(altered_data, sound_line, config, alt_pressed, note_type_name, 0)
+
+    if not new_sound_line and deferred_extraction:
+        # the adjusted clip could not be built, so make sure the clip the note
+        # already points at exists (its extraction was deferred above)
+        log_error("could not build the adjusted clip, extracting the generated one instead")
+        data = manage_files.extract_sound_line_data(sound_line)
+        altered_data = manage_files.get_altered_sound_data(sound_line, 0, 0, config, data, note_type_name)
+        if altered_data:
+            manage_files.alter_sound_file_times(altered_data, sound_line, config, alt_pressed, note_type_name, 0)
 
     if new_sound_line:
         editor.note.fields[sound_idx] = new_sound_line
@@ -421,7 +434,7 @@ def generate_fields_button(editor):
         QTimer.singleShot(50, lambda: play(sound_filename))
 
 # uses current fields to generate all missing fields
-def generate_and_update_fields(editor, note, should_overwrite):
+def generate_and_update_fields(editor, note, should_overwrite, extract_sound=True):
     ffmpeg, ffprobe = constants.get_ffmpeg_exe_path()
     if not (ffmpeg and ffprobe):
         return None, None
@@ -509,7 +522,8 @@ def generate_and_update_fields(editor, note, should_overwrite):
         data = manage_files.extract_sound_line_data(new_sound_line)
         altered_data = manage_files.get_altered_sound_data(new_sound_line, 0, 0, config, data, note_type_name)
         if new_sound_line != current_note.fields[sound_idx] and altered_data:
-            new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line, config, False, note_type_name, corresponding_audio_track_count)
+            new_sound_line = manage_files.alter_sound_file_times(altered_data, new_sound_line, config, False, note_type_name,
+                                                                corresponding_audio_track_count, extract=extract_sound)
             current_note.fields[sound_idx] = new_sound_line or ""
             updated = True
 

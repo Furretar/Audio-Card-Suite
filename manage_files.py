@@ -1802,7 +1802,8 @@ def get_altered_sound_data(sound_line, lengthen_start_ms, lengthen_end_ms, confi
     }
 
 
-def alter_sound_file_times(altered_data, sound_line, config, use_translation_data, note_type_name, corresponding_audio_track_count):
+def alter_sound_file_times(altered_data, sound_line, config, use_translation_data, note_type_name, corresponding_audio_track_count,
+                           extract=True):
     if not altered_data:
         log_error("altered sound_line_data is empty")
         return None
@@ -1814,8 +1815,34 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
     if not altered_data["old_path"]:
         return None
 
-    if os.path.exists(altered_data["old_path"]):
-        send2trash(altered_data["old_path"])
+    new_path = altered_data["new_path"]
+
+    # The clip file name records the source file, the exact start/end times, the
+    # clip's own subtitle indices and the normalisation, so an existing file is
+    # that same clip: reusing it skips encoding the audio again. Set
+    # "reuse_existing_clips": false in the config to always re-encode (e.g.
+    # after changing the bitrate).
+    reuse_existing = (
+        extract
+        and config.get("reuse_existing_clips", True)
+        and os.path.exists(new_path)
+        and os.path.getsize(new_path) > 0
+    )
+
+    if reuse_existing:
+        log_filename(f"reusing the existing sound file: {new_path}")
+        return altered_data["new_sound_line"]
+
+    if not extract:
+        # the sound line is adjusted again right after this, so the clip gets
+        # extracted then instead of encoding it twice. Nothing is deleted yet,
+        # so the old clip stays until its replacement has been built.
+        log_filename(f"deferring the extraction of: {new_path}")
+        return altered_data["new_sound_line"]
+
+    old_path = altered_data["old_path"]
+    if old_path != new_path and os.path.exists(old_path):
+        send2trash(old_path)
 
     full_source_filename = altered_data["full_source_filename"]
     log_filename(f"4: full source filename: {full_source_filename}")

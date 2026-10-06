@@ -304,7 +304,9 @@ class AudioToolsDialog(QDialog):
             layout = QVBoxLayout(dialog)
 
             message = QLabel(
-                f"All cards in the deck '{deck['name']}' will have fields generated."
+                f"All cards in the deck '{deck['name']}' will have fields generated.\n\n"
+                "A progress window with a Stop button will be shown while this runs; "
+                "stopping it displays the stats so far."
             )
             layout.addWidget(message)
 
@@ -334,7 +336,7 @@ class AudioToolsDialog(QDialog):
 
         def update_database_button():
             tooltip("Updating database...")
-            threading.Thread(target=lambda: constants.timed_call(manage_database.update_database), daemon=True).start()
+            manage_database.start_update_database()
 
         def reload_database_button():
             tooltip("Reloading database...")
@@ -348,7 +350,7 @@ class AudioToolsDialog(QDialog):
             except FileNotFoundError:
                 pass
 
-            threading.Thread(target=lambda: constants.timed_call(manage_database.update_database), daemon=True).start()
+            manage_database.start_update_database()
 
 
         self.setWindowTitle("Audio Card Suite")

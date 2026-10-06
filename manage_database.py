@@ -521,6 +521,9 @@ def search_order(paths, root):
 
 def update_database():
     constants.database_updating.set()
+    # start from a known state so a stale count from a previous (crashed) run
+    # can never be shown; each phase below sets it to its own remaining work
+    constants.database_items_left = 0
     log_database(f"update database called")
 
     close_database()
@@ -587,7 +590,11 @@ def update_database():
             log_database(f"deleting sub: {basename}")
             to_delete.append((basename, lang, track))
 
-    constants.database_items_left = len(current_media) + len(subtitles_in_folder) + len(to_delete)
+    # "files left" is counted per phase, using the number of items that phase
+    # will actually process. The previous total (every media file + every
+    # subtitle file) also counted files that were already indexed and therefore
+    # never processed, so the count shown while updating was much too high.
+    constants.database_items_left = len(to_delete)
 
     # log and delete them. The deletes are batched because looking rows up by
     # filename in the search index is a full table scan, so one delete per file
@@ -618,6 +625,11 @@ def update_database():
     # at a time, the series ordered by folder name (see search_order)
     log_database(f"current subtitles in folder (searched in this order): "
                  f"{search_order(subtitle_paths_in_folder, folder)}")
+
+    # work out which subtitle files still need adding before processing them, so
+    # that "files left" matches the number of files handled below (already
+    # indexed ones are skipped)
+    subtitle_files_to_add = []
     for subtitle_path in subtitle_paths_in_folder:
         filename = os.path.basename(subtitle_path)
 
@@ -632,23 +644,28 @@ def update_database():
             lang_code = "und"
 
         if base_name not in indexed_subtitle_basenames:
-            if base_name in media_basenames:
-                for media_file in sorted(m for m in current_media if os.path.splitext(m)[0] == base_name):
-                    try:
-                        parsed = get_srt_converted_subtitle_from_path(subtitle_path)
-                        if not parsed:
-                            log_database(f"No valid subtitle content found in {subtitle_path}")
-                            continue
+            subtitle_files_to_add.append((subtitle_path, base_name, lang_code))
 
-                        store_subtitles(conn, media_file, "-1", lang_code, parsed)
+    constants.database_items_left = len(subtitle_files_to_add)
 
-                        log_database(f"Added subtitle content for {subtitle_path} linked to media {media_file} ({len(parsed)} entries)")
-                    except Exception as e:
-                        log_database(f"Failed to add subtitle content from {subtitle_path}: {e}")
-            else:
-                log_database(f"no media basename found for {base_name}")
+    for subtitle_path, base_name, lang_code in subtitle_files_to_add:
+        if base_name in media_basenames:
+            for media_file in sorted(m for m in current_media if os.path.splitext(m)[0] == base_name):
+                try:
+                    parsed = get_srt_converted_subtitle_from_path(subtitle_path)
+                    if not parsed:
+                        log_database(f"No valid subtitle content found in {subtitle_path}")
+                        continue
 
-            constants.database_items_left -= 1
+                    store_subtitles(conn, media_file, "-1", lang_code, parsed)
+
+                    log_database(f"Added subtitle content for {subtitle_path} linked to media {media_file} ({len(parsed)} entries)")
+                except Exception as e:
+                    log_database(f"Failed to add subtitle content from {subtitle_path}: {e}")
+        else:
+            log_database(f"no media basename found for {base_name}")
+
+        constants.database_items_left -= 1
 
     # Extract subtitles from all source files
     extract_all_subtitle_tracks_and_update_db(conn)
@@ -700,6 +717,25 @@ def update_database():
     constants.database_updating.clear()
     constants.database_items_left = 0
     return conn
+
+
+def start_update_database():
+    """Runs update_database in a background thread.
+
+    The 'updating' flag and the 'files left' counter are always cleared, even if
+    the update raises, otherwise a failed update would leave the addon reporting
+    a stale number of files left (and every lookup blocked) until a restart.
+    """
+    def run():
+        try:
+            constants.timed_call(update_database)
+        except Exception as e:
+            log_error(f"database update failed: {e}")
+        finally:
+            constants.database_updating.clear()
+            constants.database_items_left = 0
+
+    threading.Thread(target=run, daemon=True).start()
 
 
 def extract_all_subtitle_tracks_and_update_db(conn):
@@ -831,6 +867,11 @@ def extract_all_subtitle_tracks_and_update_db(conn):
         os.path.relpath(p, folder) for p in current_media_paths
         if os.path.basename(p) not in indexed_basenames
     ]
+
+    # this phase's "files left" is the number of source files actually probed
+    # and extracted below; files that are already indexed are not processed
+    # again, so counting every file in the folder would be too high
+    constants.database_items_left = len(media_to_process)
 
     # probe and extract a few files at a time, in parallel (ffprobe/ffmpeg are
     # separate processes); results are consumed in order and only the database

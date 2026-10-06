@@ -2,12 +2,13 @@
 import difflib
 import os
 import re
+import time
 import aqt
 
 from aqt.sound import play, av_player
 from aqt.utils import tooltip
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QVBoxLayout
 from PyQt6.QtCore import QTimer
 
 from . import manage_database
@@ -1233,12 +1234,90 @@ def suppress_showInfo(*args, **kwargs):
     pass
 
 
+class BulkGenerateProgressDialog(QDialog):
+    """Modeless window shown while bulk generating, with a Stop button."""
+
+    def __init__(self, total):
+        super().__init__(aqt.mw)
+        self.setWindowTitle("Bulk Generate")
+        self.setModal(False)
+        self._total = total
+        self._done = 0
+        layout = QVBoxLayout(self)
+        self._label = QLabel(self._progress_text())
+        layout.addWidget(self._label)
+        self._stop_button = QPushButton("Stop")
+        self._stop_button.clicked.connect(self.request_stop)
+        layout.addWidget(self._stop_button)
+        self.resize(320, 90)
+
+    def _progress_text(self):
+        if constants.bulk_generate_stop.is_set():
+            return f"Stopping after this note... {self._done} / {self._total}"
+        return f"Generating fields... {self._done} / {self._total}"
+
+    def set_progress(self, done):
+        self._done = done
+        self._label.setText(self._progress_text())
+
+    def request_stop(self):
+        """Ask the batch loop to stop once the note it is on is finished."""
+        constants.bulk_generate_stop.set()
+        self._stop_button.setEnabled(False)
+        self._stop_button.setText("Stopping...")
+        self._label.setText(self._progress_text())
+
+
+def format_duration(seconds):
+    """Formats a number of seconds as e.g. '12s', '3m 20s' or '1h 04m'."""
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m {seconds:02d}s"
+
+
+def bulk_generate_stats_message(deck_name, stats, total, stopped, elapsed=None):
+    headline = "Bulk generate stopped." if stopped else "Bulk generate complete."
+    lines = [
+        headline,
+        "",
+        f"Deck: {deck_name}",
+        f"Notes processed: {stats['processed']} of {total}",
+        f"Fields updated: {stats['updated']}",
+        f"Skipped (already complete): {stats['unchanged']}",
+        f"Errors: {stats['failed']}",
+    ]
+
+    if elapsed is not None:
+        lines.append(f"Time: {format_duration(elapsed)}")
+        if elapsed > 0:
+            lines.append(f"Rate: {stats['processed'] / elapsed:.1f} notes/s")
+
+    return "\n".join(lines)
+
+
 def bulk_generate(deck, note_type):
+    if constants.bulk_generate_running.is_set():
+        # tooltip rather than showInfo: showInfo is suppressed while a batch
+        # from this same function is running
+        tooltip("Bulk generate is already running.")
+        return
+
     original_showInfo = aqt.utils.showInfo
     aqt.utils.showInfo = suppress_showInfo
-    try:
-        current_deck_name = deck["name"]
 
+    constants.bulk_generate_running.set()
+    constants.bulk_generate_stop.clear()
+    stats = {"processed": 0, "updated": 0, "unchanged": 0, "failed": 0}
+    total = 0
+    start_time = None
+    current_deck_name = deck["name"]
+    progress = None
+    try:
         log_command("Running bulk_generate...")
         log_command(f"Deck: {current_deck_name}")
 
@@ -1257,12 +1336,46 @@ def bulk_generate(deck, note_type):
                 log_command(f"  Name: {note_type['name']}, ID: {note_type['id']}")
 
         log_command(f"note ids: {note_ids}")
+        total = len(note_ids)
+
+        progress = BulkGenerateProgressDialog(total)
+        progress.show()
+        QApplication.processEvents()
+
+        start_time = time.perf_counter()
         for note_id in note_ids:
+            if constants.bulk_generate_stop.is_set():
+                log_command("bulk generate stopped by the user")
+                break
+
             note = aqt.mw.col.get_note(note_id)
-            # same as pressing Generate Fields on the note: notes whose fields
-            # are already filled are skipped
-            generate_and_update_fields(None, note, False)
-            
-        original_showInfo(f"Bulk generate complete. Processed {len(note_ids)} notes.")
+            try:
+                # same as pressing Generate Fields on the note: notes whose
+                # fields are already filled are skipped
+                result = generate_and_update_fields(None, note, False)
+                if not result or result[1] is None:
+                    stats["failed"] += 1
+                elif result[1]:
+                    stats["updated"] += 1
+                else:
+                    stats["unchanged"] += 1
+            except Exception as e:
+                stats["failed"] += 1
+                log_error(f"bulk generate failed on note {note_id}: {e}")
+
+            stats["processed"] += 1
+            progress.set_progress(stats["processed"])
+            # let Qt repaint and deliver the Stop button's click
+            QApplication.processEvents()
     finally:
+        constants.bulk_generate_stop.clear()
+        constants.bulk_generate_running.clear()
+        if progress is not None:
+            progress.close()
         aqt.utils.showInfo = original_showInfo
+
+    stopped = stats["processed"] < total
+    elapsed = time.perf_counter() - start_time if start_time is not None else None
+    original_showInfo(
+        bulk_generate_stats_message(current_deck_name, stats, total, stopped, elapsed)
+    )

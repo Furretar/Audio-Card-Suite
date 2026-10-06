@@ -11,7 +11,7 @@ import threading
 
 
 gui_hooks.profile_did_open.append(menu.on_profile_loaded)
-threading.Thread(target=lambda: constants.timed_call(manage_database.update_database), daemon=True).start()
+manage_database.start_update_database()
 
 if constants.addon_source_folder and not os.path.exists(constants.addon_source_folder):
     os.mkdir(constants.addon_source_folder)

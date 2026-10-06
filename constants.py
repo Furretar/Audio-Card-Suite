@@ -29,6 +29,11 @@ config_dir = os.path.join(addon_dir, "config.json")
 database_updating = threading.Event()
 database_items_left = 0
 
+# bulk generate: set while a batch runs, and set by its Stop button to ask the
+# loop to finish after the current note
+bulk_generate_running = threading.Event()
+bulk_generate_stop = threading.Event()
+
 
 temp_ffmpeg_folder = os.path.join(addon_dir, "ffmpeg")
 ffmpeg_exe_name = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"

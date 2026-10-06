@@ -15,6 +15,7 @@ import tempfile
 import shutil
 import re
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 
 from . import constants
 from .constants import log_error, ffmpeg_exe_name
@@ -29,6 +30,10 @@ media_exts = audio_exts + video_exts
 ffmpeg_path, ffprobe_path = constants.get_ffmpeg_exe_path(True)
 _thread_local = threading.local()
 
+# ffprobe/ffmpeg run as separate processes, so several files can be probed and
+# extracted at the same time when the database is updated
+MAX_EXTRACTION_WORKERS = max(1, min(8, (os.cpu_count() or 2)))
+
 def get_database():
     if not hasattr(_thread_local, "conn") or _thread_local.conn is None:
         db_path = os.path.join(constants.addon_dir, 'subtitles_index.db')
@@ -37,6 +42,12 @@ def get_database():
             _thread_local.conn.execute('PRAGMA journal_mode = WAL;')
             _thread_local.conn.execute('PRAGMA synchronous = NORMAL;')
             _thread_local.conn.execute('PRAGMA busy_timeout = 30000;')
+            # this database grows to hundreds of MB, so a larger page cache,
+            # memory-mapped reads and in-memory temp tables make the big scans
+            # and inserts noticeably faster
+            _thread_local.conn.execute('PRAGMA cache_size = -65536;')     # 64 MB
+            _thread_local.conn.execute('PRAGMA mmap_size = 268435456;')   # 256 MB
+            _thread_local.conn.execute('PRAGMA temp_store = MEMORY;')
         except Exception:
             pass
         
@@ -231,6 +242,75 @@ def delete_subtitles_fts(
 
     query = f"DELETE FROM subtitle_lines_fts WHERE {' AND '.join(clauses)}"
     conn.execute(query, tuple(params))
+
+
+def delete_subtitles_fts_bulk(conn, filenames, track=None, chunk_size=200):
+    """Delete the search index rows of many files at once.
+
+    filename/track/language are UNINDEXED columns of subtitle_lines_fts, so any
+    lookup on them is a full table scan. Deleting file by file therefore costs
+    one scan per file while deleting in chunks costs one scan per chunk, which
+    is orders of magnitude faster when a folder with many files is removed.
+    When `track` is given only that track is deleted (used for user placed
+    subtitles, which are stored with track = -1).
+    """
+    if not conn:
+        return
+    names = sorted({f for f in filenames if f})
+    for i in range(0, len(names), chunk_size):
+        batch = names[i:i + chunk_size]
+        placeholders = ','.join('?' * len(batch))
+        if track is None:
+            conn.execute(f"DELETE FROM subtitle_lines_fts WHERE filename IN ({placeholders})", batch)
+            conn.execute(f"DELETE FROM subtitles WHERE filename IN ({placeholders})", batch)
+        else:
+            conn.execute(
+                f"DELETE FROM subtitle_lines_fts WHERE filename IN ({placeholders}) AND track = ?",
+                batch + [str(track)]
+            )
+            conn.execute(
+                f"DELETE FROM subtitles WHERE filename IN ({placeholders}) AND track = ?",
+                batch + [str(track)]
+            )
+        conn.execute(f"DELETE FROM subtitle_access WHERE filename IN ({placeholders})", batch)
+
+
+def delete_media_rows_bulk(conn, filenames, chunk_size=200):
+    """Delete the per-media bookkeeping rows of many missing files at once."""
+    if not conn:
+        return
+    names = sorted({f for f in filenames if f})
+    for i in range(0, len(names), chunk_size):
+        batch = names[i:i + chunk_size]
+        placeholders = ','.join('?' * len(batch))
+        conn.execute(f"DELETE FROM media_tracks WHERE filename IN ({placeholders})", batch)
+        conn.execute(f"DELETE FROM media_audio_start_times WHERE filename IN ({placeholders})", batch)
+        conn.execute(f"DELETE FROM subtitle_access WHERE filename IN ({placeholders})", batch)
+
+
+def store_subtitles(conn, filename, track, language, parsed_blocks):
+    """Store one subtitle track plus its search index rows in one transaction.
+
+    The connection runs in autocommit mode, so without an explicit transaction
+    every row index_parsed_subtitles_fts() writes would be committed on its own,
+    which measures ~20x slower than writing them all in a single transaction.
+    """
+    conn.execute("BEGIN")
+    try:
+        conn.execute(
+            'INSERT INTO subtitles (filename, language, auto_language_code, track, content) VALUES (?, ?, ?, ?, ?)',
+            (filename, language, language, str(track), json.dumps(parsed_blocks, ensure_ascii=False))
+        )
+        index_parsed_subtitles_fts(conn, filename, str(track), language, parsed_blocks)
+        conn.execute('''
+        INSERT INTO subtitle_access(filename, last_accessed)
+        VALUES (?, CURRENT_TIMESTAMP)
+        ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
+        ''', (filename,))
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
 
 def search_subtitles_fts(
     conn,
@@ -468,20 +548,20 @@ def update_database():
 
     constants.database_items_left = len(current_media) + len(subtitles_in_folder) + len(to_delete)
 
-    # log and delete them
-    for basename, lang, track in to_delete:
-        conn.execute(
-            "DELETE FROM subtitles WHERE filename=? AND language=? AND track=?",
-            (basename, lang, track),
-        )
-        delete_subtitles_fts(conn, basename, track=track, language=lang)
-
-        conn.execute(
-            "DELETE FROM subtitle_access WHERE filename=?",
-            (basename,)
-        )
-        log_database(f"Removed subtitle: file={basename}, track={track}, lang={lang}")
-        constants.database_items_left -= 1
+    # log and delete them. The deletes are batched because looking rows up by
+    # filename in the search index is a full table scan, so one delete per file
+    # would mean one scan per file.
+    if to_delete:
+        try:
+            conn.execute("BEGIN")
+            delete_subtitles_fts_bulk(conn, [basename for basename, _, _ in to_delete])
+            for basename, lang, track in to_delete:
+                log_database(f"Removed subtitle: file={basename}, track={track}, lang={lang}")
+                constants.database_items_left -= 1
+            conn.execute("COMMIT")
+        except Exception as e:
+            conn.execute("ROLLBACK")
+            log_error(f"Failed to delete orphaned subtitles: {e}")
 
     # get current media basenames (without extension)
     media_basenames = {os.path.splitext(f)[0] for f in current_media}
@@ -516,18 +596,7 @@ def update_database():
                             log_database(f"No valid subtitle content found in {subtitle_path}")
                             continue
 
-                        conn.execute(
-                            'INSERT INTO subtitles (filename, language, auto_language_code, track, content) VALUES (?, ?, ?, ?, ?)',
-                            (media_file, lang_code, lang_code, "-1", json.dumps(parsed, ensure_ascii=False))
-                        )
-                        index_parsed_subtitles_fts(conn, media_file, "-1", lang_code, parsed)
-
-
-                        conn.execute('''
-                        INSERT INTO subtitle_access(filename, last_accessed)
-                        VALUES (?, CURRENT_TIMESTAMP)
-                        ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
-                        ''', (media_file,))
+                        store_subtitles(conn, media_file, "-1", lang_code, parsed)
 
                         log_database(f"Added subtitle content for {subtitle_path} linked to media {media_file} ({len(parsed)} entries)")
                     except Exception as e:
@@ -543,11 +612,17 @@ def update_database():
     # Remove missing media entries
     cursor = conn.execute("SELECT DISTINCT filename FROM media_tracks")
     indexed_media = {r[0] for r in cursor}
-    for mf in sorted(indexed_media - current_media):
-        conn.execute("DELETE FROM media_tracks WHERE filename=?", (mf,))
-        conn.execute("DELETE FROM media_audio_start_times WHERE filename=?", (mf,))
-        conn.execute("DELETE FROM subtitle_access WHERE filename=?", (mf,))
+    missing_media = sorted(indexed_media - current_media)
+    for mf in missing_media:
         log_database(f"Removed media entries for: {mf}")
+    if missing_media:
+        try:
+            conn.execute("BEGIN")
+            delete_media_rows_bulk(conn, missing_media)
+            conn.execute("COMMIT")
+        except Exception as e:
+            conn.execute("ROLLBACK")
+            log_error(f"Failed to remove missing media rows: {e}")
 
     # Remove orphaned user-placed subtitle entries (track = -1) whose source files no longer exist
     # Recompute current subtitle base_names in folder (same logic as above)
@@ -557,21 +632,21 @@ def update_database():
         present_subtitle_basenames.add(base_name)
 
     cursor = conn.execute("SELECT filename, language, track FROM subtitles WHERE track = '-1'")
-    for filename, language, track in cursor:
-        base_name = os.path.splitext(filename)[0]
-        if base_name not in present_subtitle_basenames:
-            conn.execute(
-                "DELETE FROM subtitles WHERE filename=? AND language=? AND track=?",
-                (filename, language, track),
-            )
-            delete_subtitles_fts(conn, filename, track=track, language=language)
-
-            conn.execute(
-                "DELETE FROM subtitle_access WHERE filename=?",
-                (filename,)
-            )
-            log_database(f"Removed orphaned user subtitle: file={filename}, lang={language}, track={track}\n"
-                         f"base name: {base_name} not in present sub basenames: {present_subtitle_basenames}")
+    orphaned_user_subs = [
+        (filename, language, track) for filename, language, track in cursor
+        if os.path.splitext(filename)[0] not in present_subtitle_basenames
+    ]
+    if orphaned_user_subs:
+        try:
+            conn.execute("BEGIN")
+            delete_subtitles_fts_bulk(conn, [filename for filename, _, _ in orphaned_user_subs], track="-1")
+            for filename, language, track in orphaned_user_subs:
+                log_database(f"Removed orphaned user subtitle: file={filename}, lang={language}, track={track}\n"
+                             f"base name: {os.path.splitext(filename)[0]} not in present sub basenames: {present_subtitle_basenames}")
+            conn.execute("COMMIT")
+        except Exception as e:
+            conn.execute("ROLLBACK")
+            log_error(f"Failed to remove orphaned user subtitles: {e}")
 
     conn.commit()
     try:
@@ -674,6 +749,32 @@ def extract_all_subtitle_tracks_and_update_db(conn):
         finally:
             shutil.rmtree(temp_dir)
 
+    def probe_and_extract(media_file):
+        """Runs in a worker thread; only ffmpeg/ffprobe are used, never the DB."""
+        path = os.path.join(folder, media_file)
+        info = run_ffprobe(path)
+        if not info:
+            return media_file, None, None
+
+        streams = [
+            s for s in info.get("streams", [])
+            if s.get("codec_type") == "subtitle" and s.get("codec_name") in ("subrip", "ass", "srt", "ssa", "mov_text", "webvtt")
+        ]
+
+        if not streams:
+            log_database(f"No subtitle streams in {media_file}, skipping")
+            return media_file, [], None
+
+        log_database(f"Found {len(streams)} subtitle streams in {media_file}")
+        return media_file, streams, extract_all_subs_single(path, streams)
+
+    # every (filename, track, language) already stored, so the per-track check
+    # below doesn't have to run a query each time
+    indexed_keys = {
+        (r[0], str(r[1]), r[2])
+        for r in conn.execute('SELECT DISTINCT filename, track, language FROM subtitles')
+    }
+
     # alphabetical walk: folder a and its files first, then folder b, ...
     current_media_paths = ordered_source_files(folder, media_exts)
     current_media = {os.path.relpath(p, folder) for p in current_media_paths}
@@ -687,26 +788,21 @@ def extract_all_subtitle_tracks_and_update_db(conn):
         if os.path.basename(p) not in indexed_basenames
     ]
 
-    for media_file in media_to_process:
-        log_database(f"processing file: {media_file}")
-        path = os.path.join(folder, media_file)
-        info = run_ffprobe(path)
+    # probe and extract a few files at a time, in parallel (ffprobe/ffmpeg are
+    # separate processes); results are consumed in order and only the database
+    # writes happen on this thread
+    def extraction_stream(files):
+        if not files:
+            return
+        workers = max(1, min(MAX_EXTRACTION_WORKERS, len(files)))
+        if workers > 1:
+            log_database(f"extracting subtitles with {workers} parallel workers")
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            yield from pool.map(probe_and_extract, files)
 
-        if not info:
-            continue
-
-        streams = [
-            s for s in info.get("streams", [])
-            if s.get("codec_type") == "subtitle" and s.get("codec_name") in ("subrip", "ass", "srt", "ssa", "mov_text", "webvtt")
-        ]
-
-        if not streams:
-            log_database(f"No subtitle streams in {media_file}, skipping")
-            continue
-
-        log_database(f"Found {len(streams)} subtitle streams in {media_file}")
-        all_texts = extract_all_subs_single(path, streams)
-        if all_texts is None:
+    for media_file, streams, all_texts in extraction_stream(media_to_process):
+        if not streams or all_texts is None:
+            constants.database_items_left -= 1
             continue
 
         for idx, (stream, text) in enumerate(zip(streams, all_texts), 1):
@@ -719,7 +815,8 @@ def extract_all_subtitle_tracks_and_update_db(conn):
                 log_database(f"skip unsupported codec {codec}")
                 continue
 
-            if check_already_indexed(conn, os.path.basename(media_file), track, lang):
+            basename = os.path.basename(media_file)
+            if (basename, str(track), lang) in indexed_keys:
                 log_database(f"skip already indexed track={track}, lang={lang}")
                 continue
 
@@ -739,21 +836,20 @@ def extract_all_subtitle_tracks_and_update_db(conn):
                     continue
                 parsed.append([lines[0], start, end, content])
 
-            conn.executemany(
-                'INSERT INTO subtitles (filename, language, auto_language_code, track, content) VALUES (?,?,?,?,?)',
-                [(os.path.basename(media_file), lang, lang, str(track),
-                  json.dumps(parsed, ensure_ascii=False))]
-            )
-            index_parsed_subtitles_fts(conn, os.path.basename(media_file), str(track), lang, parsed)
+            try:
+                store_subtitles(conn, basename, track, lang, parsed)
+                # remember which streams the file has, so lookups by language
+                # code (get_subtitle_track_number_by_code) can work
+                conn.execute(
+                    'INSERT OR REPLACE INTO media_tracks (filename, track, language, type) VALUES (?, ?, ?, ?)',
+                    (basename, track, lang, 'subtitle')
+                )
+            except Exception as e:
+                log_error(f"Failed to store subtitles for {basename}, track={track}, lang={lang}: {e}")
+                continue
 
-
-            conn.execute('''
-            INSERT INTO subtitle_access(filename, last_accessed)
-            VALUES (?, CURRENT_TIMESTAMP)
-            ON CONFLICT(filename) DO UPDATE SET last_accessed = CURRENT_TIMESTAMP
-            ''', (os.path.basename(media_file),))
-            log_database(f"Inserted {len(parsed)} blocks for {os.path.basename(media_file)}, track={track}, lang={lang}")
-            conn.commit()
+            indexed_keys.add((basename, str(track), lang))
+            log_database(f"Inserted {len(parsed)} blocks for {basename}, track={track}, lang={lang}")
         constants.database_items_left -= 1
 
     conn.commit()

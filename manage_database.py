@@ -82,6 +82,11 @@ def get_database():
         )
         ''')
 
+        # sort_key remembers the order files are searched in (see search_order)
+        access_cols = {row[1] for row in _thread_local.conn.execute('PRAGMA table_info(subtitle_access)')}
+        if 'sort_key' not in access_cols:
+            _thread_local.conn.execute('ALTER TABLE subtitle_access ADD COLUMN sort_key INTEGER')
+
         # Fast O(1) check: backfill subtitle_lines_fts if table is empty but subtitles has data
         has_fts = _thread_local.conn.execute("SELECT 1 FROM subtitle_lines_fts LIMIT 1").fetchone()
         if not has_fts:
@@ -346,8 +351,10 @@ def search_subtitles_fts(
     sql = f"""
         SELECT f.filename, f.track, f.language, f.line_index, f.start_time, f.end_time, f.clean_text
         FROM subtitle_lines_fts f
+        LEFT JOIN subtitle_access a ON f.filename = a.filename
         WHERE {' AND '.join(clauses)}
-        ORDER BY f.filename ASC,
+        ORDER BY COALESCE(a.sort_key, 2147483647) ASC,
+                 f.filename ASC,
                  CAST(f.line_index AS INTEGER) ASC
     """
 
@@ -491,6 +498,28 @@ def ordered_source_files(folder, extensions):
     return paths
 
 
+def search_order(paths, root):
+    """The order files are searched/prioritised in.
+
+    Files of one series are kept together instead of being interleaved with the
+    other series, and the series themselves are ordered by their alphabetically
+    first file. So the series whose first file sorts first is searched first,
+    in full, before the next series: e.g. every file of
+    "2 [物語シリーズ] Monogatari ..." (first file "01 - 化物語 上 ...") is
+    searched before "1 [Furretar] 戯言 ..." (first file "01 クビキリ...").
+    """
+    groups = {}
+    for p in paths:
+        rel = os.path.relpath(p, root)
+        series = rel.split(os.sep)[0]
+        groups.setdefault(series, []).append(os.path.basename(p))
+
+    ordered = []
+    for series in sorted(groups, key=lambda s: (min(groups[s]), s)):
+        ordered.extend(sorted(groups[series]))
+    return ordered
+
+
 def update_database():
     constants.database_updating.set()
     log_database(f"update database called")
@@ -529,6 +558,21 @@ def update_database():
     subtitle_extensions = constants.subtitle_extensions
     subtitle_paths_in_folder = ordered_source_files(folder, subtitle_extensions)
     subtitles_in_folder = {os.path.basename(p) for p in subtitle_paths_in_folder}
+
+    # record the order files are searched in, so the lookups prioritise them in
+    # exactly that order (see search_order)
+    media_search_order = search_order(media_paths_in_folder, folder)
+    try:
+        conn.execute("BEGIN")
+        conn.executemany(
+            "INSERT INTO subtitle_access (filename, last_accessed, sort_key) VALUES (?, CURRENT_TIMESTAMP, ?) "
+            "ON CONFLICT(filename) DO UPDATE SET sort_key = excluded.sort_key",
+            [(name, i) for i, name in enumerate(media_search_order)],
+        )
+        conn.execute("COMMIT")
+    except Exception as e:
+        conn.execute("ROLLBACK")
+        log_error(f"Failed to record the file search order: {e}")
 
     # collect orphaned subtitles
     cursor = conn.execute('SELECT filename, language, track FROM subtitles')
@@ -571,9 +615,10 @@ def update_database():
 
     indexed_subtitle_basenames = {os.path.splitext(f)[0] for f in indexed_subtitle_files}
 
-    # listed in the order the subtitles are searched/prioritised in: alphabetical
-    # by filename (then by track number), matching the ORDER BY of the lookups
-    log_database(f"current subtitles in folder (searched in this order): {sorted(subtitles_in_folder)}")
+    # listed in the order the subtitles are searched/prioritised in: one series
+    # at a time, each series ordered by its alphabetically first file
+    log_database(f"current subtitles in folder (searched in this order): "
+                 f"{search_order(subtitle_paths_in_folder, folder)}")
     for subtitle_path in subtitle_paths_in_folder:
         filename = os.path.basename(subtitle_path)
 

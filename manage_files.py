@@ -245,7 +245,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                                       WHERE s.filename = ?
                                         AND s.track = ?
                                         AND s.language = ?
-                                      ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC
+                                      ORDER BY COALESCE(a.sort_key, 2147483647) ASC, s.filename ASC, CAST(s.track AS INTEGER) ASC
                                       ''', (full_source_filename, track, code))
         else:
             cursor = database.execute('''
@@ -254,7 +254,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                                                JOIN subtitle_access a ON s.filename = a.filename
                                       WHERE s.filename = ?
                                         AND s.language = ?
-                                      ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC
+                                      ORDER BY COALESCE(a.sort_key, 2147483647) ASC, s.filename ASC, CAST(s.track AS INTEGER) ASC
                                       ''', (full_source_filename, code))
         result = cursor.fetchone()
 
@@ -279,7 +279,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                 WHERE s.filename = ?
                   AND s.track = '-1'
                   AND s.language = 'und'
-                ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
+                ORDER BY COALESCE(a.sort_key, 2147483647) ASC, s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
                 '''
         cursor.execute(query, (full_source_filename,))
         result = cursor.fetchone()
@@ -302,7 +302,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                         WHERE s.filename LIKE ?
                           AND s.track = ?
                           AND s.language = ?
-                        ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
+                        ORDER BY COALESCE(a.sort_key, 2147483647) ASC, s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
                         '''
                 cursor.execute(query, (like_pattern, track, code))
                 row = cursor.fetchone()
@@ -319,7 +319,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                              JOIN subtitle_access a ON s.filename = a.filename
                     WHERE s.filename LIKE ?
                       AND s.language = ?
-                    ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
+                    ORDER BY COALESCE(a.sort_key, 2147483647) ASC, s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
                     '''
             cursor.execute(query, (like_pattern, code))
             row = cursor.fetchone()
@@ -338,7 +338,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                     FROM subtitles s
                              JOIN subtitle_access a ON s.filename = a.filename
                     WHERE s.filename LIKE ?
-                    ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC \
+                    ORDER BY COALESCE(a.sort_key, 2147483647) ASC, s.filename ASC, CAST(s.track AS INTEGER) ASC \
                     '''
             cursor.execute(query, (like_pattern,))
             rows = cursor.fetchall()
@@ -358,7 +358,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                              JOIN subtitle_access a ON s.filename = a.filename
                     WHERE s.filename LIKE ?
                       AND s.language = ?
-                    ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
+                    ORDER BY COALESCE(a.sort_key, 2147483647) ASC, s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
                     '''
             cursor.execute(query, (like_pattern, code))
             row = cursor.fetchone()
@@ -613,7 +613,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
             WHERE s.filename = ?
               AND s.track = ?
               AND s.language = ?
-            ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
+            ORDER BY COALESCE(a.sort_key, 2147483647) ASC, s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
             '''
     params = [base_no_ext, str(track), code]
     cursor = db.execute(query, params)
@@ -629,7 +629,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
                      WHERE s.filename LIKE ?
                        AND s.track = ?
                        AND s.language = ?
-                     ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
+                     ORDER BY COALESCE(a.sort_key, 2147483647) ASC, s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
                      '''
         cursor = db.execute(query_like, (like_pattern, str(track), code))
         row = cursor.fetchone()
@@ -721,7 +721,7 @@ def get_subtitle_track_number_by_code(source_path, code):
                           WHERE m.filename = ?
                             AND m.language = ?
                             AND m.type = 'subtitle'
-                          ORDER BY CAST(m.track AS INTEGER) ASC LIMIT 1
+                          ORDER BY COALESCE(a.sort_key, 2147483647) ASC, CAST(m.track AS INTEGER) ASC LIMIT 1
                           ''', (filename, code.lower()))
 
     row = cursor.fetchone()
@@ -782,7 +782,7 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
                    WHERE s.filename = ?
                      AND s.track = ?
                      AND s.language = ?
-                   ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC
+                   ORDER BY COALESCE(a.sort_key, 2147483647) ASC, s.filename ASC, CAST(s.track AS INTEGER) ASC
                    ''', (filename, track, code))
     row = cursor.fetchone()
 

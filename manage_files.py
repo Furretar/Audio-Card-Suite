@@ -699,9 +699,12 @@ def get_source_path_from_full_filename(full_source_filename) -> str:
         if os.path.exists(path):
             return path
 
-    # Walk recursively through all subfolders except 'ignore'
+    # Walk recursively through all subfolders except 'ignore', in alphabetical
+    # order: folder a (and all the files inside it) first, then folder b, ...
     for root, dirs, files in os.walk(folder):
-        if 'ignore' in root.split(os.sep):
+        dirs.sort()
+        files.sort()
+        if 'ignore' in root.lower().split(os.sep):
             continue
         for base in possible_bases:
             for ext in all_exts:

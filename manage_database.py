@@ -392,6 +392,27 @@ def extract_subtitle_file_data(subtitle_filename):
         'base_name': base_name,
     }
 
+def ordered_source_files(folder, extensions):
+    """Every file under `folder` whose extension is in `extensions`, in a
+    deterministic alphabetical order.
+
+    Folders are walked in alphabetical order (nested folders included) and the
+    files inside a folder are collected alphabetically before moving on to the
+    next folder, i.e. folder a (and all the files inside it) first, then
+    folder b, and so on.
+    """
+    paths = []
+    for root, dirs, files in os.walk(folder):
+        dirs.sort()
+        files.sort()
+        if 'ignore' in root.lower().split(os.sep):
+            continue
+        for f in files:
+            if os.path.splitext(f)[1].lower() in extensions:
+                paths.append(os.path.join(root, f))
+    return paths
+
+
 def update_database():
     constants.database_updating.set()
     log_database(f"update database called")
@@ -421,25 +442,14 @@ def update_database():
         os.makedirs(folder)
 
 
-    # recursively get all media files, except "ignore" folder
+    # recursively get all media files, except "ignore" folder, in alphabetical
+    # order: folder a and its files first, then folder b, ...
     log_database(f"folder: {folder}")
-    media_paths_in_folder = {
-        os.path.join(root, f)
-        for root, dirs, files in os.walk(folder)
-        if 'ignore' not in root.lower().split(os.sep)
-        for f in files
-        if os.path.splitext(f)[1].lower() in media_exts
-    }
+    media_paths_in_folder = ordered_source_files(folder, media_exts)
     current_media = {os.path.basename(p) for p in media_paths_in_folder}
 
     subtitle_extensions = constants.subtitle_extensions
-    subtitle_paths_in_folder = {
-        os.path.join(root, f)
-        for root, dirs, files in os.walk(folder)
-        if 'ignore' not in root.lower().split(os.sep)
-        for f in files
-        if os.path.splitext(f)[1].lower() in subtitle_extensions
-    }
+    subtitle_paths_in_folder = ordered_source_files(folder, subtitle_extensions)
     subtitles_in_folder = {os.path.basename(p) for p in subtitle_paths_in_folder}
 
     # collect orphaned subtitles
@@ -499,7 +509,7 @@ def update_database():
 
         if base_name not in indexed_subtitle_basenames:
             if base_name in media_basenames:
-                for media_file in (m for m in current_media if os.path.splitext(m)[0] == base_name):
+                for media_file in sorted(m for m in current_media if os.path.splitext(m)[0] == base_name):
                     try:
                         parsed = get_srt_converted_subtitle_from_path(subtitle_path)
                         if not parsed:
@@ -664,19 +674,18 @@ def extract_all_subtitle_tracks_and_update_db(conn):
         finally:
             shutil.rmtree(temp_dir)
 
-    current_media = {
-        os.path.relpath(os.path.join(root, f), folder)
-        for root, dirs, files in os.walk(folder)
-        if 'ignore' not in root.split(os.sep)
-        for f in files
-        if os.path.splitext(f)[1].lower() in media_exts
-    }
+    # alphabetical walk: folder a and its files first, then folder b, ...
+    current_media_paths = ordered_source_files(folder, media_exts)
+    current_media = {os.path.relpath(p, folder) for p in current_media_paths}
 
     # fetch all filenames with any subtitle entry, use basenames only
     cursor = conn.execute('SELECT DISTINCT filename FROM subtitles')
     indexed_basenames = {os.path.basename(r[0]) for r in cursor}
 
-    media_to_process = sorted(m for m in current_media if os.path.basename(m) not in indexed_basenames)
+    media_to_process = [
+        os.path.relpath(p, folder) for p in current_media_paths
+        if os.path.basename(p) not in indexed_basenames
+    ]
 
     for media_file in media_to_process:
         log_database(f"processing file: {media_file}")

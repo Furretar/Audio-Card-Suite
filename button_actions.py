@@ -517,12 +517,13 @@ def generate_and_update_fields(editor, note, should_overwrite):
         if not new_sound_line:
             # todo: add original and sanitized filenames to database so all filenames work
             # find invalid files
-            all_files_in_folder = {
+            # alphabetical walk: folder a and its files first, then folder b, ...
+            all_files_in_folder = sorted(
                 os.path.join(root, f)
                 for root, dirs, files in os.walk(constants.folder)
                 if 'ignore' not in root.lower().split(os.sep)
                 for f in files
-            }
+            )
 
             bad_files = [
                 f for f in (all_files_in_folder)

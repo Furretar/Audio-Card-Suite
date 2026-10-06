@@ -474,18 +474,17 @@ def generate_and_update_fields(editor, note, should_overwrite, extract_sound=Tru
 
     fields_status = {
         "sound_line": not should_generate["sound_line"],
-        "sentence_line": not should_generate["sentence_line"],
+        # the sentence entry follows the image flag (not the sentence flag, which
+        # is always true): for an audiobook source the image flag is always off,
+        # so a note whose sound line is already filled counts as complete and is
+        # skipped instead of having its fields regenerated
+        "sentence_line": not should_generate["image_line"],
         "image_line": not should_generate["image_line"],
         "translation_line": not should_generate["translation_line"],
         "translation_sound_line": not should_generate["translation_sound_line"],
     }
 
     updated = False
-    # the sentence field always needs (re)generating - a shorter sentence field
-    # gets replaced by the matching subtitle sentence - so this only returns
-    # early when there is nothing left to do at all. The sound, image and
-    # translation fields keep their own should_generate flags, so a filled field
-    # is still left untouched by the generation below.
     if all(fields_status.values()) and not overwrite:
         log_filename("All fields are filled, returning.")
         current_sound_line = current_note.fields[translation_sound_idx if alt_pressed else sound_idx]
@@ -1260,10 +1259,8 @@ def bulk_generate(deck, note_type):
         log_command(f"note ids: {note_ids}")
         for note_id in note_ids:
             note = aqt.mw.col.get_note(note_id)
-            # same as pressing Generate Fields on the note: the sentence field is
-            # regenerated (so a field holding just the target word is replaced by
-            # the matching subtitle sentence) while filled sound, image and
-            # translation fields are left untouched
+            # same as pressing Generate Fields on the note: notes whose fields
+            # are already filled are skipped
             generate_and_update_fields(None, note, False)
             
         original_showInfo(f"Bulk generate complete. Processed {len(note_ids)} notes.")

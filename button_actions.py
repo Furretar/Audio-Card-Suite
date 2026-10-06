@@ -1255,7 +1255,11 @@ def bulk_generate(deck, note_type):
         log_command(f"note ids: {note_ids}")
         for note_id in note_ids:
             note = aqt.mw.col.get_note(note_id)
-            generate_and_update_fields(None, note, False)
+            # overwrite (the same as ctrl + Generate Fields): without it a note
+            # whose fields are already filled is left alone, so a sentence field
+            # holding just the target word never gets replaced by the matching
+            # sentence from the subtitle file
+            generate_and_update_fields(None, note, True)
             
         original_showInfo(f"Bulk generate complete. Processed {len(note_ids)} notes.")
     finally:

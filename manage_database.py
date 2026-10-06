@@ -346,10 +346,8 @@ def search_subtitles_fts(
     sql = f"""
         SELECT f.filename, f.track, f.language, f.line_index, f.start_time, f.end_time, f.clean_text
         FROM subtitle_lines_fts f
-        LEFT JOIN subtitle_access a ON f.filename = a.filename
         WHERE {' AND '.join(clauses)}
-        ORDER BY COALESCE(a.last_accessed, '1970-01-01 00:00:00') DESC,
-                 f.filename ASC,
+        ORDER BY f.filename ASC,
                  CAST(f.line_index AS INTEGER) ASC
     """
 
@@ -573,7 +571,9 @@ def update_database():
 
     indexed_subtitle_basenames = {os.path.splitext(f)[0] for f in indexed_subtitle_files}
 
-    log_database(f"current subtitles in folder: {subtitles_in_folder}")
+    # listed in the order the subtitles are searched/prioritised in: alphabetical
+    # by filename (then by track number), matching the ORDER BY of the lookups
+    log_database(f"current subtitles in folder (searched in this order): {sorted(subtitles_in_folder)}")
     for subtitle_path in subtitle_paths_in_folder:
         filename = os.path.basename(subtitle_path)
 

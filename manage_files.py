@@ -245,7 +245,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                                       WHERE s.filename = ?
                                         AND s.track = ?
                                         AND s.language = ?
-                                      ORDER BY a.last_accessed DESC
+                                      ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC
                                       ''', (full_source_filename, track, code))
         else:
             cursor = database.execute('''
@@ -254,7 +254,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                                                JOIN subtitle_access a ON s.filename = a.filename
                                       WHERE s.filename = ?
                                         AND s.language = ?
-                                      ORDER BY a.last_accessed DESC
+                                      ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC
                                       ''', (full_source_filename, code))
         result = cursor.fetchone()
 
@@ -267,7 +267,6 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
             # Requiring os.path.exists() here made an exact track+code hit fall through
             # to the code-only fallback, which can return a different track.
             log_filename(f"tagged_subtitle_path: {tagged_subtitle_path}")
-            safe_update_subtitle_access(database, full_source_filename)
             return tagged_subtitle_path
 
         # try matching basename (user placed file)
@@ -280,14 +279,13 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                 WHERE s.filename = ?
                   AND s.track = '-1'
                   AND s.language = 'und'
-                ORDER BY a.last_accessed DESC LIMIT 1 \
+                ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
                 '''
         cursor.execute(query, (full_source_filename,))
         result = cursor.fetchone()
 
         if result:
             log_filename(f"Found subtitle in DB for {full_source_filename} with track=-1 and language=und")
-            safe_update_subtitle_access(database, full_source_filename)
             return f"{full_source_filename}.srt"
 
         # prioritize finding the code if that tab is selected
@@ -304,7 +302,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                         WHERE s.filename LIKE ?
                           AND s.track = ?
                           AND s.language = ?
-                        ORDER BY a.last_accessed DESC LIMIT 1 \
+                        ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
                         '''
                 cursor.execute(query, (like_pattern, track, code))
                 row = cursor.fetchone()
@@ -312,8 +310,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                     base_filename, found_track, found_code = row
                     subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
                     subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-                    log_filename(f"[tab 0] subtitle_path (by track+code, recent-first): {subtitle_path}")
-                    safe_update_subtitle_access(database, base_filename)
+                    log_filename(f"[tab 0] subtitle_path (by track+code, alphabetical): {subtitle_path}")
                     return subtitle_path
 
             query = '''
@@ -322,7 +319,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                              JOIN subtitle_access a ON s.filename = a.filename
                     WHERE s.filename LIKE ?
                       AND s.language = ?
-                    ORDER BY a.last_accessed DESC LIMIT 1 \
+                    ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
                     '''
             cursor.execute(query, (like_pattern, code))
             row = cursor.fetchone()
@@ -330,8 +327,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                 base_filename, found_track, found_code = row
                 subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
                 subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-                log_filename(f"[tab 0] subtitle_path (by code, recent-first): {subtitle_path}")
-                safe_update_subtitle_access(database, base_filename)
+                log_filename(f"[tab 0] subtitle_path (by code, alphabetical): {subtitle_path}")
                 return subtitle_path
 
         # search for track
@@ -342,7 +338,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                     FROM subtitles s
                              JOIN subtitle_access a ON s.filename = a.filename
                     WHERE s.filename LIKE ?
-                    ORDER BY a.last_accessed DESC \
+                    ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC \
                     '''
             cursor.execute(query, (like_pattern,))
             rows = cursor.fetchall()
@@ -350,8 +346,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                 if db_filename.startswith(full_source_filename) and f"`track_{track}`" in db_filename:
                     subtitle_filename = f"{db_filename}`track_{track}`{db_lang}.srt"
                     subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-                    log_filename(f"[tab {selected_tab_index}] subtitle_path (by track, recent-first): {subtitle_path}")
-                    safe_update_subtitle_access(database, db_filename)
+                    log_filename(f"[tab {selected_tab_index}] subtitle_path (by track, alphabetical): {subtitle_path}")
                     return subtitle_path
 
         # search for code as a fallback if track was not found
@@ -363,7 +358,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                              JOIN subtitle_access a ON s.filename = a.filename
                     WHERE s.filename LIKE ?
                       AND s.language = ?
-                    ORDER BY a.last_accessed DESC LIMIT 1 \
+                    ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
                     '''
             cursor.execute(query, (like_pattern, code))
             row = cursor.fetchone()
@@ -371,8 +366,7 @@ def get_subtitle_file_from_database(full_source_filename, track, code, config, d
                 base_filename, found_track, found_code = row
                 subtitle_filename = f"{base_filename}`track_{found_track}`{found_code}.srt"
                 subtitle_path = os.path.join(constants.addon_source_folder, subtitle_filename)
-                log_filename(f"[tab 1+] subtitle_path (fallback by code, recent-first): {subtitle_path}")
-                safe_update_subtitle_access(database, base_filename)
+                log_filename(f"[tab 1+] subtitle_path (fallback by code, alphabetical): {subtitle_path}")
                 return subtitle_path
 
         return None
@@ -619,7 +613,7 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
             WHERE s.filename = ?
               AND s.track = ?
               AND s.language = ?
-            ORDER BY a.last_accessed DESC LIMIT 1 \
+            ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
             '''
     params = [base_no_ext, str(track), code]
     cursor = db.execute(query, params)
@@ -635,14 +629,10 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
                      WHERE s.filename LIKE ?
                        AND s.track = ?
                        AND s.language = ?
-                     ORDER BY a.last_accessed DESC LIMIT 1 \
+                     ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC LIMIT 1 \
                      '''
         cursor = db.execute(query_like, (like_pattern, str(track), code))
         row = cursor.fetchone()
-
-    # update last_accessed after fetching
-    if row:
-        safe_update_subtitle_access(db, row[1])
 
     if row is None:
         log_error(f"No subtitle content found in DB for filename={base_no_ext} track={track} language={code}")
@@ -731,13 +721,11 @@ def get_subtitle_track_number_by_code(source_path, code):
                           WHERE m.filename = ?
                             AND m.language = ?
                             AND m.type = 'subtitle'
-                          ORDER BY a.last_accessed DESC LIMIT 1
+                          ORDER BY CAST(m.track AS INTEGER) ASC LIMIT 1
                           ''', (filename, code.lower()))
 
     row = cursor.fetchone()
     if row:
-        # Update last_accessed for this access
-        safe_update_subtitle_access(conn, filename)
         return row[0]
 
     return None
@@ -794,7 +782,7 @@ def get_subtitle_blocks_from_index_range_and_path(start_index, end_index, subtit
                    WHERE s.filename = ?
                      AND s.track = ?
                      AND s.language = ?
-                   ORDER BY a.last_accessed DESC
+                   ORDER BY s.filename ASC, CAST(s.track AS INTEGER) ASC
                    ''', (filename, track, code))
     row = cursor.fetchone()
 
@@ -930,8 +918,6 @@ def get_target_subtitle_block_and_subtitle_path_from_sentence_line(sentence_line
         actual_path = os.path.join(constants.addon_source_folder, subtitle_name)
 
         try:
-            safe_update_subtitle_access(subtitle_database, fn)
-
             # Compute corresponding_audio_track_count if multiple tracks have the same language
             corresponding_audio_track_count = 0
             if lang and lang != "und" and str(trk) != "-1":

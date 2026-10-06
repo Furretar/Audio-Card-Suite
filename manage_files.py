@@ -18,6 +18,53 @@ from .constants import log_image
 from .constants import log_command
 
 
+# Generating one card looks the same things up several times, and probing a file
+# with ffprobe or walking the sources folder is slow, so the results are cached
+# for the session. The audio stream list is keyed by the file's mtime/size, so it
+# is re-read when the file itself changes.
+_audio_streams_cache = {}      # (path, mtime_ns, size) -> [audio streams]
+_source_path_cache = {}        # source filename -> full path
+
+
+def _file_cache_key(path):
+    try:
+        st = os.stat(path)
+        return (path, st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (path, None, None)
+
+
+def get_audio_streams(source_path):
+    """The audio streams ffprobe reports for a file, cached.
+
+    Returns the stream list, or None when ffprobe reported nothing (the caller
+    treats that the same way it always did).
+    """
+    key = _file_cache_key(source_path)
+    cached = _audio_streams_cache.get(key)
+    if cached is not None:
+        log_command(f"[ffprobe cache] reusing the audio streams of {source_path}")
+        return cached
+
+    _, ffprobe_path = constants.get_ffmpeg_exe_path()
+    result = constants.silent_run(
+        [ffprobe_path, "-v", "error", "-select_streams", "a", "-show_entries",
+         "stream=index:stream_tags=language", "-of", "json", source_path],
+        capture_output=True, text=True,
+    )
+    log_command(f"[ffprobe audio stream scan]\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
+    info = json.loads(result.stdout)
+    if not info:
+        return None
+
+    streams = info.get("streams", [])
+    _audio_streams_cache[key] = streams
+    # drop entries for older versions of the same file
+    for stale in [k for k in _audio_streams_cache if k[0] == source_path and k != key]:
+        _audio_streams_cache.pop(stale, None)
+    return streams
+
+
 # todo: implement 4 character sha hash to disambiguate files with the same name and extension
 # extracts all data in a sound line and returns it as a dict
 # performs only string operations
@@ -675,6 +722,13 @@ def get_overlapping_blocks_from_subtitle_path_and_hmsms_timings(subtitle_path, s
 def get_source_path_from_full_filename(full_source_filename) -> str:
     all_exts = constants.audio_extensions + constants.video_extensions
 
+    # walking the whole sources folder is slow and the same file is looked up
+    # several times while one card is generated, so found paths are cached
+    cached = _source_path_cache.get(full_source_filename)
+    if cached and os.path.exists(cached):
+        log_command(f"[cache] source path for {full_source_filename}: {cached}")
+        return cached
+
     basename_no_ext = os.path.splitext(full_source_filename)[0]
     possible_bases = [basename_no_ext, basename_no_ext.replace("_", " ")]
 
@@ -687,6 +741,7 @@ def get_source_path_from_full_filename(full_source_filename) -> str:
         log_image(f"searching path for video/audio: {path}")
         log_command(f"now checking: {path}")
         if os.path.exists(path):
+            _source_path_cache[full_source_filename] = path
             return path
 
     # Walk recursively through all subfolders except 'ignore', in alphabetical
@@ -704,6 +759,7 @@ def get_source_path_from_full_filename(full_source_filename) -> str:
                     log_image(f"searching path for video/audio: {full_path}")
                     log_command(f"now checking: {full_path}")
                     if os.path.exists(full_path):
+                        _source_path_cache[full_source_filename] = full_path
                         return full_path
 
     log_error(f"No source file found for base name: {full_source_filename}")
@@ -1290,16 +1346,9 @@ def create_ffmpeg_extract_audio_command(source_path, start_time, end_time, colle
 
     audio_track_index = None
     try:
-        result = constants.silent_run(
-            [ffprobe_path, "-v", "error", "-select_streams", "a", "-show_entries",
-             "stream=index:stream_tags=language", "-of", "json", source_path],
-            capture_output=True, text=True,
-        )
-        log_command(f"[ffprobe audio stream scan]\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
-        info = json.loads(result.stdout)
-        streams = info.get("streams", [])
+        streams = get_audio_streams(source_path)
 
-        if not info:
+        if streams is None:
             log_error(f"no info from file: {source_path}")
             return []
 
@@ -1824,29 +1873,17 @@ def alter_sound_file_times(altered_data, sound_line, config, use_translation_dat
 
 
 def audio_language_exists_in_file(full_source_path, requested_lang):
-    _, ffprobe_exe = constants.get_ffmpeg_exe_path()
-
-    command = [
-        ffprobe_exe,
-        "-v", "error",
-        "-select_streams", "a",
-        "-show_entries", "stream=index:stream_tags=language",
-        "-of", "json",
-        full_source_path
-    ]
-
-    result = constants.silent_run(command, capture_output=True, text=True)
-    if not result:
-        return False
-
+    # reuses the cached ffprobe result (get_audio_streams runs the same command)
     try:
-        data = json.loads(result.stdout)
-        streams = data.get("streams", [])
-        for stream in streams:
-            language = stream.get("tags", {}).get("language")
-            if language == requested_lang:
-                return True
+        streams = get_audio_streams(full_source_path)
     except Exception:
         return False
+
+    if not streams:
+        return False
+
+    for stream in streams:
+        if stream.get("tags", {}).get("language") == requested_lang:
+            return True
 
     return False

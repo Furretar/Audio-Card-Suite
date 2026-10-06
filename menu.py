@@ -683,7 +683,7 @@ class AudioToolsDialog(QDialog):
         self.bulkGenerateButton = QPushButton("Bulk Generate")
         self.bulkGenerateButton.setDefault(True)
         self.bulkGenerateButton.clicked.connect(confirm_bulk_generate)
-        self.bulkGenerateButton.setToolTip("Regenerates every note in the current deck, the same as ctrl + Generate Fields: sentence fields holding just the target word are replaced by the matching sentence from the subtitle file.")
+        self.bulkGenerateButton.setToolTip("Same as pressing Generate Fields on every note in the current deck: the sentence field is regenerated, so a field holding just the target word is replaced by the matching subtitle sentence. Filled sound, image and translation fields are left alone.")
         hbox2.addWidget(self.bulkGenerateButton)
 
         self.updateDatabaseButton = QPushButton("Update Database")

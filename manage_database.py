@@ -501,12 +501,11 @@ def ordered_source_files(folder, extensions):
 def search_order(paths, root):
     """The order files are searched/prioritised in.
 
-    Files of one series are kept together instead of being interleaved with the
-    other series, and the series themselves are ordered by their alphabetically
-    first file. So the series whose first file sorts first is searched first,
-    in full, before the next series: e.g. every file of
-    "2 [物語シリーズ] Monogatari ..." (first file "01 - 化物語 上 ...") is
-    searched before "1 [Furretar] 戯言 ..." (first file "01 クビキリ...").
+    Files are grouped by their series (the first folder under the sources
+    folder) and the series are ordered by their folder name - i.e. the same
+    order the folders appear in the sources folder - so a series is searched in
+    full before the next one. Inside a series the files are ordered
+    alphabetically.
     """
     groups = {}
     for p in paths:
@@ -515,7 +514,7 @@ def search_order(paths, root):
         groups.setdefault(series, []).append(os.path.basename(p))
 
     ordered = []
-    for series in sorted(groups, key=lambda s: (min(groups[s]), s)):
+    for series in sorted(groups):
         ordered.extend(sorted(groups[series]))
     return ordered
 
@@ -616,7 +615,7 @@ def update_database():
     indexed_subtitle_basenames = {os.path.splitext(f)[0] for f in indexed_subtitle_files}
 
     # listed in the order the subtitles are searched/prioritised in: one series
-    # at a time, each series ordered by its alphabetically first file
+    # at a time, the series ordered by folder name (see search_order)
     log_database(f"current subtitles in folder (searched in this order): "
                  f"{search_order(subtitle_paths_in_folder, folder)}")
     for subtitle_path in subtitle_paths_in_folder:

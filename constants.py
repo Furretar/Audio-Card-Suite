@@ -65,8 +65,10 @@ BACKTICK_PATTERN = re.compile(
     r'(?:`(?P<lang_code>[a-z]{3})(?:-(?P<timing_lang_code>[a-z]{3}))?)?'
     # optional subtitle track, disambiguates files with several tracks sharing a language
     r'(?:`track_(?P<subtitle_track>-?\d+))?'
-    r'`(?P<start_time>\d{2}h\d{2}m\d{2}s\d{3}ms)-'
-    r'(?P<end_time>\d{2}h\d{2}m\d{2}s\d{3}ms)`'
+    # start/end are the compact filename form (111536457); the legacy hmsms form
+    # (11h15m36s457ms) is still accepted so older cards keep parsing
+    r'`(?P<start_time>(?:\d{2}h\d{2}m\d{2}s\d{3}ms|\d+))-'
+    r'(?P<end_time>(?:\d{2}h\d{2}m\d{2}s\d{3}ms|\d+))`'
     r'(?P<subtitle_range>\d+-\d+)'
     r'(?:`(?P<normalize_tag>[^`]+))?'
     r'\.(?P<sound_file_extension>\w+)'

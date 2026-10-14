@@ -1203,7 +1203,7 @@ def get_fields_from_note(note):
 
 
 def is_normalized(sound_line):
-    return bool(re.search(r'`-\d+LUFS\.\w+$', sound_line))
+    return bool(re.search(r'`(?:-\d+LUFS|\d+F)\.\w+$', sound_line))
 
 
 def on_note_loaded(editor, override=False):

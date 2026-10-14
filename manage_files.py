@@ -95,6 +95,10 @@ def extract_sound_line_data(sound_line):
         subtitle_track = int(subtitle_track) if subtitle_track is not None else None
         start_time = groups["start_time"]
         end_time = groups["end_time"]
+        # filenames store a compact timestamp (111536457); keep the raw form to
+        # rebuild the path, but expose hmsms to the rest of the code
+        start_time_hmsms = filename_time_to_hmsms(start_time)
+        end_time_hmsms = filename_time_to_hmsms(end_time)
         subtitle_range = groups["subtitle_range"]
         sound_file_extension = groups["sound_file_extension"]
         normalize_tag = groups.get("normalize_tag") or ""
@@ -124,7 +128,7 @@ def extract_sound_line_data(sound_line):
             return None
 
         m4b_image_filename = f"{filename_base}{source_file_extension}.jpg"
-        image_filename = f"{filename_base}.{sound_file_extension}`{start_time}.jpg"
+        image_filename = f"{filename_base}.{sound_file_extension}`{start_time_hmsms}.jpg"
         image_collection_path = os.path.join(constants.get_collection_dir(), image_filename)
         m4b_image_collection_path = os.path.join(constants.get_collection_dir(), m4b_image_filename)
 
@@ -136,8 +140,8 @@ def extract_sound_line_data(sound_line):
             "lang_code": lang_code,
             "timing_lang_code": timing_lang_code,
             "subtitle_track": subtitle_track,
-            "start_time": start_time,
-            "end_time": end_time,
+            "start_time": start_time_hmsms,
+            "end_time": end_time_hmsms,
             "start_index": start_index,
             "end_index": end_index,
             "normalize_tag": normalize_tag,
@@ -1501,7 +1505,7 @@ def create_just_normalize_audio_command(source_path, config, note_type_name):
     ext_no_dot = file_extension[1:].lower()
 
     if lufs != -1:
-        new_collection_path = f"{base}`{lufs}LUFS{file_extension}"
+        new_collection_path = f"{base}`{abs(int(lufs))}F{file_extension}"
         filter_args = ["-af", f"loudnorm=I={lufs}:TP=-1.5:LRA=11"]
     else:
         new_collection_path = f"{base}.{file_extension}"
@@ -1606,6 +1610,27 @@ def time_srt_to_milliseconds(t):
     return (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
 
 
+def hmsms_to_filename_time(ts: str) -> str:
+    """Compact an hmsms timestamp (11h15m36s457ms) to the form used in media
+    filenames (111536457). Non-hmsms input is returned unchanged."""
+    match = re.fullmatch(r"(\d+)h(\d+)m(\d+)s(\d+)ms", ts)
+    if not match:
+        return ts
+    hours, minutes, seconds, millis = (int(part) for part in match.groups())
+    return f"{hours:02d}{minutes:02d}{seconds:02d}{millis:03d}"
+
+
+def filename_time_to_hmsms(ts: str) -> str:
+    """Inverse of hmsms_to_filename_time. Non-compact input is returned unchanged."""
+    if not re.fullmatch(r"\d{9,}", ts):
+        return ts
+    millis = ts[-3:]
+    seconds = ts[-5:-3]
+    minutes = ts[-7:-5]
+    hours = ts[:-7]
+    return f"{int(hours):02d}h{int(minutes):02d}m{int(seconds):02d}s{int(millis):03d}ms"
+
+
 def to_hmsms_format(ts) -> str:
     if isinstance(ts, int):
         hours = ts // (3600 * 1000)
@@ -1617,6 +1642,11 @@ def to_hmsms_format(ts) -> str:
         return f"{hours:02d}h{minutes:02d}m{seconds:02d}s{millis:03d}ms"
 
     ts = ts.strip()
+
+    # compact filename timestamp (111536457) -- expand it first
+    if re.fullmatch(r"\d{9,}", ts):
+        return filename_time_to_hmsms(ts)
+
     parts = []
 
     # already in hmsms format (this function's own output) -- normalize and return
@@ -1647,6 +1677,8 @@ def to_hmsms_format(ts) -> str:
 
 
 def convert_hmsms_to_ffmpeg_time_notation(t: str):
+    if re.fullmatch(r"\d{9,}", t):
+        t = filename_time_to_hmsms(t)
     hmsms_match = re.match(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms", t)
     if hmsms_match:
         h, m, s, ms = hmsms_match.groups()
@@ -1666,6 +1698,8 @@ def time_hmsms_to_seconds(t):
 
 
 def time_hmsms_to_milliseconds(ts: str):
+    if re.fullmatch(r"\d{9,}", ts):
+        ts = filename_time_to_hmsms(ts)
     pattern_hmsms = re.compile(r"(\d{2})h(\d{2})m(\d{2})s(\d{3})ms")
     pattern_colon = re.compile(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})")
 
@@ -1719,10 +1753,10 @@ def build_filename_and_sound_line(filename_base, source_file_extension, audio_co
         f"[DEBUG track] build_filename_and_sound_line: subtitle_track={subtitle_track!r}, "
         f"token_in_output={'`track_' in timestamp}")
 
-    timestamp += f"`{first_start}-{last_end}`{start_index}-{end_index}"
+    timestamp += f"`{hmsms_to_filename_time(first_start)}-{hmsms_to_filename_time(last_end)}`{start_index}-{end_index}"
 
     if lufs:
-        timestamp += f"`{lufs}LUFS.{audio_ext}"
+        timestamp += f"`{abs(int(lufs))}F.{audio_ext}"
     else:
         timestamp += f".{audio_ext}"
 

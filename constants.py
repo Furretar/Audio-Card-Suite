@@ -389,13 +389,11 @@ def format_anki_safe_filename(text, revert):
         text = text.replace('{', '{{').replace('}', '}}')
         text = text.replace('[', '{').replace(']', '}')
     else:
-        if '{' in text or '}' in text:
-            text = re.sub(r'\{\{|\}\}|\{|\}',
-                          lambda m: {'{{': '{', '}}': '}', '{': '[', '}': ']'}[m.group()],
-                          text)
-        else:
-            # files written before the brace escape used "(( " for "["
-            text = text.replace('((', '[').replace('))', ']')
+        # '{'/'}' is the escape marker: a literal "(" or "((" is left untouched,
+        # so an escaped "[" ("{") and a literal "((" can never be confused
+        text = re.sub(r'\{\{|\}\}|\{|\}',
+                      lambda m: {'{{': '{', '}}': '}', '{': '[', '}': ']'}[m.group()],
+                      text)
 
     return text
 

@@ -60,7 +60,16 @@ def _get_short_source_name_map():
         for name in files:
             if os.path.splitext(name)[1].lower() not in all_exts:
                 continue
-            for variant in (name, name.replace("_", " "), name.replace(" ", "_")):
+            # accept the raw name plus the legacy "(" escape and the current "{"
+            # escape, so a shortened name maps back whichever form it used
+            variants = {
+                name,
+                name.replace("_", " "),
+                name.replace(" ", "_"),
+                name.replace("[", "((").replace("]", "))"),
+                constants.format_anki_safe_filename(name, revert=False),
+            }
+            for variant in variants:
                 mapping.setdefault(shorten_source_name(variant), name)
     _short_source_name_map = mapping
     return mapping

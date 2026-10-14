@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import hashlib
 import threading
 import time
 import sqlite3
@@ -16,6 +17,58 @@ from .constants import log_filename
 from .constants import log_error
 from .constants import log_image
 from .constants import log_command
+
+
+# Anki caps media filenames at 120 bytes (rslib MAX_MEDIA_FILENAME_LENGTH) and
+# truncates anything longer while keeping the extension, so the sound line no
+# longer points at the file that was actually written. To avoid that, the source
+# part of a media name is capped here and a short hash of the full name is
+# appended so it stays unique. The cap is fixed (not per-clip), so a shortened
+# name can be mapped back to the real source file.
+SHORT_NAME_LIMIT = 56
+_short_source_name_map = None
+
+
+def _truncate_to_char_boundary(text, max_bytes):
+    while len(text.encode("utf-8")) > max_bytes:
+        text = text[:-1]
+    return text
+
+
+def shorten_source_name(full_source_filename, limit=SHORT_NAME_LIMIT):
+    """Cap a source filename at `limit` bytes, keeping its extension and adding a
+    short hash of the whole name. Names that already fit are returned unchanged."""
+    if len(full_source_filename.encode("utf-8")) <= limit:
+        return full_source_filename
+    stem, ext = os.path.splitext(full_source_filename)
+    digest = hashlib.sha1(full_source_filename.encode("utf-8")).hexdigest()[:8]
+    keep = limit - len(ext.encode("utf-8")) - len(digest) - 1
+    return f"{_truncate_to_char_boundary(stem, max(keep, 0))}-{digest}{ext}"
+
+
+def _get_short_source_name_map():
+    global _short_source_name_map
+    if _short_source_name_map is not None:
+        return _short_source_name_map
+    mapping = {}
+    all_exts = constants.audio_extensions + constants.video_extensions
+    for root, dirs, files in os.walk(constants.addon_source_folder):
+        dirs.sort()
+        files.sort()
+        if 'ignore' in root.lower().split(os.sep):
+            continue
+        for name in files:
+            if os.path.splitext(name)[1].lower() not in all_exts:
+                continue
+            for variant in (name, name.replace("_", " "), name.replace(" ", "_")):
+                mapping.setdefault(shorten_source_name(variant), name)
+    _short_source_name_map = mapping
+    return mapping
+
+
+def resolve_source_filename(short_name):
+    """Map a (possibly shortened) media source name back to the real source file."""
+    return _get_short_source_name_map().get(short_name, short_name)
 
 
 # Generating one card looks the same things up several times, and probing a file
@@ -103,8 +156,11 @@ def extract_sound_line_data(sound_line):
         sound_file_extension = groups["sound_file_extension"]
         normalize_tag = groups.get("normalize_tag") or ""
         start_index, end_index = map(int, subtitle_range.split("-"))
-        full_source_filename = f"{filename_base}{source_file_extension}"
-        meta_parts = [full_source_filename]
+        # the name on disk may be shortened; keep it for the path, but resolve the
+        # real source name for source/subtitle lookups
+        short_source_filename = f"{filename_base}{source_file_extension}"
+        full_source_filename = resolve_source_filename(short_source_filename)
+        meta_parts = [short_source_filename]
 
         if lang_code:
             codes = lang_code
@@ -1732,6 +1788,9 @@ def build_filename_and_sound_line(filename_base, source_file_extension, audio_co
     full_filename = f"{filename_base}{source_file_extension}"
     if full_filename.endswith(".srt"):
         full_filename = full_filename[:-4]
+
+    # keep names short enough for Anki's 120-byte media filename cap
+    full_filename = shorten_source_name(full_filename)
 
     if audio_code == timing_code:
         timing_code = None
